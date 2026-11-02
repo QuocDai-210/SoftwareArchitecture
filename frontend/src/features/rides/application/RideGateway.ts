@@ -1,0 +1,40 @@
+import type { Driver, Payment, Point, Trip, Simulation, Profile, DriverApplication, DriverRegistration, Page, PaymentStatistic, TripStatistic } from "../domain/models";
+import type { TripAction } from "../domain/trip-rules";
+export type Booking = {
+  pickup: Point;
+  destination: Point;
+  method: "Card" | "Wallet";
+  paymentToken: string | null;
+};
+export interface RideGateway {
+  search(text: string): Promise<Point[]>;
+  reverse(latitude: number, longitude: number): Promise<Point>;
+  heartbeat(): Promise<void>;
+  simulation(driverId: string): Promise<Simulation | null>;
+  control(driverId: string, speed: number, paused: boolean): Promise<Simulation>;
+  profile(): Promise<Profile>;
+  saveProfile(name: string, phone: string): Promise<Profile>;
+  applications(): Promise<DriverApplication[]>;
+  registerDriver(application: DriverRegistration): Promise<DriverApplication>;
+  approveDriver(id: string, temporaryPassword: string): Promise<DriverApplication>;
+  rejectDriver(id: string, reason: string): Promise<DriverApplication>;
+  suspendDriver(subject: string, suspended: boolean): Promise<void>;
+  history(page: number): Promise<Page<Trip>>;
+  payments(page: number): Promise<Page<Payment>>;
+  paymentStatistics(): Promise<PaymentStatistic[]>;
+  tripStatistics(): Promise<TripStatistic[]>;
+  checkout(id: string): Promise<{ paymentId: string; url: string }>;
+  topUp(amount: number, key: string): Promise<Payment>;
+  reconcile(id: string): Promise<Payment>;
+  paymentByReference(reference: string): Promise<Payment>;
+  refund(id: string, reason: string, key: string): Promise<Payment>;
+  retryPayment(trip: Trip): Promise<void>;
+  trips(): Promise<Trip[]>;
+  driver(): Promise<Driver>;
+  balance(): Promise<number>;
+  screen(id: string): Promise<{ payment: Payment | null; paymentUnavailable: boolean; simulation: Simulation | null }>;
+  book(booking: Booking, key: string): Promise<Trip>;
+  act(trip: Trip, action: TripAction): Promise<void>;
+  location(latitude: number, longitude: number): Promise<void>;
+  availability(available: boolean): Promise<void>;
+}

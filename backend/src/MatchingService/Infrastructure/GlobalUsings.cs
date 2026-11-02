@@ -1,0 +1,10 @@
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.DependencyInjection;
+global using MongoDB.Driver;
+global using SwiftRide.Contracts;
+global using SwiftRide.Core;
+global using SwiftRide.Infrastructure;
+global using SwiftRide.Matching.Application;
+global using SwiftRide.Matching.Application.Ports;
+global using SwiftRide.Matching.Domain;
+global using SwiftRide.SharedKernel;

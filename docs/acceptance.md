@@ -29,11 +29,11 @@ Nguồn: `RideLite-KienTrucPhanMem.pdf`, 11 trang, nội dung đánh số 1–9.
 | §6.1 | SRP | Tách FareCalculator, Repository, workflow, payment method |
 | §6.2 | OCP | IPricingStrategy và các implementation độc lập |
 | §6.3 | LSP | Assert chung nhiều distance/promo cho từng Strategy, giá không âm và validation |
-| §6.4 | ISP | ITripReader / ITripWriter |
-| §6.5 | DIP | DI ASP.NET Core, phụ thuộc interface thay kết nối cụ thể |
+| §6.4 | ISP | Reader/Writer/WorkflowQueue; DriverReader/Presence/Reservations; PaymentReader/Writer/WalletStore |
+| §6.5 | DIP | Application sở hữu port; Infrastructure triển khai; Domain/Application không có framework reference |
 | §7 | State | TripState điều khiển transition |
 | §7 | Strategy | StandardPricing, SurgePricing, PromoPricing |
-| §7 | Repository | TripRepository, DriverRepository, EF DbContext/DbSet tại Payment |
+| §7 | Repository | TripRepository, MongoDriverRepository, PaymentRepository |
 | §7 | Factory | PaymentMethodFactory chọn CardMethod/WalletMethod |
 | §7 | Observer/Pub-Sub | RabbitMQ consumers cho Trip, Matching và Payment |
 | §7 | API Gateway | YARP routes, auth/rate-limit/aggregation |
@@ -42,7 +42,7 @@ Nguồn: `RideLite-KienTrucPhanMem.pdf`, 11 trang, nội dung đánh số 1–9.
 | §8 | .NET 10, EF Core 10, MongoDB.Driver | Project references và phiên bản package cố định |
 | §8 | RabbitMQ/MassTransit, OAuth/OIDC, Docker Compose, OpenTelemetry | Cấu hình chạy thật, không thay bằng mock in-memory |
 | §8 | xUnit/Moq được đề xuất | Thay bằng console/assert theo AGENTS.md; không thêm test framework |
-| §8.1 | Layout Domain/Application/Infrastructure/Api | Mỗi service giữ ranh giới trong các file hiện có; Shared Core/Hosting tối thiểu; solution và tests riêng |
+| §8.1 | Layout Domain/Application/Infrastructure/Api | Mỗi service có bốn project riêng; SharedKernel/Contracts/Application/Infrastructure; frontend chia theo feature/tầng; check-architecture.py |
 | §9.1 | Trade-off, modular monolith, chi phí phân tán | architecture.md; phát triển theo chặng từ lõi đến broker/observability |
 | §9.2 | Strong/eventual consistency, Outbox nguyên tử | Transaction trong SQL Server/PostgreSQL; propagation qua event |
 | §9.2 | Consumer idempotent, at-least-once | Inbox, unique business key, status guards; duplicate fault scenario |
@@ -53,11 +53,66 @@ Nguồn: `RideLite-KienTrucPhanMem.pdf`, 11 trang, nội dung đánh số 1–9.
 | §9.3 | CorrelationId/trace context và OTel | GUID header, request scope, HTTP/MassTransit instrumentation, LGTM |
 | §9.3 | Các chỉ số vận hành | Grafana dashboard + broker metrics + Outbox gauge |
 
-## Kết quả đã chạy trong phiên bàn giao
+## Refactor SOLID / Clean Architecture
+
+Mã nguồn hiện tại chia 17 project backend sản phẩm, một project console kiểm thử và bốn tầng feature frontend. [Bản đồ nguồn](source-guide.md) chỉ đường dẫn theo chức năng; [kiến trúc](architecture.md) ghi chiều phụ thuộc và bằng chứng SOLID.
+
+- Domain/Application backend không có package/framework reference; API chỉ ánh xạ HTTP và gọi use case.
+- EF/Mongo/MassTransit/HttpClient nằm trong Infrastructure; application sở hữu port giao tiếp.
+- Trạng thái Trip, số dư Wallet và hoàn tiền Payment được thay đổi qua Domain.
+- Frontend tách domain/application/infrastructure/presentation; composition ghép service/adapter; route không chứa logic proxy/auth.
+- `scripts/check-architecture.py` chạy trong cả hai chế độ của `verify.sh`; `ApplicationChecks.cs` kiểm tra thay adapter, debit/refund và invariant số dư; `check-frontend.mjs` kiểm tra retry giữ key và thao tác theo vai trò/trạng thái.
+- Giữ migration ID, bảng/collection và tên sự kiện wire/queue để chạy tiếp với dữ liệu hiện có.
+
+Log và ảnh của các lần kiểm tra đã được dọn khỏi workspace. Các bảng dưới ghi kết quả đã chạy và tên file từng dùng để lưu bằng chứng; không yêu cầu các file này tồn tại trong repository. Chạy lại các lệnh nghiệm thu khi cần tạo bằng chứng mới.
+
+## Rà soát ngày 03/11/2026
+
+Giữ nguyên công thức giá, vòng đời chuyến, k=3, idempotency, sổ cái, migration và tên sự kiện wire. Các sửa đổi trong lần rà soát này:
+
+- Chuẩn hóa đường dẫn khi chọn giới hạn đặt xe; `/trips`, `/trips/` và `/TRIPS/` dùng chung mức 10 yêu cầu/phút cho mỗi danh tính. Thêm kiểm tra hồi quy vào runner tích hợp hiện có.
+- Đặt `turbopack.root` tại frontend để Next.js không nhận nhầm lockfile ngoài repo.
+- Thêm timeout 30 giây cho HTTP từ trình duyệt; retry đặt xe vẫn giữ idempotency key.
+- Gom nhóm ngắn trong `tsconfig.json`; giữ chuẩn format 100 ký tự và mỗi câu lệnh một dòng.
+- Ảnh kiểm tra trình duyệt lưu trong thư mục tạm hệ điều hành; `verify.sh` tắt Python bytecode cache. Log kiểm tra lưu ngoài repo.
+
+| Kiểm tra | Kết quả lần rà soát này |
+|---|---|
+| Backend | Build Release toàn bộ solution: 0 warning, 0 error; restore theo lockfile |
+| Frontend | TypeScript strict và production build qua, không có warning; npm audit 0 lỗ hổng |
+| Kiến trúc | Qua kiểm tra 17 project backend sản phẩm và 25 file frontend |
+| Format | CSharpier: 176 file; Prettier và Black qua kiểm tra; `git diff --check` qua |
+| Nghiệp vụ | 127 assert qua, gồm giá 91.575 VND, State, k=3, Strategy, Wallet và ledger |
+| API tích hợp | 52 kiểm tra qua trên Gateway đã cập nhật, gồm 39 kiểm tra nghiệp vụ/quyền và 13 kiểm tra giới hạn đặt xe với các biến thể đường dẫn |
+| Biên API | 13 ca dữ liệu sai/JWT malformed qua; JWT được ký nhưng sai audience trả 401 |
+| Matching thật | Chọn gần nhất; loại offline/busy/stale/đang giữ chỗ/ngoài 5 km; loại trừ; reserve/confirm idempotent; release cũ không xóa giữ chỗ mới; fixture riêng đã xóa |
+| Phục hồi | Cả năm ca qua: broker/SQL Outbox qua Trip restart, message trùng, Trip restart, kill Payment sau capture trước commit ledger, DLQ/replay |
+| Observability | Sáu truy vấn metric có giá trị hữu hạn; có log và trace đi qua Gateway, Trip, Matching, Payment |
+| Trình duyệt | OIDC, Rider/Driver trọn luồng, thanh toán, hủy, 360 px, focus bàn phím, refresh sau 300 giây, logout; không có exception/HTTP 5xx |
+| Secret | Quét 263 file không thấy bản sao secret từ `.env`; `.env` giữ quyền 0600 |
+
+Log nằm trong `/tmp/swiftride-review.*`, ảnh nằm trong `/tmp/swiftride-screenshots-*`, không nằm trong repository. `0 warning/0 error` nêu trên là kết quả build; log runtime vẫn có cảnh báo Data Protection mặc định của ASP.NET và các lỗi retry/DLQ được chủ động gây để kiểm tra phục hồi. Demo vẫn dùng tuyến và cổng thanh toán mô phỏng như phạm vi đã ghi trong README.
+
+## Kết quả chạy lại sau refactor
+
+| Kiểm tra | Kết quả | File bằng chứng của lần chạy trước |
+|---|---|---|
+| Ranh giới kiến trúc | PASS, 17 project backend và 25 file frontend | `clean-core-checks.txt` |
+| Build backend | PASS, 0 warning, 0 error; 18 lockfile | `clean-backend-build.txt` |
+| Frontend | PASS, TypeScript strict, production build và assert service | `clean-frontend-build.txt`, `clean-frontend-checks.txt` |
+| Nghiệp vụ / hợp đồng adapter | PASS, 127 assert | `clean-core-checks.txt` |
+| API tích hợp | PASS, 39 kiểm tra; Wallet/refund, sáu kịch bản Card, quyền, k=3 và tranh reservation | `clean-integration-checks.txt` |
+| Phục hồi lỗi | PASS, cả năm kịch bản; Outbox qua Trip restart và kill Payment sau capture | `clean-fault-checks.txt` |
+| Compose | PASS, toàn bộ container healthy trên dữ liệu hiện có | `clean-deploy.txt` |
+| Observability | PASS, sáu truy vấn metric hữu hạn; log; trace qua đủ bốn API | `clean-observability-check.json` |
+| Trình duyệt | PASS, Rider/Driver, hủy chuyến, 360 px/keyboard, refresh sau 300 giây và logout | `clean-browser-checks.txt` |
+
+## Kết quả nền trước refactor
+
 
 | Kiểm tra | Kết quả |
 |---|---|
-| `./scripts/verify.sh --core` | PASS, 111 assert; build Core và console runner thật bằng .NET 10 |
+| `./scripts/verify.sh --core` | PASS, 111 assert; Core và console runner .NET 10 |
 | `docker compose config --quiet` | PASS; đã sinh .env cục bộ, không in secret |
 | Python `py_compile` và Bash `bash -n` | PASS |
 | Build toàn bộ .NET solution | PASS, 0 warning, 0 error; đủ bảy package lock |
@@ -78,14 +133,14 @@ Nguồn: `RideLite-KienTrucPhanMem.pdf`, 11 trang, nội dung đánh số 1–9.
 
 1. Chạy setup và Compose theo README; chỉ tạo lại lockfile khi cập nhật dependency. Xác nhận service healthy và không có lỗi migration/consumer trong log.
 2. Chạy `./scripts/verify.sh`; lưu kết quả build và integration, không sửa dữ liệu kiểm tra giữa các bước.
-3. Chạy `python3 scripts/faults.py`; ghi nhận trạng thái PaymentPending/PaymentReview, số bút toán và phục hồi Paid.
+3. Chạy `python3 -B scripts/faults.py`; ghi nhận trạng thái PaymentPending/PaymentReview, số bút toán và phục hồi Paid.
 4. Dùng hai cửa sổ Rider/Driver hoàn thành một chuyến; kiểm tra giá trước xác nhận, hành trình và thanh toán.
 5. Mở dashboard, tìm cùng CorrelationId/trace ID qua Gateway, Trip, Payment; xác nhận metrics tăng khi gây lỗi.
 6. Lưu ảnh/log mới, đối chiếu bảng bao phủ và bằng chứng bên dưới.
 
 ## Bằng chứng bàn giao
 
-Ngày kiểm tra: 02/11/2026. Các ảnh/log nằm trong `artifacts/`, không chứa mật khẩu hoặc token và được `.gitignore` loại.
+Ngày kiểm tra: 02/11/2026. Bảng dưới ghi tên ảnh/log của lần kiểm tra trước; các file đã được dọn khỏi workspace. Đầu ra mới không được chứa mật khẩu hoặc token và không được đưa vào Git.
 
 | Bằng chứng | Nội dung |
 |---|---|

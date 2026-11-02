@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
-    <ProjectReference Include="../SwiftRide.Hosting/SwiftRide.Hosting.csproj" />
+    <ProjectReference Include="../Shared/SwiftRide.Infrastructure/SwiftRide.Infrastructure.csproj" />
     <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
   </ItemGroup>
 </Project>

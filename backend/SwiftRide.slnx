@@ -1,11 +1,24 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/SwiftRide.Core/SwiftRide.Core.csproj" />
-    <Project Path="src/SwiftRide.Hosting/SwiftRide.Hosting.csproj" />
-    <Project Path="src/TripService/TripService.csproj" />
-    <Project Path="src/MatchingService/MatchingService.csproj" />
-    <Project Path="src/PaymentService/PaymentService.csproj" />
     <Project Path="src/ApiGateway/ApiGateway.csproj" />
+    <Project Path="src/MatchingService/Api/MatchingService.Api.csproj" />
+    <Project Path="src/MatchingService/Application/MatchingService.Application.csproj" />
+    <Project Path="src/MatchingService/Domain/MatchingService.Domain.csproj" />
+    <Project Path="src/MatchingService/Infrastructure/MatchingService.Infrastructure.csproj" />
+    <Project Path="src/PaymentService/Api/PaymentService.Api.csproj" />
+    <Project Path="src/PaymentService/Application/PaymentService.Application.csproj" />
+    <Project Path="src/PaymentService/Domain/PaymentService.Domain.csproj" />
+    <Project Path="src/PaymentService/Infrastructure/PaymentService.Infrastructure.csproj" />
+    <Project Path="src/Shared/SwiftRide.Application/SwiftRide.Application.csproj" />
+    <Project Path="src/Shared/SwiftRide.Contracts/SwiftRide.Contracts.csproj" />
+    <Project Path="src/Shared/SwiftRide.Infrastructure/SwiftRide.Infrastructure.csproj" />
+    <Project Path="src/Shared/SwiftRide.SharedKernel/SwiftRide.SharedKernel.csproj" />
+    <Project Path="src/TripService/Api/TripService.Api.csproj" />
+    <Project Path="src/TripService/Application/TripService.Application.csproj" />
+    <Project Path="src/TripService/Domain/TripService.Domain.csproj" />
+    <Project Path="src/TripService/Infrastructure/TripService.Infrastructure.csproj" />
   </Folder>
-  <Folder Name="/tests/"><Project Path="tests/SwiftRide.Checks/SwiftRide.Checks.csproj" /></Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SwiftRide.Checks/SwiftRide.Checks.csproj" />
+  </Folder>
 </Solution>

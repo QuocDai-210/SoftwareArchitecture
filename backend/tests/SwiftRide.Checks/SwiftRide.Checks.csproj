@@ -1,4 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../../src/SwiftRide.Core/SwiftRide.Core.csproj" /></ItemGroup>
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/TripService/Application/TripService.Application.csproj" />
+    <ProjectReference Include="../../src/MatchingService/Application/MatchingService.Application.csproj" />
+    <ProjectReference Include="../../src/PaymentService/Application/PaymentService.Application.csproj" />
+  </ItemGroup>
 </Project>

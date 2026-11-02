@@ -1,0 +1,11 @@
+global using Microsoft.EntityFrameworkCore;
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using SwiftRide.Contracts;
+global using SwiftRide.Core;
+global using SwiftRide.Infrastructure;
+global using SwiftRide.Payments.Application;
+global using SwiftRide.Payments.Application.Ports;
+global using SwiftRide.Payments.Domain;
+global using SwiftRide.SharedKernel;

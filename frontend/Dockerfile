@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package*.json .npmrc ./
 RUN npm ci --no-audit --no-fund
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=1536
 RUN npm run build
 FROM node:24.11.1-alpine3.22
 WORKDIR /app

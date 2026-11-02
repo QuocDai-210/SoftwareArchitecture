@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Application/MatchingService.Application.csproj" />
+    <ProjectReference Include="../../Shared/SwiftRide.Infrastructure/SwiftRide.Infrastructure.csproj" />
+    <PackageReference Include="MongoDB.Driver" Version="3.13.0" />
+  </ItemGroup>
+</Project>

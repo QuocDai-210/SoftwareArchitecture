@@ -2,26 +2,74 @@
 
 Đồ án theo `RideLite-KienTrucPhanMem.pdf`: Next.js + Tailwind, .NET 10, YARP, 3 microservice, SQL Server / MongoDB / PostgreSQL, RabbitMQ, Saga, Outbox và OpenTelemetry.
 
-**Trạng thái kiểm chứng:** 111 assert lõi nghiệp vụ; backend/frontend build thành công; npm audit 0 lỗ hổng; kiểm thử API và năm kịch bản lỗi container đều PASS. Outbox qua restart khi broker tắt và crash sau provider capture đã kiểm chứng. Chrome đã chạy trọn luồng Rider/Driver, 360 px, refresh token sau 5 phút và đăng xuất. Xem [bảng đối chiếu PDF](docs/acceptance.md).
+**Trạng thái kiểm chứng:** 127 assert lõi nghiệp vụ và hợp đồng adapter; backend/frontend build thành công; npm audit 0 lỗ hổng; kiểm thử API và năm kịch bản lỗi container đều PASS. Outbox qua restart khi broker tắt và crash sau provider capture đã kiểm chứng. Chrome đã chạy trọn luồng Rider/Driver, 360 px, refresh token sau 5 phút và đăng xuất. Xem [bảng đối chiếu PDF](docs/acceptance.md).
 
 ## Mã nguồn
 
 ```text
-frontend/   Next.js, Tailwind, Auth.js; giao diện Rider/Driver
-backend/    SwiftRide.slnx; Core, Hosting, Gateway, ba service, console checks
-deploy/     Khởi tạo database/Keycloak, RabbitMQ, Grafana
-scripts/    Setup, kiểm thử API/trình duyệt, gây lỗi và replay
-docs/       Kiến trúc và đối chiếu yêu cầu PDF
+backend/src/
+  Shared/
+    SwiftRide.SharedKernel/       Giá trị chung, hình học, lỗi nghiệp vụ
+    SwiftRide.Contracts/          DTO HTTP và sự kiện liên service
+    SwiftRide.Application/        Actor và port dùng chung
+    SwiftRide.Infrastructure/     Auth, HTTP, Outbox, telemetry
+  TripService/                   Chuyến đi, trạng thái, Saga
+    Domain/                      Luật nghiệp vụ thuần C#
+    Application/                 Commands, Queries, Workflows, Ports
+    Infrastructure/              Persistence, Clients, Messaging, Workers
+    Api/                         Endpoints, Program.cs
+  MatchingService/               Domain/Application/Infrastructure/Api
+  PaymentService/                Domain/Application/Infrastructure/Api
+  ApiGateway/                    Endpoints, Composition, Infrastructure
+backend/tests/SwiftRide.Checks/   Console/assert
+frontend/src/
+  app/                           Next.js routes và server actions
+  composition/                   Ghép service với HTTP adapter phía client
+  features/rides/
+    domain/                      Mô hình, thao tác hợp lệ theo trạng thái
+    application/                 RideService, RideGateway
+    infrastructure/              HTTP adapter
+    presentation/                Hook, layout, từng component giao diện
+  infrastructure/                Auth/session và server proxy
+scripts/                         Setup, kiểm tra kiến trúc, kiểm thử, replay
+deploy/                          Database, Keycloak, RabbitMQ, Grafana
+docs/                            Kiến trúc, bản đồ nguồn, nghiệm thu PDF
 ```
+
+[Bản đồ mã nguồn theo chức năng](docs/source-guide.md) chỉ file cần sửa cho từng yêu cầu. Mỗi tầng backend là project riêng; Domain/Application không tham chiếu framework. `scripts/check-architecture.py` kiểm tra dependency graph và import frontend, được chạy trong `verify.sh`.
 
 ## Chạy trên máy
 
-Chạy demo cần Docker Engine/Compose có quyền truy cập và mạng tải image/package. Kiểm thử trên host cần .NET SDK 10.0.100 trở lên trong nhánh 10.0 và Node.js 24 trở lên. Đề xuất RAM 12–16 GB; SQL Server cần x86_64.
+Chạy demo cần Docker Engine/Compose có quyền truy cập và mạng tải image/package. Kiểm thử trên host cần .NET SDK 10.0.100 trở lên trong nhánh 10.0 và Node.js 24 trở lên. Ngân sách RAM dành cho dự án tối đa 12 GB, bao gồm build và kiểm thử; SQL Server cần x86_64.
 
 ```bash
 python3 scripts/setup.py
-docker compose up --build -d --wait --wait-timeout 300
+docker compose --profile observability stop
+COMPOSE_PARALLEL_LIMIT=1 docker compose build
+docker compose up --no-build -d --wait --wait-timeout 300
 ```
+
+Tổng hạn mức RAM của nhóm mặc định là **7,38 GB**, kể cả container `sql-init` chỉ chạy
+một lần. Bật thêm observability nâng tổng hạn mức lên **9,53 GB**; từng container có
+`mem_limit` và không dùng swap. Đây là hạn mức container, không bao gồm RAM của hệ điều
+hành, IDE hoặc Docker daemon. Khi build, dừng container dự án và chạy tuần tự để giữ
+ngân sách tổng 12 GB. Kiểm tra cấu hình bằng `python3 scripts/check-resources.py`.
+
+Observability mặc định tắt. Khi cần kiểm tra metrics, logs và traces:
+
+```bash
+OTEL_SDK_DISABLED=false docker compose --profile observability up --no-build -d --wait
+# Kết thúc kiểm tra; tắt collector và đưa API về chế độ không xuất telemetry.
+docker compose stop observability
+OTEL_SDK_DISABLED=true docker compose up --no-build -d --wait
+```
+
+Chỉ bật riêng service và dependency cần dùng, ví dụ `docker compose up -d mongo`.
+Dùng `docker compose stop <service>` khi không cần service đó và không còn service
+đang chạy phụ thuộc vào nó. Kết thúc phiên làm việc: `docker compose --profile
+observability stop`. Lệnh này giữ container và volume. `scripts/verify.sh` tự dừng
+container trước build và sau kiểm thử, kể cả khi có lỗi; muốn xem web sau kiểm thử,
+chạy lại `docker compose up --no-build -d --wait`.
 
 `setup.py` sinh `.env` quyền 0600 và không ghi đè file đã có. Đọc mật khẩu trực tiếp trong file này; không đưa vào Git. Backend/frontend có đầy đủ lockfile; Docker restore bằng `--locked-mode`. Frontend dùng `npm ci`. Chỉ chạy `scripts/lock.sh` khi chủ động cập nhật dependency.
 
@@ -31,7 +79,7 @@ docker compose up --build -d --wait --wait-timeout 300
 | http://localhost:8080/health/ready | Gateway và readiness ba service |
 | http://localhost:8081 | Keycloak; quản trị `admin`, `KEYCLOAK_ADMIN_PASSWORD` |
 | http://localhost:15672 | RabbitMQ; `RABBIT_USER` / `RABBIT_PASSWORD` |
-| http://localhost:3001/d/swiftride | Grafana; `admin` / `GRAFANA_PASSWORD` |
+| http://localhost:3001/d/swiftride | Grafana khi bật profile `observability`; `admin` / `GRAFANA_PASSWORD` |
 
 Chỉ các cổng trên được bind vào loopback. Microservice và database nằm trong mạng Compose.
 
@@ -48,20 +96,20 @@ Mở hai hồ sơ trình duyệt hoặc cửa sổ riêng: một Rider, một Dr
 ## Kiểm tra
 
 ```bash
-# Không cần Docker hoặc package ngoài .NET SDK
+# Kiến trúc + nghiệp vụ thuần, không cần Docker
 ./scripts/verify.sh --core
 
-# Build backend/frontend, khởi động Compose, kiểm tra tích hợp thật
+# Kiến trúc, backend/frontend checks/build, Compose, API tích hợp thật
 ./scripts/verify.sh
 
 # Gây lỗi container và kiểm tra phục hồi trên dữ liệu demo
-python3 scripts/faults.py
+python3 -B scripts/faults.py
 
 # Chrome/Chromium có sẵn; có thể đặt CHROME_BIN
 node scripts/browser-check.mjs --refresh
 ```
 
-Ảnh và log của phiên kiểm thử nằm trong `artifacts/` (được `.gitignore` loại). Bằng chứng và phạm vi kiểm thử ghi trong [docs/acceptance.md](docs/acceptance.md).
+Ảnh kiểm thử trình duyệt được tạo trong thư mục tạm hệ điều hành; đường dẫn và log in ra terminal, không sinh thêm file trong repo. Kết quả và phạm vi kiểm thử ghi trong [docs/acceptance.md](docs/acceptance.md).
 
 Các kịch bản lỗi có thể chạy riêng: `broker`, `duplicate`, `trip-restart`, `payment-restart`, `dead-letter`. Runner tạo và thay đổi dữ liệu mẫu. Cần môi trường demo không có chuyến đang hoạt động của tài khoản kiểm tra.
 
@@ -102,13 +150,14 @@ sys.path.insert(0, 'scripts')
 from demo import api
 api('ops1', '/payments/THAY-BANG-TRIP-ID/demo-recover', {}, 'POST')
 PY
-python3 scripts/replay.py --queue ride-completed_error
+python3 -B scripts/replay.py --queue ride-completed_error
 ```
 
 Replay dùng RabbitMQ Shovel với publisher confirms, giữ message ID; không lấy message ra rồi publish theo cách có thể mất dữ liệu. API `POST /trips/{id}/retry-payment` dành cho Ops phát lại bằng event mới và cùng khóa thu tiền. Khoản bị từ chối hoặc đã bồi thường không tự đổi phương thức/thử thu mới.
 
 ## Tài liệu và giới hạn đã chọn
 
+- [Bản đồ mã nguồn theo chức năng](docs/source-guide.md).
 - [Kiến trúc, API, SOLID, pattern, trade-off](docs/architecture.md).
 - [Đối chiếu PDF và checklist nghiệm thu](docs/acceptance.md).
 - OpenAPI có xác thực Ops tại `/openapi/trip.json`, `/openapi/matching.json`, `/openapi/payment.json` trên Gateway.
@@ -119,4 +168,3 @@ Replay dùng RabbitMQ Shovel với publisher confirms, giữ message ID; không 
 - Tag image và phiên bản package được cố định; dùng `dotnet restore --locked-mode` và `npm ci` trong CI.
 
 Dừng hệ thống bằng `docker compose down`; dữ liệu database và broker còn trong volume. Không dùng `down -v` nếu cần giữ lịch sử và sổ cái.
-# SoftwareArchitecture

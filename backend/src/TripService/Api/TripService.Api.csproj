@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>TripService</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Application/TripService.Application.csproj" />
+    <ProjectReference Include="../Infrastructure/TripService.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

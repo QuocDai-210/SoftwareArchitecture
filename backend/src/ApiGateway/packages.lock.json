@@ -214,10 +214,19 @@
         "resolved": "8.0.0",
         "contentHash": "ne1843evDugl0md7Fjzy6QjJrzsjh46ZKbhf8GwBXb5f/gw97J4bxMs0NQKifDuThh/f0bZ0e62NPl1jzTuRqA=="
       },
-      "swiftride.core": {
-        "type": "Project"
+      "swiftride.application": {
+        "type": "Project",
+        "dependencies": {
+          "SwiftRide.SharedKernel": "[1.0.0, )"
+        }
       },
-      "swiftride.hosting": {
+      "swiftride.contracts": {
+        "type": "Project",
+        "dependencies": {
+          "SwiftRide.SharedKernel": "[1.0.0, )"
+        }
+      },
+      "swiftride.infrastructure": {
         "type": "Project",
         "dependencies": {
           "MassTransit.EntityFrameworkCore": "[8.5.7, )",
@@ -229,8 +238,12 @@
           "OpenTelemetry.Extensions.Hosting": "[1.20.1, )",
           "OpenTelemetry.Instrumentation.AspNetCore": "[1.20.1, )",
           "OpenTelemetry.Instrumentation.Http": "[1.20.1, )",
-          "SwiftRide.Core": "[1.0.0, )"
+          "SwiftRide.Application": "[1.0.0, )",
+          "SwiftRide.Contracts": "[1.0.0, )"
         }
+      },
+      "swiftride.sharedkernel": {
+        "type": "Project"
       }
     }
   }

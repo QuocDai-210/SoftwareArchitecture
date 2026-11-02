@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>MatchingService</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Application/MatchingService.Application.csproj" />
+    <ProjectReference Include="../Infrastructure/MatchingService.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

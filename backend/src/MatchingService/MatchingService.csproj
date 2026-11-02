@@ -1,6 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
-  <ItemGroup>
-    <ProjectReference Include="../SwiftRide.Hosting/SwiftRide.Hosting.csproj" />
-    <PackageReference Include="MongoDB.Driver" Version="3.13.0" />
-  </ItemGroup>
-</Project>

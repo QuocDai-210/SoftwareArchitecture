@@ -1,0 +1,12 @@
+global using Microsoft.EntityFrameworkCore;
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using Microsoft.Extensions.Logging;
+global using SwiftRide.Contracts;
+global using SwiftRide.Core;
+global using SwiftRide.Infrastructure;
+global using SwiftRide.SharedKernel;
+global using SwiftRide.Trips.Application;
+global using SwiftRide.Trips.Application.Ports;
+global using SwiftRide.Trips.Domain;

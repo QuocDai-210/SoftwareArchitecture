@@ -1,17 +1,97 @@
 @import "tailwindcss";
 
-:root { color-scheme: light; --ink: #172d2a; --brand: #12695b; --paper: #f5f6f2; }
-body { margin: 0; background: var(--paper); color: var(--ink); font-family: Arial, Helvetica, sans-serif; }
-button, input, select { font: inherit; }
-button, a, input, select { -webkit-tap-highlight-color: transparent; }
-button:not(:disabled), select { cursor: pointer; }
-:focus-visible { outline: 3px solid #c17813; outline-offset: 4px; }
-button:disabled { cursor: wait; opacity: .55; }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 44px; padding: .7rem 1rem; border-radius: .75rem; font-size: .875rem; font-weight: 700; background: #12695b; color: white; }
-.btn:hover:not(:disabled) { background: #0d5146; }
-.btn-secondary { background: #eef2ed; color: #24483d; }
-.btn-secondary:hover:not(:disabled) { background: #dce7dd; }
-.field { width: 100%; border: 1px solid #c6d0c7; border-radius: .75rem; padding: .8rem; background: white; min-height: 48px; }
-.card { border: 1px solid #dce2d9; border-radius: 1.25rem; background: white; }
-.map-grid { background-color: #e9eee4; background-image: linear-gradient(30deg, transparent 45%, #f9faf6 46%, #f9faf6 51%, transparent 52%), linear-gradient(115deg, transparent 45%, #f9faf6 46%, #f9faf6 52%, transparent 53%); background-size: 110px 140px, 180px 160px; }
-@media (prefers-reduced-motion: no-preference) { .card { animation: appear .25s ease-out; } @keyframes appear { from { opacity: .5; transform: translateY(5px); } to { opacity: 1; transform: none; } } }
+:root {
+  color-scheme: light;
+  --ink: #172d2a;
+  --brand: #12695b;
+  --paper: #f5f6f2;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: Arial, Helvetica, sans-serif;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+button:not(:disabled),
+select {
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 3px solid #c17813;
+  outline-offset: 4px;
+}
+button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.7rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  background: #12695b;
+  color: white;
+}
+.btn:hover:not(:disabled) {
+  background: #0d5146;
+}
+.btn-secondary {
+  background: #eef2ed;
+  color: #24483d;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #dce7dd;
+}
+.field {
+  width: 100%;
+  border: 1px solid #c6d0c7;
+  border-radius: 0.75rem;
+  padding: 0.8rem;
+  background: white;
+  min-height: 48px;
+}
+.card {
+  border: 1px solid #dce2d9;
+  border-radius: 1.25rem;
+  background: white;
+}
+.map-grid {
+  background-color: #e9eee4;
+  background-image:
+    linear-gradient(30deg, transparent 45%, #f9faf6 46%, #f9faf6 51%, transparent 52%),
+    linear-gradient(115deg, transparent 45%, #f9faf6 46%, #f9faf6 52%, transparent 53%);
+  background-size:
+    110px 140px,
+    180px 160px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .card {
+    animation: appear 0.25s ease-out;
+  }
+  @keyframes appear {
+    from {
+      opacity: 0.5;
+      transform: translateY(5px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

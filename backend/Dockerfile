@@ -3,8 +3,8 @@ ARG SERVICE
 WORKDIR /work
 COPY Directory.Build.props global.json ./
 COPY src ./src
-RUN dotnet restore src/${SERVICE}/${SERVICE}.csproj --locked-mode
-RUN dotnet publish src/${SERVICE}/${SERVICE}.csproj -c Release --no-restore -o /publish /p:UseAppHost=false
+RUN if [ "$SERVICE" = "ApiGateway" ]; then project="src/ApiGateway/ApiGateway.csproj"; else project="src/${SERVICE}/Api/${SERVICE}.Api.csproj"; fi; dotnet restore "$project" --locked-mode
+RUN if [ "$SERVICE" = "ApiGateway" ]; then project="src/ApiGateway/ApiGateway.csproj"; else project="src/${SERVICE}/Api/${SERVICE}.Api.csproj"; fi; dotnet publish "$project" -c Release --no-restore -m:1 --disable-build-servers -p:UseSharedCompilation=false -o /publish /p:UseAppHost=false
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.14
 ARG SERVICE
 WORKDIR /app

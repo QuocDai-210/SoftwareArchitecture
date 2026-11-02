@@ -25,6 +25,28 @@ Presentation kiểm tra đầu vào để phản hồi nhanh; server kiểm tra 
 
 Có đúng ba service nghiệp vụ và ba database nghiệp vụ, dùng ba công nghệ trong PDF. Keycloak, broker và monitoring là hạ tầng. Không có Auth Service tự viết, BFF Rider/Driver riêng hoặc database dùng chung giữa các service.
 
+## Clean Architecture và chiều phụ thuộc
+
+Mỗi service nghiệp vụ có bốn project độc lập, kiểm soát bằng ProjectReference:
+
+```mermaid
+flowchart LR
+    Api[Api · HTTP/composition] --> App[Application · use case/port]
+    Api --> Infra[Infrastructure · adapter]
+    Infra --> App
+    App --> Domain[Domain · luật nghiệp vụ]
+    Domain --> Kernel[SharedKernel · kiểu thuần]
+    App --> Contracts[Contracts · DTO/event]
+```
+
+Domain/Application không có PackageReference hay FrameworkReference. ASP.NET, EF Core, MongoDB.Driver, MassTransit, ClaimsPrincipal và HttpClient nằm ở tầng ngoài. Lỗi nghiệp vụ dùng `ErrorKind`; middleware ánh xạ thành HTTP status. JWT đã xác thực được chuyển thành `Actor` tại biên HTTP.
+
+Application sở hữu port đọc/ghi, giao dịch, phát sự kiện, Matching và provider thanh toán. EF/Mongo/MassTransit triển khai port trong Infrastructure. `TripWorkflowWorker` quản lý scope/lịch chạy và gọi `TripWorkflow`; consumer chuyển message sang use case. `EfUnitOfWork` tham gia transaction consumer hiện có, chỉ commit transaction do chính nó mở để giữ tính nguyên tử Inbox/Outbox.
+
+Frontend giữ chiều phụ thuộc tương tự: presentation gọi `RideService`; service phụ thuộc `RideGateway`; `HttpRideGateway` triển khai port. `composition/RideClient.tsx` ghép hai bên trong client boundary. React state/polling ở presentation; fetch ở infrastructure; Auth.js/token/proxy ở server infrastructure. Route Next.js nối handler hoặc composition.
+
+`check-architecture.py` kiểm tra project reference từng tầng, cấm framework ở tầng trong, cấm endpoint truy cập persistence/broker trực tiếp và cấm import ngược tầng trên frontend. Kiểm tra tự động bảo vệ cấu trúc; review vẫn cần đánh giá ý nghĩa nghiệp vụ. [Bản đồ nguồn](source-guide.md) mô tả từng đường dẫn và cách thêm chức năng.
+
 ## Dữ liệu và chủ sở hữu
 
 | Bounded context | Dữ liệu sở hữu | Ràng buộc |
@@ -161,13 +183,15 @@ HTTP nội bộ timeout từng attempt 5 giây, tối đa 3 retry có backoff/ji
 
 | Nguyên tắc | Mã minh họa |
 |---|---|
-| SRP | FareCalculator tính giá; TripRepository truy cập DB; TripWorkflow điều phối |
-| OCP | Thêm implementation IPricingStrategy mà không sửa StandardPricing |
-| LSP | Cùng tập đầu vào hợp lệ cho Standard/Surge/Promo: giá không âm, đầu vào sai bị từ chối |
-| ISP | ITripReader và ITripWriter tách nhỏ |
-| DIP | DI cho reader/writer, IPaymentMethod, IPublishEndpoint; application không tự tạo kết nối broker |
+| SRP | Domain giữ luật; Application điều phối; Repository truy cập DB; consumer/worker xử lý vòng đời hạ tầng; component web chia theo chức năng |
+| OCP | IPricingStrategy và IPaymentMethod; PaymentMethodFactory nhận danh sách đăng ký DI, không switch; kiểm tra thay implementation |
+| LSP | Assert chung cho pricing strategy; CardMethod/WalletMethod dùng cùng hợp đồng Capture/Refund, kiểm tra qua port giả |
+| ISP | ITripReader/ITripWriter/ITripWorkflowQueue; IPaymentReader/IPaymentWriter/IWalletStore; IDriverReader/IDriverPresence/IDriverReservations |
+| DIP | Use case sở hữu port IMatchingClient, ICardProvider, IEventPublisher, IUnitOfWork; Infrastructure triển khai; composition đăng ký |
 
-State = TripState; Strategy = IPricingStrategy; Repository = TripRepository/DriverRepository và EF DbContext/DbSet làm repository tại Payment; Factory = PaymentMethodFactory với hai implementation thật; Observer/Pub-Sub = consumer sự kiện; API Gateway = YARP; Saga = TripWorkflow + consumer thanh toán + bồi thường; Outbox = EF Bus/Consumer Outbox.
+`Trip.Status`, version, deadline và retry có setter riêng; chuyển trạng thái đi qua Domain. Wallet debit/credit qua phương thức kiểm tra số tiền và số dư. Payment giữ luật hoàn tiền/bồi thường; Application điều phối provider, journal và transaction. Compiler cùng kiểm tra kiến trúc bảo vệ chiều phụ thuộc; console/assert kiểm tra hành vi.
+
+State = TripState; Strategy = IPricingStrategy; Repository = TripRepository/MongoDriverRepository/PaymentRepository; Factory = PaymentMethodFactory với hai implementation; Observer/Pub-Sub = consumer sự kiện; API Gateway = YARP; Saga = TripWorkflow + thông báo thanh toán + bồi thường; Outbox = EF Bus/Consumer Outbox.
 
 ## Bảo mật, quan sát và trade-off
 
