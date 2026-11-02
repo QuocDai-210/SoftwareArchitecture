@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: SwiftRide
+    folder: SwiftRide
+    type: file
+    options:
+      path: /otel-lgtm/dashboards

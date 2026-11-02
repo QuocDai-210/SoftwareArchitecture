@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/.next/
+**/*.tsbuildinfo
+.env
+.env.*
+!.env.example
+artifacts/
+*.user
+
+**/__pycache__/

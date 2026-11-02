@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SwiftRide.Core/SwiftRide.Core.csproj" />
+    <Project Path="src/SwiftRide.Hosting/SwiftRide.Hosting.csproj" />
+    <Project Path="src/TripService/TripService.csproj" />
+    <Project Path="src/MatchingService/MatchingService.csproj" />
+    <Project Path="src/PaymentService/PaymentService.csproj" />
+    <Project Path="src/ApiGateway/ApiGateway.csproj" />
+  </Folder>
+  <Folder Name="/tests/"><Project Path="tests/SwiftRide.Checks/SwiftRide.Checks.csproj" /></Folder>
+</Solution>
