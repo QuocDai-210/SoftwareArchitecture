@@ -12,7 +12,15 @@ public sealed class TestMapProvider : IMapProvider
     public Task<RoadRoute> Route(Point from, Point to, CancellationToken ct)
     {
         var estimate = Routes.Estimate(from, to);
-        return Task.FromResult(new RoadRoute(estimate.DistanceKm, estimate.DurationMinutes,
-            [[from.Longitude, from.Latitude], [to.Longitude, to.Latitude]]));
+        return Task.FromResult(
+            new RoadRoute(
+                estimate.DistanceKm,
+                estimate.DurationMinutes,
+                [
+                    [from.Longitude, from.Latitude],
+                    [to.Longitude, to.Latitude],
+                ]
+            )
+        );
     }
 }

@@ -6,10 +6,39 @@ public static class TripEndpoints
 {
     public static void MapTripEndpoints(this WebApplication app)
     {
-        app.MapGet("/profiles/me", async (ClaimsPrincipal user, ProfileCommands commands, CancellationToken ct) => Results.Ok(await commands.Get(user.Actor(), ct))).RequireAuthorization();
-        app.MapPut("/profiles/me", (ProfileRequest request, ClaimsPrincipal user, ProfileCommands commands, CancellationToken ct) => commands.Update(request, user.Actor(), ct)).RequireAuthorization();
-        app.MapGet("/trips/history", (int? page, string? status, ClaimsPrincipal user, TripQueries queries, CancellationToken ct) => queries.History(user.Actor(), page ?? 1, status, ct)).RequireAuthorization();
-        app.MapGet("/trips/statistics", (ClaimsPrincipal user, TripQueries queries, CancellationToken ct) => queries.Statistics(user.Actor(), ct)).RequireAuthorization("ops");
+        app.MapGet(
+                "/profiles/me",
+                async (ClaimsPrincipal user, ProfileCommands commands, CancellationToken ct) =>
+                    Results.Ok(await commands.Get(user.Actor(), ct))
+            )
+            .RequireAuthorization();
+        app.MapPut(
+                "/profiles/me",
+                (
+                    ProfileRequest request,
+                    ClaimsPrincipal user,
+                    ProfileCommands commands,
+                    CancellationToken ct
+                ) => commands.Update(request, user.Actor(), ct)
+            )
+            .RequireAuthorization();
+        app.MapGet(
+                "/trips/history",
+                (
+                    int? page,
+                    string? status,
+                    ClaimsPrincipal user,
+                    TripQueries queries,
+                    CancellationToken ct
+                ) => queries.History(user.Actor(), page ?? 1, status, ct)
+            )
+            .RequireAuthorization();
+        app.MapGet(
+                "/trips/statistics",
+                (ClaimsPrincipal user, TripQueries queries, CancellationToken ct) =>
+                    queries.Statistics(user.Actor(), ct)
+            )
+            .RequireAuthorization("ops");
         app.MapPost(
                 "/trips",
                 async (

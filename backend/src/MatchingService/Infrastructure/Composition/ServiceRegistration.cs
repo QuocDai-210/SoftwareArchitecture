@@ -9,21 +9,50 @@ public static class ServiceRegistration
 {
     public static void AddMatchingInfrastructure(this WebApplicationBuilder builder)
     {
-        MongoDB.Bson.Serialization.BsonSerializer.TryRegisterSerializer(new MongoDB.Bson.Serialization.Serializers.GuidSerializer(MongoDB.Bson.GuidRepresentation.Standard));
-        builder.Services.AddHttpClient("geoapify", client => { client.BaseAddress = new Uri("https://api.geoapify.com/v1/"); client.Timeout = TimeSpan.FromSeconds(20); })
-            .RemoveAllLoggers().AddHttpMessageHandler<InternalRetryHandler>();
+        MongoDB.Bson.Serialization.BsonSerializer.TryRegisterSerializer(
+            new MongoDB.Bson.Serialization.Serializers.GuidSerializer(
+                MongoDB.Bson.GuidRepresentation.Standard
+            )
+        );
+        builder.Services.AddMemoryCache(options => options.SizeLimit = 128);
+        builder
+            .Services.AddHttpClient(
+                "geoapify",
+                client =>
+                {
+                    client.BaseAddress = new Uri("https://api.geoapify.com/v1/");
+                    client.Timeout = TimeSpan.FromSeconds(20);
+                }
+            )
+            .RemoveAllLoggers()
+            .AddHttpMessageHandler<InternalRetryHandler>();
         if (builder.Configuration["Maps:Provider"] == "Test")
             builder.Services.AddSingleton<IMapProvider, TestMapProvider>();
         else
             builder.Services.AddSingleton<IMapProvider, GeoapifyMapProvider>();
         builder.Services.AddScoped<MapQueries>();
-        builder.Services.AddHttpClient("identity-admin", client => { client.BaseAddress = new Uri(builder.Configuration["Auth:AdminUrl"] ?? "http://keycloak:8080/"); client.Timeout = TimeSpan.FromSeconds(10); }).RemoveAllLoggers();
+        builder
+            .Services.AddHttpClient(
+                "identity-admin",
+                client =>
+                {
+                    client.BaseAddress = new Uri(
+                        builder.Configuration["Auth:AdminUrl"] ?? "http://keycloak:8080/"
+                    );
+                    client.Timeout = TimeSpan.FromSeconds(10);
+                }
+            )
+            .RemoveAllLoggers();
         builder.Services.AddScoped<IDriverIdentity, KeycloakDriverIdentity>();
         builder.Services.AddScoped<IDriverAdministration, DriverAdministrationStore>();
         builder.Services.AddScoped<ISimulationStore, MongoSimulationStore>();
         builder.Services.AddScoped<DriverAdministration>();
         builder.Services.AddScoped<SimulationWorkflow>();
-        builder.Services.AddSingleton(new SimulationSettings(builder.Configuration.GetValue("Simulation:EnforceArrival", true)));
+        builder.Services.AddSingleton(
+            new SimulationSettings(
+                builder.Configuration.GetValue("Simulation:EnforceArrival", true)
+            )
+        );
         builder.Services.AddHostedService<SimulationWorker>();
         builder.Services.AddSingleton<IMongoClient>(_ => new MongoClient(
             builder.Configuration.GetConnectionString("Matching")
@@ -81,6 +110,7 @@ public static class ServiceRegistration
                     {
                         r.Handle<Exception>(ex =>
                             TransientErrors.IsTransient(ex)
+                            || ex is SimulationConflictException
                             || ex is MongoException mongo
                                 && (
                                     mongo.HasErrorLabel("RetryableWriteError")

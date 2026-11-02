@@ -1,5 +1,12 @@
 import type { Trip } from "./models";
-export const terminal = new Set(["Paid", "Cancelled", "Failed", "PaymentReview"]);
+export const terminal = new Set([
+  "Paid",
+  "Cancelled",
+  "Failed",
+  "DroppedOff",
+  "PaymentPending",
+  "PaymentReview",
+]);
 export type TripAction =
   | "confirm-quote"
   | "cancel"

@@ -10,9 +10,20 @@ public sealed class UserProfile
 
     public void Update(string name, string phone)
     {
-        if (string.IsNullOrWhiteSpace(name) || name.Length > 100 || phone.Length is < 9 or > 15
-            || phone.Any(c => !char.IsAsciiDigit(c) && c != '+'))
-            throw new RuleException("Họ tên hoặc số điện thoại không hợp lệ.", ErrorKind.Validation);
-        Name = name.Trim(); Phone = phone;
+        var digits = phone?.StartsWith('+') == true ? phone[1..] : phone;
+        if (
+            string.IsNullOrWhiteSpace(name)
+            || name.Length > 100
+            || string.IsNullOrWhiteSpace(phone)
+            || phone.Length > 15
+            || digits!.Length < 9
+            || digits.Any(c => !char.IsAsciiDigit(c))
+        )
+            throw new RuleException(
+                "Họ tên hoặc số điện thoại không hợp lệ.",
+                ErrorKind.Validation
+            );
+        Name = name.Trim();
+        Phone = phone;
     }
 }

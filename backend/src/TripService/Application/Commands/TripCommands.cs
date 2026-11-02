@@ -26,7 +26,10 @@ public sealed class TripCommands(
             throw new RuleException("Cần điểm đón và điểm đến.", ErrorKind.Validation);
         request.Pickup.Validate();
         request.Destination.Validate();
-        if (request.Pickup.Latitude == request.Destination.Latitude && request.Pickup.Longitude == request.Destination.Longitude)
+        if (
+            request.Pickup.Latitude == request.Destination.Latitude
+            && request.Pickup.Longitude == request.Destination.Longitude
+        )
             throw new RuleException("Điểm đón và điểm đến phải khác nhau.", ErrorKind.Validation);
         if (!Enum.IsDefined(request.Method))
             throw new RuleException("Phương thức thanh toán không hợp lệ.", ErrorKind.Validation);
@@ -160,11 +163,29 @@ public sealed class TripCommands(
         TripAccess.Driver(trip, actor);
         trip.CheckVersion(request.ExpectedVersion);
         if (target is TripStatus.PickedUp or TripStatus.DroppedOff)
-            await matching.EnsureArrival(new(trip.DriverId!, trip.Id, target.ToString()), trip.CorrelationId, ct);
+            await matching.EnsureArrival(
+                new(trip.DriverId!, trip.Id, target.ToString()),
+                trip.CorrelationId,
+                ct
+            );
         trip.Move(target);
         if (target is TripStatus.EnRoute or TripStatus.PickedUp)
-            await bus.Publish(new TripProgressed(Guid.NewGuid(), trip.Id, trip.DriverId!, trip.ReservationId!.Value,
-                trip.Version, target.ToString(), trip.Pickup, trip.Destination, trip.Quote?.Route, trip.CorrelationId), trip.CorrelationId, ct);
+            await bus.Publish(
+                new TripProgressed(
+                    Guid.NewGuid(),
+                    trip.Id,
+                    trip.DriverId!,
+                    trip.ReservationId!.Value,
+                    trip.Version,
+                    target.ToString(),
+                    trip.Pickup,
+                    trip.Destination,
+                    trip.Quote?.Route,
+                    trip.CorrelationId
+                ),
+                trip.CorrelationId,
+                ct
+            );
         if (target == TripStatus.DroppedOff)
         {
             trip.Move(TripStatus.PaymentPending);

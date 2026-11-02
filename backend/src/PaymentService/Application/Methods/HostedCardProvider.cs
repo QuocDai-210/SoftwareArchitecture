@@ -6,8 +6,10 @@ public sealed class HostedCardProvider(ICheckoutStore store) : ICardProvider
 {
     public Task<CaptureResult> Capture(PaymentRequest request, CancellationToken ct)
     {
-        if (request.PaymentToken is not null) throw new RuleException("VNPAY không nhận token mô phỏng.", ErrorKind.Validation);
-        if (request.Amount == 0) return Task.FromResult(new CaptureResult(true));
+        if (request.PaymentToken is not null)
+            throw new RuleException("VNPAY không nhận token mô phỏng.", ErrorKind.Validation);
+        if (request.Amount == 0)
+            return Task.FromResult(new CaptureResult(true));
         var attempt = new CheckoutAttempt { PaymentId = request.TripId, Amount = request.Amount };
         store.Add(attempt);
         return Task.FromResult(new CaptureResult(false, CheckoutReference: attempt.Reference));

@@ -50,10 +50,15 @@ public sealed class PaymentCommands(
         if (payment is not null)
         {
             RequestKeys.Same(payment.RequestHash, hash);
-            if (payment.CheckoutReference is not null && payment.Status == PaymentStatus.Declined && request.Attempt > payment.Attempt)
+            if (
+                payment.CheckoutReference is not null
+                && payment.Status == PaymentStatus.Declined
+                && request.Attempt > payment.Attempt
+            )
             {
                 var retry = await factory.Create(request.Method).Capture(request, ct);
-                if (retry.CheckoutReference is not null) payment.AwaitCheckout(retry.CheckoutReference, request.Attempt);
+                if (retry.CheckoutReference is not null)
+                    payment.AwaitCheckout(retry.CheckoutReference, request.Attempt);
             }
             await PublishResult(payment, ct);
             await unit.Save(ct);
@@ -74,7 +79,8 @@ public sealed class PaymentCommands(
             capture.Reason
         );
         writer.Add(payment);
-        if (capture.CheckoutReference is not null) payment.AwaitCheckout(capture.CheckoutReference, request.Attempt);
+        if (capture.CheckoutReference is not null)
+            payment.AwaitCheckout(capture.CheckoutReference, request.Attempt);
         if (capture.Success)
         {
             var lines = Ledger.Charge(method.DebitAccount(payment.RiderId), payment.Amount);
@@ -121,11 +127,14 @@ public sealed class PaymentCommands(
         }
         if (payment.Status != PaymentStatus.Settled)
             throw new RuleException("Chỉ hoàn khoản đã thanh toán.");
-        if (payment.IsTopUp) throw new RuleException("Chức năng này chỉ hoàn tiền chuyến.", ErrorKind.Validation);
+        if (payment.IsTopUp)
+            throw new RuleException("Chức năng này chỉ hoàn tiền chuyến.", ErrorKind.Validation);
         if (payment.CheckoutReference is not null)
         {
             payment.RequestRefund(key, hash, request.Reason);
-            await unit.Save(ct); await tx.Commit(ct); return payment;
+            await unit.Save(ct);
+            await tx.Commit(ct);
+            return payment;
         }
         await factory.Create(payment.Method).Refund(payment, ct);
         var charge = (await reader.Journals(payment.Id, ct)).Single(x => x.Kind == "Charge");

@@ -24,31 +24,47 @@ public sealed class Payment
     {
         if (Status is not (PaymentStatus.Declined or PaymentStatus.Pending))
             throw new RuleException("Không thể tạo thanh toán mới.");
-        Status = PaymentStatus.Pending; CheckoutReference = reference; Attempt = attempt; Reason = null;
+        Status = PaymentStatus.Pending;
+        CheckoutReference = reference;
+        Attempt = attempt;
+        Reason = null;
     }
 
     public void MarkTopUp() => IsTopUp = true;
 
     public bool Settle()
     {
-        if (Status == PaymentStatus.Settled) return false;
-        if (Status != PaymentStatus.Pending) throw new RuleException("Giao dịch không chờ thanh toán.");
-        Status = PaymentStatus.Settled; Reason = null; return true;
+        if (Status == PaymentStatus.Settled)
+            return false;
+        if (Status != PaymentStatus.Pending)
+            throw new RuleException("Giao dịch không chờ thanh toán.");
+        Status = PaymentStatus.Settled;
+        Reason = null;
+        return true;
     }
 
     public void Decline(string reason)
     {
-        if (Status == PaymentStatus.Pending) { Status = PaymentStatus.Declined; Reason = reason; }
+        if (Status == PaymentStatus.Pending)
+        {
+            Status = PaymentStatus.Declined;
+            Reason = reason;
+        }
     }
 
     public void RequestRefund(string key, string hash, string reason)
     {
-        EnsureSettled(); Status = PaymentStatus.RefundPending; RefundKey = key; RefundHash = hash; Reason = reason;
+        EnsureSettled();
+        Status = PaymentStatus.RefundPending;
+        RefundKey = key;
+        RefundHash = hash;
+        Reason = reason;
     }
 
     public void CompleteRefund()
     {
-        if (Status != PaymentStatus.RefundPending) throw new RuleException("Giao dịch không chờ hoàn tiền.");
+        if (Status != PaymentStatus.RefundPending)
+            throw new RuleException("Giao dịch không chờ hoàn tiền.");
         Status = PaymentStatus.Refunded;
     }
 

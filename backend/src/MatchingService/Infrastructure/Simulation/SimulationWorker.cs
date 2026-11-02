@@ -3,7 +3,8 @@ using Microsoft.Extensions.Logging;
 
 namespace SwiftRide.Matching.Infrastructure;
 
-public sealed class SimulationWorker(IServiceScopeFactory scopes, ILogger<SimulationWorker> logger) : BackgroundService
+public sealed class SimulationWorker(IServiceScopeFactory scopes, ILogger<SimulationWorker> logger)
+    : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -15,9 +16,15 @@ public sealed class SimulationWorker(IServiceScopeFactory scopes, ILogger<Simula
                 await using var scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<SimulationWorkflow>().Tick(ct);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return;
+            }
             catch (RuleException) { }
-            catch (Exception ex) { logger.LogWarning(ex, "Simulation tick deferred"); }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Simulation tick deferred");
+            }
         }
     }
 }

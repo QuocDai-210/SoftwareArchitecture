@@ -2,26 +2,51 @@ namespace SwiftRide.Trips.Infrastructure;
 
 public sealed class TripRepository(TripDb db) : ITripReader, ITripWriter, ITripWorkflowQueue
 {
-    public async Task<PageResult<TripView>> History(string subject, bool all, int page, string? status, CancellationToken ct)
+    public async Task<PageResult<TripView>> History(
+        string subject,
+        bool all,
+        int page,
+        string? status,
+        CancellationToken ct
+    )
     {
         var query = db.Trips.AsNoTracking().AsQueryable();
-        if (!all) query = query.Where(x => x.RiderId == subject || (x.DriverId == subject
-            && x.Status != TripStatus.Requested && x.Status != TripStatus.AwaitingRiderConfirmation && x.Status != TripStatus.ReservingDriver));
+        if (!all)
+            query = query.Where(x =>
+                x.RiderId == subject
+                || (
+                    x.DriverId == subject
+                    && x.Status != TripStatus.Requested
+                    && x.Status != TripStatus.AwaitingRiderConfirmation
+                    && x.Status != TripStatus.ReservingDriver
+                )
+            );
         if (status is not null)
         {
-            if (!Enum.TryParse<TripStatus>(status, out var parsed) || !Enum.IsDefined(parsed)) throw new RuleException("Trạng thái không hợp lệ.", ErrorKind.Validation);
+            if (!Enum.TryParse<TripStatus>(status, out var parsed) || !Enum.IsDefined(parsed))
+                throw new RuleException("Trạng thái không hợp lệ.", ErrorKind.Validation);
             query = query.Where(x => x.Status == parsed);
         }
         var total = await query.LongCountAsync(ct);
-        var items = await query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).Skip((page - 1) * 10).Take(10).ToListAsync(ct);
+        var items = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Skip((page - 1) * 10)
+            .Take(10)
+            .ToListAsync(ct);
         return new(items.Select(TripView.From).ToArray(), page, 10, total);
     }
 
     public async Task<object> Statistics(CancellationToken ct)
     {
-        var statuses = await db.Trips.AsNoTracking().GroupBy(x => x.Status).Select(x => new { Status = x.Key, Count = x.Count() }).ToListAsync(ct);
+        var statuses = await db
+            .Trips.AsNoTracking()
+            .GroupBy(x => x.Status)
+            .Select(x => new { Status = x.Key, Count = x.Count() })
+            .ToListAsync(ct);
         return new { total = statuses.Sum(x => x.Count), statuses };
     }
+
     public async Task<Trip> Get(Guid id, CancellationToken ct) =>
         await db.Trips.SingleOrDefaultAsync(x => x.Id == id, ct)
         ?? throw new RuleException("Không tìm thấy chuyến.", ErrorKind.NotFound);

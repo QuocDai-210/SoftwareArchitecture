@@ -1,19 +1,27 @@
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using SwiftRide.Application.Payments;
 using SwiftRide.SharedKernel;
 
 namespace SwiftRide.Infrastructure;
 
 // ponytail: local mock tokens only; replace this adapter alongside the real payment provider.
-public sealed class DemoPaymentTokenPolicy(IHostEnvironment environment, IConfiguration configuration) : IPaymentTokenPolicy
+public sealed class DemoPaymentTokenPolicy(
+    IHostEnvironment environment,
+    IConfiguration configuration
+) : IPaymentTokenPolicy
 {
     public void Validate(PaymentMethod method, string? token)
     {
-        if (method != PaymentMethod.Card) return;
+        if (method != PaymentMethod.Card)
+            return;
         if (configuration["Payments:Provider"] != "Test")
         {
-            if (!string.IsNullOrEmpty(token)) throw new RuleException("VNPAY không nhận token thẻ từ trình duyệt.", ErrorKind.Validation);
+            if (!string.IsNullOrEmpty(token))
+                throw new RuleException(
+                    "VNPAY không nhận token thẻ từ trình duyệt.",
+                    ErrorKind.Validation
+                );
             return;
         }
         if (

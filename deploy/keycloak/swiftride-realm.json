@@ -1,82 +1,22 @@
 {
   "realm": "swiftride",
   "enabled": true,
-  "displayName": "SwiftRide · Demo",
+  "displayName": "SwiftRide",
   "sslRequired": "none",
-  "registrationAllowed": false,
+  "registrationAllowed": true,
   "resetPasswordAllowed": false,
   "accessTokenLifespan": 300,
   "ssoSessionIdleTimeout": 1800,
   "roles": {
-    "realm": [{ "name": "rider" }, { "name": "driver" }, { "name": "ops" }, { "name": "service" }]
+    "realm": [
+      { "name": "user" },
+      { "name": "driver" },
+      { "name": "ops" },
+      { "name": "service" },
+      { "name": "default-roles-swiftride", "composite": true, "composites": { "realm": ["user"] } }
+    ]
   },
   "users": [
-    {
-      "id": "11111111-1111-1111-1111-000000000001",
-      "username": "rider1",
-      "enabled": true,
-      "emailVerified": true,
-      "email": "rider1@swiftride.local",
-      "firstName": "Rider",
-      "lastName": "1",
-      "realmRoles": ["rider"],
-      "credentials": [{ "type": "password", "value": "${RIDER_PASSWORD}", "temporary": false }]
-    },
-    {
-      "id": "11111111-1111-1111-1111-000000000002",
-      "username": "rider2",
-      "enabled": true,
-      "emailVerified": true,
-      "email": "rider2@swiftride.local",
-      "firstName": "Rider",
-      "lastName": "2",
-      "realmRoles": ["rider"],
-      "credentials": [{ "type": "password", "value": "${RIDER_PASSWORD}", "temporary": false }]
-    },
-    {
-      "id": "22222222-2222-2222-2222-000000000001",
-      "username": "driver1",
-      "enabled": true,
-      "emailVerified": true,
-      "email": "driver1@swiftride.local",
-      "firstName": "Driver",
-      "lastName": "1",
-      "realmRoles": ["driver"],
-      "credentials": [{ "type": "password", "value": "${DRIVER_PASSWORD}", "temporary": false }]
-    },
-    {
-      "id": "22222222-2222-2222-2222-000000000002",
-      "username": "driver2",
-      "enabled": true,
-      "emailVerified": true,
-      "email": "driver2@swiftride.local",
-      "firstName": "Driver",
-      "lastName": "2",
-      "realmRoles": ["driver"],
-      "credentials": [{ "type": "password", "value": "${DRIVER_PASSWORD}", "temporary": false }]
-    },
-    {
-      "id": "22222222-2222-2222-2222-000000000003",
-      "username": "driver3",
-      "enabled": true,
-      "emailVerified": true,
-      "email": "driver3@swiftride.local",
-      "firstName": "Driver",
-      "lastName": "3",
-      "realmRoles": ["driver"],
-      "credentials": [{ "type": "password", "value": "${DRIVER_PASSWORD}", "temporary": false }]
-    },
-    {
-      "id": "22222222-2222-2222-2222-000000000004",
-      "username": "driver4",
-      "enabled": true,
-      "emailVerified": true,
-      "email": "driver4@swiftride.local",
-      "firstName": "Driver",
-      "lastName": "4",
-      "realmRoles": ["driver"],
-      "credentials": [{ "type": "password", "value": "${DRIVER_PASSWORD}", "temporary": false }]
-    },
     {
       "id": "33333333-3333-3333-3333-000000000001",
       "username": "ops1",
@@ -93,6 +33,14 @@
       "enabled": true,
       "serviceAccountClientId": "swiftride-service",
       "realmRoles": ["service"]
+    },
+    {
+      "username": "service-account-swiftride-ops",
+      "enabled": true,
+      "serviceAccountClientId": "swiftride-ops",
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users", "query-users", "view-realm"]
+      }
     }
   ],
   "clients": [
@@ -170,7 +118,7 @@
     },
     {
       "clientId": "swiftride-check",
-      "enabled": true,
+      "enabled": false,
       "protocol": "openid-connect",
       "publicClient": true,
       "standardFlowEnabled": false,
@@ -200,6 +148,20 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "swiftride-ops",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${OPS_CLIENT_SECRET}",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
     }
-  ]
+  ],
+  "registrationEmailAsUsername": false,
+  "loginWithEmailAllowed": true,
+  "passwordPolicy": "length(12) and upperCase(1) and lowerCase(1) and digits(1)",
+  "defaultRole": { "name": "default-roles-swiftride" }
 }

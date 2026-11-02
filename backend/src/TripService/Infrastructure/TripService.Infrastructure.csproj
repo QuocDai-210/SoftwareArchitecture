@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <EmbeddedResource Include="Persistence/Migrations/InitialSchema.sql" LogicalName="InitialSchema.sql" />
+    <EmbeddedResource
+      Include="Persistence/Migrations/InitialSchema.sql"
+      LogicalName="InitialSchema.sql"
+    />
     <ProjectReference Include="../Application/TripService.Application.csproj" />
     <ProjectReference Include="../../Shared/SwiftRide.Infrastructure/SwiftRide.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />

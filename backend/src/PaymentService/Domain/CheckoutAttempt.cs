@@ -16,11 +16,14 @@ public sealed class CheckoutAttempt
     {
         if (ProviderTransaction is not null && ProviderTransaction != transaction)
             throw new SwiftRide.SharedKernel.RuleException("Mã giao dịch provider không khớp.");
-        ProviderTransaction = transaction; PayDate = payDate; BankCode = bankCode;
+        ProviderTransaction = transaction;
+        PayDate = payDate;
+        BankCode = bankCode;
     }
 
     public void RequestRefund(DateTimeOffset now)
     {
-        RefundSubmitted = true; RefundRequestedAt ??= now;
+        RefundSubmitted = true;
+        RefundRequestedAt ??= now;
     }
 }

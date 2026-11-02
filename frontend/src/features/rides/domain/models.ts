@@ -51,6 +51,7 @@ export type Driver = {
 };
 export type RoadRoute = { distanceKm: number; durationMinutes: number; coordinates: number[][] };
 export type Simulation = {
+  currentPosition: Point;
   driverId: string;
   tripId: string;
   stage: string;
@@ -73,7 +74,10 @@ export type DriverApplication = {
   subject: string | null;
   reason: string | null;
 };
-export type DriverRegistration = Pick<DriverApplication, "username" | "name" | "email" | "phone" | "plate" | "vehicle">;
+export type DriverRegistration = Pick<
+  DriverApplication,
+  "username" | "name" | "email" | "phone" | "plate" | "vehicle"
+>;
 export type Page<T> = { items: T[]; page: number; pageSize: number; total: number };
 export type PaymentStatistic = { status: string; isTopUp: boolean; count: number; amount: number };
 export type TripStatistic = { status: string; count: number };

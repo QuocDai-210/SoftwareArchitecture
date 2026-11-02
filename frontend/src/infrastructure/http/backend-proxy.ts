@@ -9,7 +9,18 @@ export async function proxy(
   const { path } = await params;
   if (
     !path.length ||
-    !["trips", "drivers", "payments", "wallets", "quote", "screens", "maps", "profiles", "ops", "simulations"].includes(path[0]) ||
+    ![
+      "trips",
+      "drivers",
+      "payments",
+      "wallets",
+      "quote",
+      "screens",
+      "maps",
+      "profiles",
+      "ops",
+      "simulations",
+    ].includes(path[0]) ||
     path.some((p) => !/^[a-zA-Z0-9-]+$/.test(p))
   )
     return NextResponse.json({ detail: "Đường dẫn không hợp lệ." }, { status: 400 });

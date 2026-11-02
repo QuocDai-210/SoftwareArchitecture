@@ -9,7 +9,9 @@ public sealed class InitialMigration : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        using var reader = new StreamReader(typeof(InitialMigration).Assembly.GetManifestResourceStream("InitialSchema.sql")!);
+        using var reader = new StreamReader(
+            typeof(InitialMigration).Assembly.GetManifestResourceStream("InitialSchema.sql")!
+        );
         migrationBuilder.Sql(reader.ReadToEnd());
     }
 

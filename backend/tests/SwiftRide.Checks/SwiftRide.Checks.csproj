@@ -3,6 +3,7 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/MatchingService/Infrastructure/MatchingService.Infrastructure.csproj" />
     <ProjectReference Include="../../src/TripService/Application/TripService.Application.csproj" />
     <ProjectReference Include="../../src/MatchingService/Application/MatchingService.Application.csproj" />
     <ProjectReference Include="../../src/PaymentService/Application/PaymentService.Application.csproj" />

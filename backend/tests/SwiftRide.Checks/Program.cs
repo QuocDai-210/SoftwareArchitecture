@@ -200,6 +200,7 @@ Reject(() => RequestKeys.Validate("bad\nkey"), "control character in key rejecte
 RequestKeys.Same(RequestKeys.Hash("same"), RequestKeys.Hash("same"));
 Check(true, "identical payload replay accepted");
 await ApplicationChecks.Run(Check);
+MapChecks.Run(Check);
 Console.WriteLine($"Core checks passed: {checks}");
 if (!args.Contains("--integration"))
     return;

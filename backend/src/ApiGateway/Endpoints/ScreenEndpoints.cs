@@ -59,22 +59,43 @@ public static class ScreenEndpoints
                         }
                     }
                     JsonElement? simulation = null;
-                    if (trip.TryGetProperty("driverId", out var driverId) && driverId.ValueKind == JsonValueKind.String)
+                    if (
+                        trip.TryGetProperty("driverId", out var driverId)
+                        && driverId.ValueKind == JsonValueKind.String
+                    )
                     {
                         try
                         {
                             var matching = clients.CreateClient("matching");
-                            using var simulationResponse = await matching.GetAsync($"/simulations/{Uri.EscapeDataString(driverId.GetString()!)}", ct);
+                            using var simulationResponse = await matching.GetAsync(
+                                $"/simulations/{Uri.EscapeDataString(driverId.GetString()!)}",
+                                ct
+                            );
                             if (simulationResponse.IsSuccessStatusCode)
                             {
-                                var value = await simulationResponse.Content.ReadFromJsonAsync<JsonElement>(ct);
-                                if (value.ValueKind == JsonValueKind.Object && value.GetProperty("tripId").GetGuid() == id) simulation = value;
+                                var value =
+                                    await simulationResponse.Content.ReadFromJsonAsync<JsonElement>(
+                                        ct
+                                    );
+                                if (
+                                    value.ValueKind == JsonValueKind.Object
+                                    && value.GetProperty("tripId").GetGuid() == id
+                                )
+                                    simulation = value;
                             }
                         }
                         catch (HttpRequestException) { }
                         catch (TaskCanceledException) when (!ct.IsCancellationRequested) { }
                     }
-                    return Results.Ok(new { trip, payment, simulation, paymentUnavailable = deferred });
+                    return Results.Ok(
+                        new
+                        {
+                            trip,
+                            payment,
+                            simulation,
+                            paymentUnavailable = deferred,
+                        }
+                    );
                 }
             )
             .RequireAuthorization();

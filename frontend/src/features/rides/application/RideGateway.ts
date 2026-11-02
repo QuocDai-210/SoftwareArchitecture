@@ -1,4 +1,17 @@
-import type { Driver, Payment, Point, Trip, Simulation, Profile, DriverApplication, DriverRegistration, Page, PaymentStatistic, TripStatistic } from "../domain/models";
+import type {
+  Driver,
+  Payment,
+  Point,
+  Trip,
+  Simulation,
+  Profile,
+  DriverApplication,
+  DriverRegistration,
+  Page,
+  PaymentStatistic,
+  TripStatistic,
+  RoadRoute,
+} from "../domain/models";
 import type { TripAction } from "../domain/trip-rules";
 export type Booking = {
   pickup: Point;
@@ -7,6 +20,7 @@ export type Booking = {
   paymentToken: string | null;
 };
 export interface RideGateway {
+  route(pickup: Point, destination: Point): Promise<RoadRoute>;
   search(text: string): Promise<Point[]>;
   reverse(latitude: number, longitude: number): Promise<Point>;
   heartbeat(): Promise<void>;
@@ -14,7 +28,7 @@ export interface RideGateway {
   control(driverId: string, speed: number, paused: boolean): Promise<Simulation>;
   profile(): Promise<Profile>;
   saveProfile(name: string, phone: string): Promise<Profile>;
-  applications(): Promise<DriverApplication[]>;
+  applications(page: number): Promise<Page<DriverApplication>>;
   registerDriver(application: DriverRegistration): Promise<DriverApplication>;
   approveDriver(id: string, temporaryPassword: string): Promise<DriverApplication>;
   rejectDriver(id: string, reason: string): Promise<DriverApplication>;
@@ -32,7 +46,13 @@ export interface RideGateway {
   trips(): Promise<Trip[]>;
   driver(): Promise<Driver>;
   balance(): Promise<number>;
-  screen(id: string): Promise<{ payment: Payment | null; paymentUnavailable: boolean; simulation: Simulation | null }>;
+  screen(
+    id: string,
+  ): Promise<{
+    payment: Payment | null;
+    paymentUnavailable: boolean;
+    simulation: Simulation | null;
+  }>;
   book(booking: Booking, key: string): Promise<Trip>;
   act(trip: Trip, action: TripAction): Promise<void>;
   location(latitude: number, longitude: number): Promise<void>;

@@ -13,6 +13,9 @@ export \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1536}"
 python3 scripts/check-architecture.py
 if [[ "${1:-}" == "--core" ]]; then
+  if [[ -f .env ]] && command -v docker >/dev/null && docker info >/dev/null 2>&1; then
+    docker compose --profile observability stop
+  fi
   exec dotnet run --project backend/tests/SwiftRide.Checks -c Release --disable-build-servers -p:BuildInParallel=false -p:UseSharedCompilation=false -- --core
 fi
 if [[ ! -f .env ]]; then
@@ -41,6 +44,10 @@ docker compose config --quiet
 trap 'docker compose --profile observability stop' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-docker compose build
+for service in rabbitmq trip matching payment gateway web; do
+  docker compose build "$service"
+done
 docker compose up --no-build -d --wait --wait-timeout 300
-dotnet run --project backend/tests/SwiftRide.Checks -c Release --no-build -- --integration
+python3 -B scripts/sync-identity.py
+dotnet run --project backend/tests/SwiftRide.Checks -c Release --no-build -- --core
+node scripts/browser-check.mjs

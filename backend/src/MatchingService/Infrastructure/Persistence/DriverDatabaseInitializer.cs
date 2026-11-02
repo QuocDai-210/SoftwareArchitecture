@@ -7,8 +7,18 @@ public sealed class DriverDatabaseInitializer(IMongoDatabase database, IConfigur
 
     public async Task Initialize(CancellationToken ct)
     {
-        await Drivers.UpdateManyAsync(Builders<DriverDocument>.Filter.Exists(x => x.Approved, false),
-            Builders<DriverDocument>.Update.Set(x => x.Approved, config.GetValue<bool>("Fixtures:Enabled")).Set(x => x.Available, false), cancellationToken: ct);
+        await Drivers.UpdateManyAsync(
+            Builders<DriverDocument>.Filter.Exists(x => x.Approved, false),
+            Builders<DriverDocument>
+                .Update.Set(x => x.Approved, config.GetValue<bool>("Fixtures:Enabled"))
+                .Set(x => x.Available, false),
+            cancellationToken: ct
+        );
+        await Drivers.UpdateManyAsync(
+            Builders<DriverDocument>.Filter.Exists(x => x.Suspended, false),
+            Builders<DriverDocument>.Update.Set(x => x.Suspended, false),
+            cancellationToken: ct
+        );
         await Drivers.Indexes.CreateOneAsync(
             new CreateIndexModel<DriverDocument>(
                 Builders<DriverDocument>.IndexKeys.Geo2DSphere(x => x.Location)
@@ -21,7 +31,8 @@ public sealed class DriverDatabaseInitializer(IMongoDatabase database, IConfigur
             ),
             cancellationToken: ct
         );
-        if (!config.GetValue<bool>("Fixtures:Enabled")) return;
+        if (!config.GetValue<bool>("Fixtures:Enabled"))
+            return;
         var names = new[] { "Minh", "Lan", "Hùng", "An" };
         for (var i = 1; i <= 4; i++)
         {

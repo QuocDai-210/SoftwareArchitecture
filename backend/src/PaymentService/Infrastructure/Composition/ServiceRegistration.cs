@@ -18,11 +18,16 @@ public static class ServiceRegistration
         builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork<PayDb>>();
         builder.Services.AddScoped<ICheckoutStore, CheckoutStore>();
         builder.Services.AddScoped<IVnpayGateway, VnpayGateway>();
-        builder.Services.AddHttpClient("vnpay", client =>
-        {
-            client.BaseAddress = new Uri("https://sandbox.vnpayment.vn/");
-            client.Timeout = TimeSpan.FromSeconds(15);
-        }).RemoveAllLoggers();
+        builder
+            .Services.AddHttpClient(
+                "vnpay",
+                client =>
+                {
+                    client.BaseAddress = new Uri("https://sandbox.vnpayment.vn/");
+                    client.Timeout = TimeSpan.FromSeconds(15);
+                }
+            )
+            .RemoveAllLoggers();
         if (builder.Configuration["Payments:Provider"] == "Test")
             builder.Services.AddScoped<ICardProvider, DemoCardProvider>();
         else

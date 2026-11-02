@@ -2,19 +2,36 @@ namespace SwiftRide.Payments.Infrastructure;
 
 public sealed class PaymentRepository(PayDb db) : IPaymentReader, IPaymentWriter, IWalletStore
 {
-    public async Task<PageResult<PaymentView>> History(string subject, bool all, int page, CancellationToken ct)
+    public async Task<PageResult<PaymentView>> History(
+        string subject,
+        bool all,
+        int page,
+        CancellationToken ct
+    )
     {
         var query = db.Payments.AsNoTracking().Where(x => all || x.RiderId == subject);
         var count = await query.CountAsync(ct);
-        var items = await query.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).Skip((page - 1) * 10).Take(10).ToListAsync(ct);
+        var items = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Skip((page - 1) * 10)
+            .Take(10)
+            .ToListAsync(ct);
         return new(items.Select(PaymentView.From).ToArray(), page, 10, count);
     }
 
     public async Task<object> Statistics(CancellationToken ct) =>
-        await db.Payments.AsNoTracking().GroupBy(x => new { x.Status, x.IsTopUp }).Select(g => new
-        {
-            g.Key.Status, g.Key.IsTopUp, Count = g.Count(), Amount = g.Sum(x => x.Amount)
-        }).ToListAsync(ct);
+        await db
+            .Payments.AsNoTracking()
+            .GroupBy(x => new { x.Status, x.IsTopUp })
+            .Select(g => new
+            {
+                g.Key.Status,
+                g.Key.IsTopUp,
+                Count = g.Count(),
+                Amount = g.Sum(x => x.Amount),
+            })
+            .ToListAsync(ct);
 
     public Task<Payment?> Find(Guid id, CancellationToken ct) =>
         db.Payments.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
@@ -43,9 +60,12 @@ public sealed class PaymentRepository(PayDb db) : IPaymentReader, IPaymentWriter
     public async Task<Wallet> GetOrCreateLocked(string riderId, CancellationToken ct)
     {
         await db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtextextended({"wallet:" + riderId}, 0))", ct);
+            $"SELECT pg_advisory_xact_lock(hashtextextended({"wallet:" + riderId}, 0))",
+            ct
+        );
         var wallet = await GetLocked(riderId, ct);
-        if (wallet is not null) return wallet;
+        if (wallet is not null)
+            return wallet;
         wallet = Wallet.Funded(riderId, 0);
         db.Wallets.Add(wallet);
         return wallet;

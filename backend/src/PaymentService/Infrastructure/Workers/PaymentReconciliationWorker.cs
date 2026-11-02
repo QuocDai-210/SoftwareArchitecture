@@ -2,7 +2,10 @@ using Microsoft.Extensions.Logging;
 
 namespace SwiftRide.Payments.Infrastructure;
 
-public sealed class PaymentReconciliationWorker(IServiceScopeFactory scopes, ILogger<PaymentReconciliationWorker> logger) : BackgroundService
+public sealed class PaymentReconciliationWorker(
+    IServiceScopeFactory scopes,
+    ILogger<PaymentReconciliationWorker> logger
+) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -15,7 +18,9 @@ public sealed class PaymentReconciliationWorker(IServiceScopeFactory scopes, ILo
                 try
                 {
                     using var scope = scopes.CreateScope();
-                    ids = await scope.ServiceProvider.GetRequiredService<ICheckoutStore>().Pending(stoppingToken);
+                    ids = await scope
+                        .ServiceProvider.GetRequiredService<ICheckoutStore>()
+                        .Pending(stoppingToken);
                 }
                 catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
                 {
@@ -27,11 +32,17 @@ public sealed class PaymentReconciliationWorker(IServiceScopeFactory scopes, ILo
                     try
                     {
                         using var scope = scopes.CreateScope();
-                        await scope.ServiceProvider.GetRequiredService<HostedPayments>().Reconcile(id, stoppingToken);
+                        await scope
+                            .ServiceProvider.GetRequiredService<HostedPayments>()
+                            .Reconcile(id, stoppingToken);
                     }
                     catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
                     {
-                        logger.LogInformation("Payment {Id} reconciliation deferred ({Type}).", id, ex.GetType().Name);
+                        logger.LogInformation(
+                            "Payment {Id} reconciliation deferred ({Type}).",
+                            id,
+                            ex.GetType().Name
+                        );
                     }
                 }
             }

@@ -1,4 +1,4 @@
-import type { Trip, Payment } from "../../domain/models";
+import type { Trip, Simulation } from "../../domain/models";
 import { availableActions, type TripAction } from "../../domain/trip-rules";
 import { labels, money } from "../format";
 const actionLabels: Record<TripAction, string> = {
@@ -16,14 +16,14 @@ export function TripDetails({
   isRider,
   busy,
   act,
-  payment,
+  simulation,
 }: {
   trip: Trip;
   isDriver: boolean;
   isRider: boolean;
   busy: boolean;
   act: (t: Trip, action: TripAction) => void;
-  payment: Payment | null;
+  simulation: Simulation | null;
 }) {
   const b = t.quote?.breakdown;
   return (
@@ -47,9 +47,7 @@ export function TripDetails({
       </div>
       {t.quote && (
         <div className="bg-[#f3f6ee] rounded-xl p-4 my-5">
-          <p className="text-xs text-[#62766b]">
-            Giá chuyến đi · {t.method === "Wallet" ? "Ví SwiftRide" : "VNPAY sandbox"}
-          </p>
+          <p className="text-xs text-[#62766b]">Giá chuyến đi</p>
           <p className="text-3xl font-bold my-2">{money(t.quote.amount)}</p>
           {b && (
             <details className="text-xs text-[#526c5b]">
@@ -81,28 +79,21 @@ export function TripDetails({
         </div>
       )}
       {t.reason && <p className="text-sm my-4 text-[#6b5a32]">{t.reason}</p>}
-      {payment && (
-        <p className="text-sm my-4">
-          Thanh toán:{" "}
-          <strong>
-            {(
-              {
-                Settled: "Đã thu tiền",
-                Refunded: "Đã hoàn tiền",
-                Compensated: "Đã hoàn tiền bồi thường",
-                Declined: "Bị từ chối",
-                Pending: "Chờ xử lý",
-              } as Record<string, string>
-            )[payment.status] ?? payment.status}
-          </strong>
-          {payment.reason && <span className="block text-xs mt-1">{payment.reason}</span>}
+      {isDriver && ["EnRoute", "PickedUp"].includes(t.status) && !simulation?.arrived && (
+        <p className="text-sm mt-4" role="status">
+          Chờ xe đến điểm {t.status === "EnRoute" ? "đón" : "trả"} khách trước khi xác nhận.
         </p>
       )}
       <div className="flex flex-wrap gap-2 mt-5">
         {availableActions(t, isRider ? "rider" : isDriver ? "driver" : "observer").map((action) => (
           <button
             key={action}
-            disabled={busy}
+            disabled={
+              busy ||
+              ((action === "pickup" || action === "dropoff") &&
+                (!simulation?.arrived ||
+                  simulation.stage !== (action === "pickup" ? "EnRoute" : "PickedUp")))
+            }
             className={`btn ${["cancel", "driver-reject"].includes(action) ? "btn-secondary" : "flex-1"}`}
             onClick={() => act(t, action)}
           >

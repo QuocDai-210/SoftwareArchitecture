@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Native Chrome DevTools check: no test framework or browser package.
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,6 +40,7 @@ let socket;
 let sequence = 0;
 const pending = new Map();
 const errors = [];
+const contexts = new Map();
 const call = (method, params = {}, sessionId) =>
   new Promise((resolve, reject) => {
     const id = ++sequence;
@@ -91,37 +93,95 @@ async function page() {
     { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false },
     sessionId,
   );
+  contexts.set(sessionId, browserContextId);
   return sessionId;
 }
-async function login(session, user, password) {
-  await call("Page.navigate", { url: "http://localhost:3000" }, session);
-  await click(session, "Đăng nhập để tiếp tục ↗");
-  await wait(session, `!!document.querySelector('#username')`, "Keycloak login");
+async function input(session, selector, value) {
+  await wait(session, `!!document.querySelector(${JSON.stringify(selector)})`, selector);
   await evaluate(
     session,
-    `document.querySelector('#username').value = ${JSON.stringify(user)}; document.querySelector('#password').value = ${JSON.stringify(password)}; document.querySelector('#kc-login').click(); true`,
+    `(() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(element, ${JSON.stringify(value)});
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`,
   );
-  await wait(session, `!!document.querySelector('a[href="#history"]')`, "dashboard after OIDC");
-  const sessionData = await evaluate(
+}
+async function field(session, label, value) {
+  const selector = `Array.from(document.querySelectorAll('label')).find(l => l.textContent.trim().startsWith(${JSON.stringify(label)}))?.querySelector('input')`;
+  await wait(session, `!!(${selector}) && !(${selector}).disabled`, label);
+  await evaluate(
     session,
-    `(async () => { const r=await fetch('/api/auth/session'); return r.json(); })()`,
+    `(() => {
+    const element = ${selector};
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(element, ${JSON.stringify(value)});
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`,
+  );
+}
+async function request(session, path, body, method = "POST") {
+  return evaluate(
+    session,
+    `(async () => {
+    const response = await fetch('/api/backend/' + ${JSON.stringify(path)}, {
+      method: ${JSON.stringify(body === undefined ? "GET" : method)},
+      headers: { 'Content-Type': 'application/json' },
+      ${body === undefined ? "" : `body: JSON.stringify(${JSON.stringify(body)}),`}
+    });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  })()`,
+  );
+}
+async function sessionCheck(session, role) {
+  await wait(session, `!!document.querySelector('a[href="#history"]')`, "dashboard after OIDC");
+  const data = await evaluate(session, `(async () => (await fetch('/api/auth/session')).json())()`);
+  assert(data.user.id, "Session must include Keycloak subject.");
+  assert.deepEqual(
+    data.user.roles.filter((r) => ["user", "driver", "ops"].includes(r)),
+    [role],
   );
   assert(
-    sessionData.user.id && sessionData.user.roles.length,
-    "Session must include role and identity.",
-  );
-  assert.equal(
-    sessionData.user.id,
-    user === "driver1"
-      ? "22222222-2222-2222-2222-000000000001"
-      : "11111111-1111-1111-1111-000000000001",
-    "Session must use the Keycloak subject, matching backend ownership.",
-  );
-  assert(
-    !JSON.stringify(sessionData).match(/accessToken|refreshToken|access_token|refresh_token/),
+    !JSON.stringify(data).match(/accessToken|refreshToken|access_token|refresh_token/),
     "Browser session must not expose tokens.",
   );
-  console.log("PASS browser OIDC and private token session:", user);
+  return data.user.id;
+}
+async function login(session, username, password, role, newPassword) {
+  await call("Page.navigate", { url: "http://localhost:3000" }, session);
+  await click(session, "Đăng nhập để tiếp tục ↗");
+  await input(session, "#username", username);
+  await input(session, "#password", password);
+  await evaluate(session, `document.querySelector('#kc-login').click()`);
+  if (newPassword) {
+    await input(session, "#password-new", newPassword);
+    await input(session, "#password-confirm", newPassword);
+    await evaluate(
+      session,
+      `document.querySelector('input[type="submit"],button[type="submit"]').click()`,
+    );
+  }
+  return sessionCheck(session, role);
+}
+async function geolocation(session, latitude, longitude) {
+  await call("Browser.grantPermissions", {
+    browserContextId: contexts.get(session),
+    origin: "http://localhost:3000",
+    permissions: ["geolocation"],
+  });
+  await call("Emulation.setGeolocationOverride", { latitude, longitude, accuracy: 10 }, session);
+}
+async function search(session, label, text) {
+  await field(session, label, text);
+  const selector = `document.querySelector(${JSON.stringify(`ul[aria-label="Kết quả ${label}"] button`)})`;
+  await wait(session, `!!(${selector})`, `Geoapify search: ${label}`);
+  await evaluate(session, `(${selector}).click()`);
+}
+async function noAlerts(session, name) {
+  const alerts = await evaluate(
+    session,
+    `Array.from(document.querySelectorAll('[role="alert"]')).map(e => e.textContent.trim())`,
+  );
+  assert.deepEqual(alerts, [], name + ": visible errors");
 }
 async function screenshot(session, name) {
   await call("Page.bringToFront", {}, session);
@@ -156,56 +216,263 @@ try {
     }
     if (message.method === "Runtime.exceptionThrown")
       errors.push(message.params.exceptionDetails.text);
-    if (message.method === "Network.responseReceived" && message.params.response.status >= 500)
-      errors.push(
-        `${message.params.response.status} ${new URL(message.params.response.url).pathname}`,
-      );
+    if (message.method === "Network.responseReceived") {
+      const { status, url } = message.params.response;
+      const path = new URL(url).pathname;
+      if (status >= 500 || (status >= 400 && path.startsWith("/api/backend/screens/")))
+        errors.push(`${status} ${path}`);
+    }
   });
+  const suffix = Date.now().toString(36);
+  const password = "Ride9" + randomBytes(12).toString("hex");
+  const temporaryPassword = "Temp7" + randomBytes(12).toString("hex");
+  const userName = "check-user-" + suffix;
+  const driverName = "check-driver-" + suffix;
+  const user = await page();
+  const ops = await page();
   const driver = await page();
-  const rider = await page();
-  await login(driver, "driver1", env.DRIVER_PASSWORD);
-  await wait(
-    driver,
-    `Array.from(document.querySelectorAll('button')).some(b => ['Bật nhận chuyến', 'Chuyển ngoại tuyến'].includes(b.textContent.trim()) && !b.disabled)`,
-    "driver availability loaded",
+
+  await call("Page.navigate", { url: "http://localhost:3000" }, user);
+  await click(user, "Đăng ký tài khoản User");
+  for (const [selector, value] of Object.entries({
+    "#firstName": "Kiểm tra",
+    "#lastName": "User",
+    "#email": userName + "@example.com",
+    "#username": userName,
+    "#password": password,
+    "#password-confirm": password,
+  }))
+    await input(user, selector, value);
+  await evaluate(user, `document.querySelector('input[type="submit"]').click()`);
+  const userId = await sessionCheck(user, "user");
+  assert.equal((await request(user, "ops/drivers")).status, 403);
+  assert.equal((await request(user, "drivers/me")).status, 403);
+  console.log(
+    "PASS public User registration, isolated role, private tokens, forbidden Ops/Driver APIs",
   );
-  if (
+
+  await login(ops, "ops1", env.OPS_PASSWORD, "ops");
+  await evaluate(ops, `document.querySelector('#operations details').open = true`);
+  for (const [label, value] of Object.entries({
+    "Tên đăng nhập": driverName,
+    "Họ tên": "Kiểm tra Driver",
+    Email: driverName + "@example.com",
+    "Số điện thoại": "0901234567",
+    "Biển số": "59A-12345",
+    "Loại xe": "SwiftCar",
+  }))
+    await field(ops, label, value);
+  await click(ops, "Lưu hồ sơ chờ duyệt");
+  await wait(
+    ops,
+    `Array.from(document.querySelectorAll('#operations tr')).some(r => r.textContent.includes(${JSON.stringify(driverName)}))`,
+    "pending Driver application",
+  );
+  await evaluate(
+    ops,
+    `Array.from(document.querySelectorAll('#operations tr')).find(r => r.textContent.includes(${JSON.stringify(driverName)})).querySelector('button').click()`,
+  );
+  await field(ops, "Mật khẩu tạm", temporaryPassword);
+  await click(ops, "Duyệt và cấp tài khoản");
+  await wait(
+    ops,
+    `Array.from(document.querySelectorAll('#operations tr')).some(r => r.textContent.includes(${JSON.stringify(driverName)}) && r.textContent.includes('Approved'))`,
+    "Ops approves Driver and provisions identity",
+  );
+  const applications = await request(ops, "ops/drivers?page=1");
+  assert.equal(applications.status, 200);
+  assert(applications.body.total > 0 && applications.body.items.length <= 10);
+  assert.equal((await request(ops, "ops/drivers?page=0")).status, 400);
+  await screenshot(ops, "ops-approval");
+  console.log("PASS Ops Driver application, approval, provisioning and server pagination");
+
+  const driverId = await login(driver, driverName, temporaryPassword, "driver", password);
+  assert.notEqual(driverId, userId);
+  const emptySimulation = await evaluate(
+    driver,
+    `(async () => {
+    const r = await fetch('/api/backend/simulations/${driverId}');
+    return { status: r.status, text: await r.text() };
+  })()`,
+  );
+  assert.equal(emptySimulation.status, 200);
+  assert.equal(
+    emptySimulation.text,
+    "null",
+    "A vehicle without a journey must return valid JSON null.",
+  );
+  assert.equal((await request(driver, "ops/drivers")).status, 403);
+  const trackingReads = await evaluate(
+    driver,
+    `(async () => {
+    const statuses = [];
+    for (let batch = 0; batch < 8; batch++) {
+      statuses.push(...await Promise.all(Array.from({ length: 20 }, async () =>
+        (await fetch('/api/backend/drivers/me')).status)));
+    }
+    return statuses;
+  })()`,
+  );
+  assert(
+    trackingReads.every((status) => status === 200),
+    "Tracking reads remain within their own budget.",
+  );
+  await geolocation(driver, 10.772, 106.704);
+  await click(driver, "Dùng vị trí hiện tại");
+  await click(driver, "Lưu vị trí xe");
+  await click(driver, "Bật nhận chuyến");
+  await wait(driver, `document.body.innerText.includes('Đang trực tuyến')`, "Driver online");
+  console.log("PASS Driver first-login password change, geolocation, saved position, availability");
+
+  await call("Page.bringToFront", {}, user);
+  await wait(
+    user,
+    `document.querySelectorAll('.leaflet-tile-loaded').length > 0`,
+    "real map tiles",
+  );
+  const mapBounds = await evaluate(
+    user,
+    `(() => { const r = document.querySelector('.leaflet-container').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+  );
+  for (const type of ["mousePressed", "mouseReleased"])
+    await call(
+      "Input.dispatchMouseEvent",
+      { type, ...mapBounds, button: "left", clickCount: 1 },
+      user,
+    );
+  await wait(
+    user,
+    `Array.from(document.querySelectorAll('label')).find(l => l.textContent.trim().startsWith('Điểm đón'))?.querySelector('input').value.length > 0`,
+    "map click reverse geocodes pickup",
+  );
+  await geolocation(user, 10.7769, 106.7009);
+  await click(user, "Dùng vị trí hiện tại làm điểm đón");
+  await search(user, "Điểm đến", "Dinh Độc Lập");
+  await wait(
+    user,
+    `Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === 'Tìm xe và xem giá' && !b.disabled)`,
+    "real driving route preview",
+  );
+  await field(user, "Điểm đến", "Dinh Độc Lập thay đổi");
+  assert(
     await evaluate(
-      driver,
-      `Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Bật nhận chuyến')`,
-    )
-  )
-    await click(driver, "Bật nhận chuyến");
-  await wait(driver, `document.body.innerText.includes('Đang trực tuyến')`, "driver online");
-  await login(rider, "rider1", env.RIDER_PASSWORD);
-  await screenshot(rider, "rider-desktop");
-  await click(rider, "Tìm xe và xem giá");
-  await click(rider, "Đồng ý giá");
+      user,
+      `Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Tìm xe và xem giá').disabled`,
+    ),
+    "Editing selected address must clear old coordinates.",
+  );
+  await search(user, "Điểm đến", "Dinh Độc Lập");
+  await wait(
+    user,
+    `Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === 'Tìm xe và xem giá' && !b.disabled)`,
+    "updated route preview ready",
+  );
+  await screenshot(user, "user-route");
+  await click(user, "Tìm xe và xem giá");
+  await wait(
+    user,
+    `Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === 'Đồng ý giá' && !b.disabled)`,
+    "quote ready before simulation exists",
+  );
+  const quoted = (await request(user, "trips")).body.find(
+    (t) => t.status === "AwaitingRiderConfirmation",
+  );
+  assert(quoted, "User receives a quote.");
+  for (const [session, name] of [
+    [user, "User"],
+    [ops, "Ops"],
+  ]) {
+    const preview = await request(session, "screens/trips/" + quoted.id);
+    assert.equal(preview.status, 200, name + " can view trip before simulation starts.");
+    assert.equal(preview.body.simulation, null);
+  }
+  await click(user, "Đồng ý giá");
   await click(driver, "Nhận chuyến");
   await click(driver, "Đang đến đón");
+  await click(driver, "Tạm dừng");
+  const trips = await request(driver, "trips");
+  assert.equal(trips.status, 200);
+  const trip = trips.body.find((t) => t.riderId === userId && t.status === "EnRoute");
+  assert(trip, "Driver must receive this User trip.");
+  const before = await request(driver, "simulations/" + driverId);
+  assert.equal(before.body.paused, true);
+  await delay(2200);
+  const after = await request(driver, "simulations/" + driverId);
+  assert.equal(after.body.progress, before.body.progress, "Paused vehicle must not move.");
+  assert.equal(
+    (await request(user, "simulations/" + driverId, { speed: 20, paused: false }, "PUT")).status,
+    403,
+  );
+  const screen = await request(user, "screens/trips/" + trip.id);
+  assert.equal(screen.status, 200);
+  assert.equal(
+    screen.body.simulation.tripId,
+    trip.id,
+    "User can track own trip via authorized screen.",
+  );
+  await evaluate(
+    driver,
+    `(() => { const select = Array.from(document.querySelectorAll('label')).find(l => l.textContent.trim().startsWith('Tốc độ')).querySelector('select'); select.value = '20'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`,
+  );
+  await wait(
+    driver,
+    `(async () => (await (await fetch('/api/backend/simulations/${driverId}')).json()).speed === 20)()`,
+    "simulation speed saved",
+  );
+  await click(driver, "Tiếp tục");
   await click(driver, "Đã đón khách");
+  await wait(
+    driver,
+    `(async () => { const s = await (await fetch('/api/backend/simulations/${driverId}')).json(); return s.stage === 'PickedUp'; })()`,
+    "dropoff leg begins",
+  );
+  await click(driver, "Tạm dừng");
+  const onboard = (await request(driver, "trips/" + trip.id)).body;
+  assert.equal(
+    (await request(driver, "trips/" + trip.id + "/dropoff", { expectedVersion: onboard.version }))
+      .status,
+    409,
+    "Cannot drop off before arrival.",
+  );
+  const secondLeg = (await request(driver, "simulations/" + driverId)).body;
+  assert.equal(secondLeg.speed, 20, "Speed persists between legs.");
   await screenshot(driver, "driver-active");
+  await click(driver, "Tiếp tục");
   await click(driver, "Đã trả khách");
   await wait(
-    rider,
-    `document.body.innerText.includes('Đã thu tiền')`,
-    "settled payment on Rider screen",
+    user,
+    `document.querySelector('[aria-label="Chi tiết chuyến"]')?.innerText.includes('Đã trả khách') || document.body.innerText.includes('Đặt chuyến mới')`,
+    "completed journey",
   );
-  await screenshot(rider, "rider-paid");
+  await screenshot(user, "user-complete");
   console.log(
-    "PASS browser Rider/Driver booking, quote, accept, en-route, pickup, dropoff, payment",
+    "PASS real map/search/reverse/route, stale address guard, booking, Driver acceptance, simulation controls after tracking reads, arrival enforcement and dropoff",
   );
-  await click(rider, "Tìm xe và xem giá");
-  await click(rider, "Từ chối giá");
+
+  await click(user, "Đặt chuyến mới");
+  await click(user, "Tìm xe và xem giá");
+  await click(user, "Từ chối giá");
   await wait(
-    rider,
+    user,
     `document.querySelector('[aria-label="Chi tiết chuyến"]')?.innerText.includes('Đã hủy')`,
-    "rider rejects quote",
+    "User cancels quote",
   );
-  console.log("PASS browser rider cancellation");
+  await field(user, "Họ và tên", "Kiểm tra User");
+  await field(user, "Số điện thoại", "0907654321");
+  await click(user, "Lưu hồ sơ");
+  await wait(
+    user,
+    `document.querySelector('#profile').innerText.includes('Đã lưu hồ sơ.')`,
+    "profile saved",
+  );
+  assert.equal((await request(user, "profiles/me")).body.phone, "0907654321");
+  assert((await request(user, "trips/history?page=1")).body.total >= 2);
+  console.log("PASS User cancellation, profile save and paginated history");
+
   for (const [session, name] of [
-    [rider, "rider-mobile"],
+    [user, "user-mobile"],
     [driver, "driver-mobile"],
+    [ops, "ops-mobile"],
   ]) {
     await call(
       "Emulation.setDeviceMetricsOverride",
@@ -231,34 +498,25 @@ try {
       await evaluate(session, `document.activeElement.tagName !== 'BODY'`),
       `${name}: keyboard focus`,
     );
+    await noAlerts(session, name);
     await screenshot(session, name);
   }
-  console.log("PASS browser 360px responsive layout and keyboard focus");
+  await click(driver, "Chuyển ngoại tuyến");
+  console.log("PASS User/Driver/Ops 360px responsive layout, keyboard focus and no visible errors");
   if (process.argv.includes("--refresh")) {
-    console.log("Checking access-token refresh after its 300-second lifespan...");
+    console.log("Checking server-side access-token refresh after 300-second lifespan...");
     for (let i = 0; i < 31; i++) await delay(10000);
-    const result = await evaluate(
-      rider,
-      `(async () => {
-      const response = await fetch('/api/backend/wallets/me');
-      return { status: response.status, body: await response.json() };
-    })()`,
-    );
-    assert.equal(result.status, 200, "Expired access token must refresh server-side.");
-    assert.equal(result.body.currency, "VND");
+    assert.equal((await request(user, "profiles/me")).status, 200);
     console.log("PASS browser access-token refresh after expiry");
   }
-  await click(rider, "Đăng xuất");
+  await click(user, "Đăng xuất");
   await wait(
-    rider,
+    user,
     `Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === 'Đăng nhập để tiếp tục ↗')`,
     "logout",
   );
-  assert.equal(
-    await evaluate(rider, `(async () => (await fetch('/api/backend/trips')).status)()`),
-    401,
-  );
-  console.log("PASS browser logout clears backend access");
+  assert.equal((await request(user, "trips")).status, 401);
+  console.log("PASS logout clears backend access");
   assert.equal(errors.length, 0, "Browser exceptions / HTTP 5xx: " + errors.join("; "));
   console.log("Browser checks passed. Screenshots:", screenshots);
 } finally {

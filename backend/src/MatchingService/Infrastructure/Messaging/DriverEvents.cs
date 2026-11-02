@@ -7,7 +7,9 @@ public sealed class DriverEvents(DriverReservations reservations, SimulationWork
         IConsumer<RideCompleted>,
         IConsumer<TripProgressed>
 {
-    public Task Consume(ConsumeContext<TripProgressed> context) => simulation.Start(context.Message, context.CancellationToken);
+    public Task Consume(ConsumeContext<TripProgressed> context) =>
+        simulation.Start(context.Message, context.CancellationToken);
+
     public Task Consume(ConsumeContext<ReservationReleased> context) =>
         reservations.Release(
             context.Message.TripId,

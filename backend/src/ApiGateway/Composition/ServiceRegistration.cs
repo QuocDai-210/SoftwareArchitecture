@@ -31,15 +31,24 @@ public static class ServiceRegistration
                         "/trips",
                         StringComparison.OrdinalIgnoreCase
                     );
+                var reading = HttpMethods.IsGet(context.Request.Method);
+                var category =
+                    booking ? "booking"
+                    : reading ? "read"
+                    : "write";
                 var identity =
                     context.User.FindFirst("sub")?.Value
                     ?? context.Connection.RemoteIpAddress?.ToString()
                     ?? "anonymous";
                 return RateLimitPartition.GetFixedWindowLimiter(
-                    $"{identity}:{booking}",
+                    $"{identity}:{category}",
                     _ => new FixedWindowRateLimiterOptions
                     {
-                        PermitLimit = booking ? 10 : 180,
+                        // Allow two tracking tabs without consuming the command budget.
+                        PermitLimit =
+                            booking ? 10
+                            : reading ? 360
+                            : 60,
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0,
                     }
@@ -87,10 +96,33 @@ public static class ServiceRegistration
                 Match = new() { Path = "/wallets/{**rest}" },
             },
         };
-        foreach (var (prefix, cluster) in new[] { ("profiles", "trip"), ("maps", "matching"), ("ops", "matching"), ("simulations", "matching") })
-            routes.Add(new RouteConfig { RouteId = prefix, ClusterId = cluster, Match = new() { Path = "/" + prefix + "/{**rest}" } });
-        routes.Add(new RouteConfig { RouteId = "vnpay-ipn", ClusterId = "payment", Order = -1,
-            AuthorizationPolicy = "anonymous", Match = new() { Path = "/payments/vnpay/ipn", Methods = ["GET"] } });
+        foreach (
+            var (prefix, cluster) in new[]
+            {
+                ("profiles", "trip"),
+                ("maps", "matching"),
+                ("ops", "matching"),
+                ("simulations", "matching"),
+            }
+        )
+            routes.Add(
+                new RouteConfig
+                {
+                    RouteId = prefix,
+                    ClusterId = cluster,
+                    Match = new() { Path = "/" + prefix + "/{**rest}" },
+                }
+            );
+        routes.Add(
+            new RouteConfig
+            {
+                RouteId = "vnpay-ipn",
+                ClusterId = "payment",
+                Order = -1,
+                AuthorizationPolicy = "anonymous",
+                Match = new() { Path = "/payments/vnpay/ipn", Methods = ["GET"] },
+            }
+        );
         foreach (var name in new[] { "trip", "matching", "payment" })
             routes.Add(
                 new RouteConfig

@@ -127,7 +127,10 @@ public static class ServiceRegistration
             .WithTracing(t =>
                 t.AddSource("SwiftRide", "MassTransit")
                     .AddAspNetCoreInstrumentation()
-                    .AddHttpClientInstrumentation(o => o.FilterHttpRequestMessage = request => request.RequestUri?.Host != "api.geoapify.com")
+                    .AddHttpClientInstrumentation(o =>
+                        o.FilterHttpRequestMessage = request =>
+                            request.RequestUri?.Host != "api.geoapify.com"
+                    )
                     .AddOtlpExporter()
             )
             .WithMetrics(m =>

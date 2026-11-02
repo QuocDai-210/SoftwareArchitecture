@@ -1,31 +1,78 @@
-import type { Driver, Trip, DriverRegistration } from "../domain/models";
+import type { Driver, Trip, DriverRegistration, Point } from "../domain/models";
 import { availableActions, type TripAction } from "../domain/trip-rules";
 import type { Booking, RideGateway } from "./RideGateway";
 export class RideService {
   private pending: { payload: string; key: string } | null = null;
   constructor(private readonly gateway: RideGateway) {}
-  search(text: string) { return this.gateway.search(text); }
-  reverse(latitude: number, longitude: number) { return this.gateway.reverse(latitude, longitude); }
-  heartbeat() { return this.gateway.heartbeat(); }
-  simulation(driverId: string) { return this.gateway.simulation(driverId); }
-  control(driverId: string, speed: number, paused: boolean) { return this.gateway.control(driverId, speed, paused); }
-  profile() { return this.gateway.profile(); }
-  saveProfile(name: string, phone: string) { return this.gateway.saveProfile(name, phone); }
-  applications() { return this.gateway.applications(); }
-  registerDriver(application: DriverRegistration) { return this.gateway.registerDriver(application); }
-  approveDriver(id: string, temporaryPassword: string) { return this.gateway.approveDriver(id, temporaryPassword); }
-  rejectDriver(id: string, reason: string) { return this.gateway.rejectDriver(id, reason); }
-  suspendDriver(subject: string, suspended: boolean) { return this.gateway.suspendDriver(subject, suspended); }
-  history(page: number) { return this.gateway.history(page); }
-  payments(page: number) { return this.gateway.payments(page); }
-  paymentStatistics() { return this.gateway.paymentStatistics(); }
-  tripStatistics() { return this.gateway.tripStatistics(); }
-  checkout(id: string) { return this.gateway.checkout(id); }
-  topUp(amount: number, key: string) { return this.gateway.topUp(amount, key); }
-  reconcile(id: string) { return this.gateway.reconcile(id); }
-  paymentByReference(reference: string) { return this.gateway.paymentByReference(reference); }
-  refund(id: string, reason: string, key: string) { return this.gateway.refund(id, reason, key); }
-  retryPayment(trip: Trip) { return this.gateway.retryPayment(trip); }
+  route(pickup: Point, destination: Point) {
+    return this.gateway.route(pickup, destination);
+  }
+  search(text: string) {
+    return this.gateway.search(text);
+  }
+  reverse(latitude: number, longitude: number) {
+    return this.gateway.reverse(latitude, longitude);
+  }
+  heartbeat() {
+    return this.gateway.heartbeat();
+  }
+  simulation(driverId: string) {
+    return this.gateway.simulation(driverId);
+  }
+  control(driverId: string, speed: number, paused: boolean) {
+    return this.gateway.control(driverId, speed, paused);
+  }
+  profile() {
+    return this.gateway.profile();
+  }
+  saveProfile(name: string, phone: string) {
+    return this.gateway.saveProfile(name, phone);
+  }
+  applications(page: number) {
+    return this.gateway.applications(page);
+  }
+  registerDriver(application: DriverRegistration) {
+    return this.gateway.registerDriver(application);
+  }
+  approveDriver(id: string, temporaryPassword: string) {
+    return this.gateway.approveDriver(id, temporaryPassword);
+  }
+  rejectDriver(id: string, reason: string) {
+    return this.gateway.rejectDriver(id, reason);
+  }
+  suspendDriver(subject: string, suspended: boolean) {
+    return this.gateway.suspendDriver(subject, suspended);
+  }
+  history(page: number) {
+    return this.gateway.history(page);
+  }
+  payments(page: number) {
+    return this.gateway.payments(page);
+  }
+  paymentStatistics() {
+    return this.gateway.paymentStatistics();
+  }
+  tripStatistics() {
+    return this.gateway.tripStatistics();
+  }
+  checkout(id: string) {
+    return this.gateway.checkout(id);
+  }
+  topUp(amount: number, key: string) {
+    return this.gateway.topUp(amount, key);
+  }
+  reconcile(id: string) {
+    return this.gateway.reconcile(id);
+  }
+  paymentByReference(reference: string) {
+    return this.gateway.paymentByReference(reference);
+  }
+  refund(id: string, reason: string, key: string) {
+    return this.gateway.refund(id, reason, key);
+  }
+  retryPayment(trip: Trip) {
+    return this.gateway.retryPayment(trip);
+  }
   trips() {
     return this.gateway.trips();
   }

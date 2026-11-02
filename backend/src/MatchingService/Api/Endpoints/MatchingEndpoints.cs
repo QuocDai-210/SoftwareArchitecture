@@ -11,10 +11,29 @@ public static class MatchingEndpoints
                     useCase.Execute(request, ct)
             )
             .RequireAuthorization("service");
-        app.MapPost("/quote", (QuoteRequest request, QuoteTrip useCase, CancellationToken ct) => useCase.Execute(request, ct))
+        app.MapPost(
+                "/quote",
+                (QuoteRequest request, QuoteTrip useCase, CancellationToken ct) =>
+                    useCase.Execute(request, ct)
+            )
             .RequireAuthorization();
-        app.MapGet("/maps/search", (string text, MapQueries queries, CancellationToken ct) => queries.Search(text, ct)).RequireAuthorization();
-        app.MapGet("/maps/reverse", (double latitude, double longitude, MapQueries queries, CancellationToken ct) => queries.Reverse(latitude, longitude, ct)).RequireAuthorization();
+        app.MapPost(
+                "/maps/route",
+                (QuoteRequest request, MapQueries queries, CancellationToken ct) =>
+                    queries.Route(request, ct)
+            )
+            .RequireAuthorization();
+        app.MapGet(
+                "/maps/search",
+                (string text, MapQueries queries, CancellationToken ct) => queries.Search(text, ct)
+            )
+            .RequireAuthorization();
+        app.MapGet(
+                "/maps/reverse",
+                (double latitude, double longitude, MapQueries queries, CancellationToken ct) =>
+                    queries.Reverse(latitude, longitude, ct)
+            )
+            .RequireAuthorization();
         app.MapPost(
                 "/reservations",
                 (ReservationRequest request, DriverReservations useCase, CancellationToken ct) =>

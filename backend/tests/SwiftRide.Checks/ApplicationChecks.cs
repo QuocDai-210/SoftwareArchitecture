@@ -109,7 +109,9 @@ static class ApplicationChecks
 
     private sealed class MemoryWallet(Wallet wallet) : IWalletStore
     {
-        public Task<Wallet> GetOrCreateLocked(string riderId, CancellationToken ct) => Task.FromResult(wallet);
+        public Task<Wallet> GetOrCreateLocked(string riderId, CancellationToken ct) =>
+            Task.FromResult(wallet);
+
         public Task<Wallet?> GetLocked(string riderId, CancellationToken ct) =>
             Task.FromResult<Wallet?>(wallet.RiderId == riderId ? wallet : null);
     }

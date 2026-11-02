@@ -6,14 +6,17 @@ public sealed class PaymentQueries(IPaymentReader reader)
 {
     public Task<PageResult<PaymentView>> History(int page, Actor actor, CancellationToken ct)
     {
-        if (!actor.IsRider && !actor.IsOps) throw new RuleException("Cần quyền User hoặc Ops.", ErrorKind.Forbidden);
-        if (page is < 1 or > 10000) throw new RuleException("Trang không hợp lệ.", ErrorKind.Validation);
+        if (!actor.IsRider && !actor.IsOps)
+            throw new RuleException("Cần quyền User hoặc Ops.", ErrorKind.Forbidden);
+        if (page is < 1 or > 10000)
+            throw new RuleException("Trang không hợp lệ.", ErrorKind.Validation);
         return reader.History(actor.Id, actor.IsOps, page, ct);
     }
 
     public Task<object> Statistics(Actor actor, CancellationToken ct)
     {
-        if (!actor.IsOps) throw new RuleException("Cần quyền Ops.", ErrorKind.Forbidden);
+        if (!actor.IsOps)
+            throw new RuleException("Cần quyền Ops.", ErrorKind.Forbidden);
         return reader.Statistics(ct);
     }
 

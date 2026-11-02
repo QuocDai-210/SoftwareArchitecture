@@ -15,5 +15,17 @@ public sealed record PaymentView(
 )
 {
     public static PaymentView From(Payment p) =>
-        new(p.Id, p.Id, p.RiderId, p.Amount, "VND", p.Method, p.Status, p.Reason, p.CreatedAt, p.IsTopUp, p.Status == PaymentStatus.Pending && p.CheckoutReference is not null);
+        new(
+            p.Id,
+            p.Id,
+            p.RiderId,
+            p.Amount,
+            "VND",
+            p.Method,
+            p.Status,
+            p.Reason,
+            p.CreatedAt,
+            p.IsTopUp,
+            p.Status == PaymentStatus.Pending && p.CheckoutReference is not null
+        );
 }

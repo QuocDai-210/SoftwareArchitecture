@@ -4,43 +4,52 @@
 
 Đường dẫn backend trong bảng bắt đầu từ `backend/src/`.
 
-| Việc cần đổi | Bắt đầu tại |
-|---|---|
-| Endpoint, payload HTTP, policy Rider/Driver/Ops | `<Service>/Api/Endpoints/` |
-| Luật chuyển trạng thái chuyến | `TripService/Domain/Trip.cs`, `TripState.cs` |
-| Đặt, hủy, xác nhận chuyến | `TripService/Application/Commands/TripCommands.cs` |
-| Quyền tài nguyên chuyến | `TripService/Application/Security/TripAccess.cs` |
-| Danh sách/chi tiết chuyến | `TripService/Application/Queries/`; DTO tại `ReadModels/` |
-| Ghép xe, retry sau restart | `TripService/Application/Workflows/TripWorkflow.cs` |
-| SQL Server, index, optimistic concurrency | `TripService/Infrastructure/Persistence/` |
-| Trip gọi Matching qua HTTP | `TripService/Infrastructure/Clients/MatchingHttpClient.cs` |
-| Tính giá và decorator | `MatchingService/Domain/`; use case tại `Application/Pricing/` |
-| Bán kính/vị trí/giữ chỗ còn hiệu lực | `MatchingService/Domain/MatchingPolicy.cs` |
-| Tìm tài xế, vị trí, reservation | `MatchingService/Application/{Matching,Drivers,Reservations}/` |
-| GeoJSON, Mongo query, giữ chỗ nguyên tử | `MatchingService/Infrastructure/Persistence/` |
-| Số dư, trạng thái thanh toán, cân bằng Nợ/Có | `PaymentService/Domain/` |
-| Thu tiền, hoàn tiền, idempotency | `PaymentService/Application/Commands/PaymentCommands.cs` |
-| Card/Wallet và registry lựa chọn | `PaymentService/Application/Methods/` |
-| Cổng thẻ demo, giả lập timeout | `PaymentService/Infrastructure/Providers/` |
-| PostgreSQL, row/advisory lock, trigger sổ cái | `PaymentService/Infrastructure/Persistence/` |
-| Sự kiện giữa các service | `Shared/SwiftRide.Contracts/Events/` |
-| Consumer RabbitMQ | `<Service>/Infrastructure/Messaging/` |
-| Đăng ký DI và cấu hình adapter | `<Service>/Infrastructure/Composition/ServiceRegistration.cs` |
-| Khởi động host | `<Service>/Api/Program.cs` |
-| JWT, chuyển HttpContext thành Actor | `Shared/SwiftRide.Infrastructure/Security/` |
-| Inbox/Outbox, retry broker, telemetry | `Shared/SwiftRide.Infrastructure/{Messaging,Persistence,Resilience,Observability}/` |
-| Gateway routes, rate limit, upstream | `ApiGateway/Composition/ServiceRegistration.cs` |
-| Gom dữ liệu chuyến/thanh toán | `ApiGateway/Endpoints/ScreenEndpoints.cs` |
-| Mô hình và thao tác chuyến trên web | `frontend/src/features/rides/domain/` |
-| Retry đặt xe, điều phối thao tác web | `frontend/src/features/rides/application/RideService.ts` |
-| HTTP web gọi backend proxy | `frontend/src/features/rides/infrastructure/HttpRideGateway.ts` |
-| React state, polling/heartbeat | `frontend/src/features/rides/presentation/useRides.ts` |
-| Form, chi tiết chuyến, lịch sử, sơ đồ | `frontend/src/features/rides/presentation/components/` |
-| Ghép service và adapter client | `frontend/src/composition/RideClient.tsx` |
-| OIDC, session HttpOnly, refresh token | `frontend/src/infrastructure/auth/` |
-| Origin/path/body và chuyển tiếp Gateway | `frontend/src/infrastructure/http/backend-proxy.ts` |
-| Bảo vệ ranh giới tầng | `scripts/check-architecture.py` |
-| Kiểm thử nghiệp vụ/hợp đồng adapter | `backend/tests/SwiftRide.Checks/`; `scripts/check-frontend.mjs` |
+| Việc cần đổi                                     | Bắt đầu tại                                                                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Endpoint, payload HTTP, policy User/Driver/Ops   | `<Service>/Api/Endpoints/`                                                                                         |
+| Luật chuyển trạng thái chuyến                    | `TripService/Domain/Trip.cs`, `TripState.cs`                                                                       |
+| Đặt, hủy, xác nhận chuyến                        | `TripService/Application/Commands/TripCommands.cs`                                                                 |
+| Quyền tài nguyên chuyến                          | `TripService/Application/Security/TripAccess.cs`                                                                   |
+| Danh sách/chi tiết chuyến                        | `TripService/Application/Queries/`; DTO tại `ReadModels/`                                                          |
+| Ghép xe, retry sau restart                       | `TripService/Application/Workflows/TripWorkflow.cs`                                                                |
+| SQL Server, index, optimistic concurrency        | `TripService/Infrastructure/Persistence/`                                                                          |
+| Trip gọi Matching qua HTTP                       | `TripService/Infrastructure/Clients/MatchingHttpClient.cs`                                                         |
+| Tính giá và decorator                            | `MatchingService/Domain/`; use case tại `Application/Pricing/`                                                     |
+| Bán kính/vị trí/giữ chỗ còn hiệu lực             | `MatchingService/Domain/MatchingPolicy.cs`                                                                         |
+| Tìm tài xế, vị trí, reservation                  | `MatchingService/Application/{Matching,Drivers,Reservations}/`                                                     |
+| GeoJSON, Mongo query, giữ chỗ nguyên tử          | `MatchingService/Infrastructure/Persistence/`                                                                      |
+| Tìm địa chỉ, định vị ngược, xem đường đi         | `MatchingService/Application/Maps/MapQueries.cs`, `Infrastructure/Maps/GeoapifyMapProvider.cs`                     |
+| Tạo, duyệt, từ chối, khóa Driver                 | `MatchingService/Application/Drivers/DriverAdministration.cs`, `Infrastructure/Identity/KeycloakDriverIdentity.cs` |
+| Xe di chuyển, tạm dừng, tốc độ, kiểm tra đến nơi | `MatchingService/Domain/Simulation.cs`, `Application/Simulation/SimulationWorkflow.cs`                             |
+| Lưu hành trình giả lập và revision               | `MatchingService/Infrastructure/Persistence/MongoSimulationStore.cs`                                               |
+| Hồ sơ User và lịch sử có phân trang              | `TripService/Application/{Commands/ProfileCommands.cs,Queries/TripQueries.cs}`, `Infrastructure/Persistence/`      |
+| Số dư, trạng thái thanh toán, cân bằng Nợ/Có     | `PaymentService/Domain/`                                                                                           |
+| Thu tiền, hoàn tiền, idempotency                 | `PaymentService/Application/Commands/PaymentCommands.cs`                                                           |
+| Card/Wallet và registry lựa chọn                 | `PaymentService/Application/Methods/`                                                                              |
+| Cổng thẻ demo, giả lập timeout                   | `PaymentService/Infrastructure/Providers/`                                                                         |
+| PostgreSQL, row/advisory lock, trigger sổ cái    | `PaymentService/Infrastructure/Persistence/`                                                                       |
+| Sự kiện giữa các service                         | `Shared/SwiftRide.Contracts/Events/`                                                                               |
+| Consumer RabbitMQ                                | `<Service>/Infrastructure/Messaging/`                                                                              |
+| Đăng ký DI và cấu hình adapter                   | `<Service>/Infrastructure/Composition/ServiceRegistration.cs`                                                      |
+| Khởi động host                                   | `<Service>/Api/Program.cs`                                                                                         |
+| JWT, chuyển HttpContext thành Actor              | `Shared/SwiftRide.Infrastructure/Security/`                                                                        |
+| Inbox/Outbox, retry broker, telemetry            | `Shared/SwiftRide.Infrastructure/{Messaging,Persistence,Resilience,Observability}/`                                |
+| Gateway routes, rate limit, upstream             | `ApiGateway/Composition/ServiceRegistration.cs`                                                                    |
+| Gom chuyến, vị trí xe và dữ liệu thanh toán cũ   | `ApiGateway/Endpoints/ScreenEndpoints.cs`                                                                          |
+| Mô hình và thao tác chuyến trên web              | `frontend/src/features/rides/domain/`                                                                              |
+| Retry đặt xe, điều phối thao tác web             | `frontend/src/features/rides/application/RideService.ts`                                                           |
+| HTTP web gọi backend proxy                       | `frontend/src/features/rides/infrastructure/HttpRideGateway.ts`                                                    |
+| React state, polling/heartbeat                   | `frontend/src/features/rides/presentation/useRides.ts`                                                             |
+| Form, chi tiết chuyến, lịch sử, bản đồ           | `frontend/src/features/rides/presentation/components/`                                                             |
+| Ghép service và adapter client                   | `frontend/src/composition/RideClient.tsx`                                                                          |
+| OIDC, session HttpOnly, refresh token            | `frontend/src/infrastructure/auth/`                                                                                |
+| Origin/path/body và chuyển tiếp Gateway          | `frontend/src/infrastructure/http/backend-proxy.ts`                                                                |
+| Đăng ký User và đồng bộ quyền, giữ danh tính cũ  | `deploy/keycloak/swiftride-realm.json`, `scripts/sync-identity.py`                                                 |
+| Bản đồ web, chọn địa chỉ và điều khiển xe        | `frontend/src/features/rides/presentation/components/{RouteMap,AddressField,SimulationControls}.tsx`               |
+| Giao diện quản trị Driver                        | `frontend/src/features/rides/presentation/components/OpsPanel.tsx`                                                 |
+| Giới hạn RAM và kiểm thử ba vai trò              | `scripts/check-resources.py`, `scripts/browser-check.mjs`, `scripts/verify.sh`                                     |
+| Bảo vệ ranh giới tầng                            | `scripts/check-architecture.py`                                                                                    |
+| Kiểm thử nghiệp vụ/hợp đồng adapter              | `backend/tests/SwiftRide.Checks/`; `scripts/check-frontend.mjs`                                                    |
 
 ## Quy tắc đặt file
 

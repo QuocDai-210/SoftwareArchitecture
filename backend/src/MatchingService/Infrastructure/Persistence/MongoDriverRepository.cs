@@ -5,8 +5,13 @@ public sealed class MongoDriverRepository(IMongoDatabase database)
         IDriverPresence,
         IDriverReservations
 {
-    public Task Heartbeat(string driverId, CancellationToken ct) => Drivers.UpdateOneAsync(x => x.Id == driverId,
-        Builders<DriverDocument>.Update.Set(x => x.LastSeenAt, DateTime.UtcNow), cancellationToken: ct);
+    public Task Heartbeat(string driverId, CancellationToken ct) =>
+        Drivers.UpdateOneAsync(
+            x => x.Id == driverId,
+            Builders<DriverDocument>.Update.Set(x => x.LastSeenAt, DateTime.UtcNow),
+            cancellationToken: ct
+        );
+
     private IMongoCollection<DriverDocument> Drivers { get; } =
         database.GetCollection<DriverDocument>("drivers");
 
@@ -130,23 +135,31 @@ public sealed class MongoDriverRepository(IMongoDatabase database)
 
     public async Task Location(string driverId, string name, Point point, CancellationToken ct)
     {
-        await Drivers.UpdateOneAsync(
-            x => x.Id == driverId && !x.Busy && x.Approved && !x.Suspended,
+        var result = await Drivers.UpdateOneAsync(
+            x =>
+                x.Id == driverId
+                && !x.Busy
+                && x.Approved
+                && !x.Suspended
+                && (x.ReservationId == null || x.LeaseExpiresAt <= DateTime.UtcNow),
             Builders<DriverDocument>
                 .Update.Set(x => x.Location, DriverDocument.Geo(point.Longitude, point.Latitude))
-                .Set(x => x.LastSeenAt, DateTime.UtcNow)
-                .SetOnInsert(x => x.Name, name)
-                .SetOnInsert(x => x.Busy, false)
-                .SetOnInsert(x => x.Available, false),
-            new UpdateOptions { IsUpsert = true },
-            ct
+                .Set(x => x.LastSeenAt, DateTime.UtcNow),
+            cancellationToken: ct
         );
+        if (result.MatchedCount == 0)
+            throw new RuleException("Không thể đổi vị trí khi xe đang nhận hoặc phục vụ chuyến.");
     }
 
     public async Task<bool> Availability(string driverId, bool available, CancellationToken ct)
     {
         var r = await Drivers.UpdateOneAsync(
-            x => x.Id == driverId,
+            x =>
+                x.Id == driverId
+                && x.Approved
+                && !x.Suspended
+                && !x.Busy
+                && (x.ReservationId == null || x.LeaseExpiresAt <= DateTime.UtcNow),
             Builders<DriverDocument>.Update.Set(x => x.Available, available),
             cancellationToken: ct
         );

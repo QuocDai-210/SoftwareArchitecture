@@ -10,6 +10,7 @@ x-api-env: &api-env
   OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
   OTEL_EXPORTER_OTLP_PROTOCOL: grpc
   OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
+  Payments__Provider: ${PAYMENTS_PROVIDER:-Test}
   Logging__LogLevel__Microsoft: Warning
 x-api: &api
   mem_limit: 384m
@@ -121,12 +122,14 @@ services:
       JAVA_OPTS_KC_HEAP: -Xms128m -Xmx384m
       WEB_CLIENT_SECRET: ${WEB_CLIENT_SECRET}
       SERVICE_CLIENT_SECRET: ${SERVICE_CLIENT_SECRET}
+      OPS_CLIENT_SECRET: ${OPS_CLIENT_SECRET:?Run scripts/setup.py}
       RIDER_PASSWORD: ${RIDER_PASSWORD}
       DRIVER_PASSWORD: ${DRIVER_PASSWORD}
       OPS_PASSWORD: ${OPS_PASSWORD}
     ports: [127.0.0.1:8081:8080]
     volumes:
-      [./deploy/keycloak/swiftride-realm.json:/opt/keycloak/data/import/swiftride-realm.json:ro]
+      - identity-data:/opt/keycloak/data
+      - ./deploy/keycloak/swiftride-realm.json:/opt/keycloak/data/import/swiftride-realm.json:ro
     networks: [backend]
     restart: unless-stopped
     healthcheck:
@@ -161,6 +164,10 @@ services:
     environment:
       <<: *api-env
       ConnectionStrings__Matching: mongodb://matching:${MATCH_DB_PASSWORD}@mongo:27017/MatchDB?authSource=MatchDB
+      Maps__Provider: ${MAPS_PROVIDER:-Geoapify}
+      Maps__ApiKey: ${GEOAPIFY_API_KEY:-}
+      Fixtures__Enabled: ${FIXTURES_ENABLED:-false}
+      Auth__AdminClientSecret: ${OPS_CLIENT_SECRET:?Run scripts/setup.py}
       Pricing__Surge: ${PRICING_SURGE:-1}
       Pricing__Toll: ${PRICING_TOLL:-0}
       Pricing__Promotion: ${PRICING_PROMOTION:-1}
@@ -180,6 +187,7 @@ services:
     build: { context: ./backend, args: { SERVICE: PaymentService } }
     environment:
       <<: *api-env
+      Payments__Provider: ${PAYMENTS_PROVIDER:-Test}
       ConnectionStrings__Payment: Host=postgres;Database=PayDB;Username=payment;Password=${PAY_DB_PASSWORD};GSS Encryption Mode=Disable
     healthcheck:
       test: [CMD, dotnet, PaymentService.dll, --health]
@@ -219,6 +227,7 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?Run scripts/setup.py}
       AUTH_TRUST_HOST: true
       GATEWAY_URL: http://gateway:8080
+      GEOAPIFY_MAP_KEY: ${NEXT_PUBLIC_GEOAPIFY_MAP_KEY:-}
     ports: [127.0.0.1:3000:3000]
     networks: [backend]
     restart: unless-stopped
@@ -265,3 +274,4 @@ volumes:
   match-data:
   pay-data:
   rabbit-data:
+  identity-data:

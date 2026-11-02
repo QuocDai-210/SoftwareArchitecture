@@ -18,13 +18,27 @@ public sealed class DriverApplication
 
     public void Validate()
     {
-        if (string.IsNullOrWhiteSpace(Username) || string.IsNullOrWhiteSpace(Email) || string.IsNullOrWhiteSpace(Phone)
-            || Username.Length is < 3 or > 60 || Username.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_' and not '.')
-            || string.IsNullOrWhiteSpace(Name) || Name.Length > 100
-            || Email.Length > 120 || !System.Net.Mail.MailAddress.TryCreate(Email, out _)
-            || Phone.Length is < 9 or > 15 || Phone.Any(c => !char.IsAsciiDigit(c) && c != '+')
-            || string.IsNullOrWhiteSpace(Plate) || Plate.Length > 20
-            || string.IsNullOrWhiteSpace(Vehicle) || Vehicle.Length > 100)
+        var digits = Phone?.StartsWith('+') == true ? Phone[1..] : Phone;
+        if (
+            string.IsNullOrWhiteSpace(Username)
+            || string.IsNullOrWhiteSpace(Email)
+            || string.IsNullOrWhiteSpace(Phone)
+            || Username.Length is < 3 or > 60
+            || Username.Any(c =>
+                !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_' and not '.'
+            )
+            || string.IsNullOrWhiteSpace(Name)
+            || Name.Length > 100
+            || Email.Length > 120
+            || !System.Net.Mail.MailAddress.TryCreate(Email, out _)
+            || Phone.Length > 15
+            || digits!.Length < 9
+            || digits.Any(c => !char.IsAsciiDigit(c))
+            || string.IsNullOrWhiteSpace(Plate)
+            || Plate.Length > 20
+            || string.IsNullOrWhiteSpace(Vehicle)
+            || Vehicle.Length > 100
+        )
             throw new RuleException("Hồ sơ tài xế không hợp lệ.", ErrorKind.Validation);
     }
 
@@ -39,13 +53,19 @@ public sealed class DriverApplication
     {
         if (Status != "Provisioning" || string.IsNullOrWhiteSpace(subject))
             throw new RuleException("Chưa hoàn tất cấp danh tính.");
-        Subject = subject; Status = "Approved"; Reason = null;
+        Subject = subject;
+        Status = "Approved";
+        Reason = null;
     }
 
     public void Reject(string reason)
     {
         if (Status != "Pending" || string.IsNullOrWhiteSpace(reason) || reason.Length > 200)
-            throw new RuleException("Cần hồ sơ chờ duyệt và lý do tối đa 200 ký tự.", ErrorKind.Validation);
-        Status = "Rejected"; Reason = reason;
+            throw new RuleException(
+                "Cần hồ sơ chờ duyệt và lý do tối đa 200 ký tự.",
+                ErrorKind.Validation
+            );
+        Status = "Rejected";
+        Reason = reason;
     }
 }
