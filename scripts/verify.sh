@@ -50,4 +50,4 @@ done
 docker compose up --no-build -d --wait --wait-timeout 300
 python3 -B scripts/sync-identity.py
 dotnet run --project backend/tests/SwiftRide.Checks -c Release --no-build -- --core
-node scripts/browser-check.mjs
+node scripts/browser-check.mjs --faults

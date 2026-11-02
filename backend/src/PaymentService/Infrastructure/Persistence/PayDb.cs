@@ -14,6 +14,12 @@ public sealed class PayDb(DbContextOptions<PayDb> options) : DbContext(options)
         var p = b.Entity<Payment>();
         p.HasKey(x => x.Id);
         p.Property(x => x.RiderId).HasMaxLength(100);
+        p.Property(x => x.DriverId).HasMaxLength(100);
+        p.Property(x => x.CollectedBy).HasMaxLength(100);
+        p.Property(x => x.CollectionKey).HasMaxLength(100);
+        p.Property(x => x.CollectionHash).HasMaxLength(100);
+        p.Property(x => x.CollectionReason).HasMaxLength(200);
+        p.Property(x => x.RefundedBy).HasMaxLength(100);
         p.Property(x => x.IdempotencyKey).HasMaxLength(100);
         p.HasIndex(x => x.IdempotencyKey).IsUnique();
         p.Property(x => x.Amount).HasPrecision(18, 0);

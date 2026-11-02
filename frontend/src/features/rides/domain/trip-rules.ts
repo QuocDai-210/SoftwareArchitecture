@@ -1,12 +1,12 @@
 import type { Trip } from "./models";
-export const terminal = new Set([
-  "Paid",
-  "Cancelled",
-  "Failed",
-  "DroppedOff",
-  "PaymentPending",
-  "PaymentReview",
-]);
+export const terminal = new Set(["Paid", "Cancelled", "Failed"]);
+export function isActiveTrip(trip: Pick<Trip, "status" | "method">): boolean {
+  return (
+    !terminal.has(trip.status) &&
+    (trip.method === "Cod" ||
+      !["DroppedOff", "PaymentPending", "PaymentReview"].includes(trip.status))
+  );
+}
 export type TripAction =
   | "confirm-quote"
   | "cancel"

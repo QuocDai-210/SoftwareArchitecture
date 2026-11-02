@@ -1,9 +1,8 @@
 "use client";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { RideService } from "../application/RideService";
 import { useRides, type RideUser } from "./useRides";
 import { labels } from "./format";
-import { Stat } from "./components/Stat";
 import { BookingForm } from "./components/BookingForm";
 import { DriverAvailability } from "./components/DriverAvailability";
 import { TripHistory } from "./components/TripHistory";
@@ -12,6 +11,9 @@ import { RouteMap } from "./components/RouteMap";
 import { AccountPanel } from "./components/AccountPanel";
 import { OpsPanel } from "./components/OpsPanel";
 import { SimulationControls } from "./components/SimulationControls";
+import { PaymentPanel } from "./components/PaymentPanel";
+import { CashReceipt } from "./components/CashReceipt";
+import { NavIcon, type View } from "./components/NavIcon";
 
 export function RideDashboard({
   user,
@@ -27,125 +29,99 @@ export function RideDashboard({
   const model = useRides(user, service);
   const { isDriver, isRider, isOps, driver, error, busy, active, current, reload, run, act } =
     model;
+  const [view, setView] = useState<View>(isOps ? "overview" : "ride");
+  const [collapsed, setCollapsed] = useState(false);
+  const nav: { id: View; label: string }[] = [
+    { id: "ride", label: isOps ? "Bản đồ" : isDriver ? "Nhận chuyến" : "Đặt xe" },
+    { id: "history", label: "Lịch sử chuyến" },
+    { id: "payments", label: "Tiền mặt" },
+    ...(isOps
+      ? [
+          { id: "operations" as const, label: "Quản lý tài xế" },
+          { id: "overview" as const, label: "Tổng quan" },
+        ]
+      : []),
+    { id: "profile", label: "Hồ sơ cá nhân" },
+  ];
+  useEffect(() => {
+    function sync() {
+      const [value, id] = window.location.hash.slice(1).split("/");
+      if (value === "ride" && id && /^[0-9a-f-]{36}$/i.test(id)) model.setSelected(id);
+      const known: View[] = [
+        "ride",
+        "history",
+        "payments",
+        "profile",
+        ...(isOps ? ["operations" as const, "overview" as const] : []),
+      ];
+      if (known.includes(value as View)) setView(value as View);
+    }
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, [isOps, model.setSelected]);
+  function openRide(id?: string) {
+    if (id) model.setSelected(id);
+    setCollapsed(false);
+    window.location.hash = id ? `ride/${id}` : "ride";
+    setView("ride");
+  }
+  const vehicle = driver
+    ? { latitude: driver.latitude, longitude: driver.longitude, label: "Vị trí xe" }
+    : null;
+  const selecting = !current && ((isRider && !active) || (isDriver && !driver?.busy && !active));
   const roleName = isOps
     ? "Ops · Quản trị hệ thống"
     : isDriver
       ? "Driver · Tài xế"
       : "User · Người đặt xe";
-  const vehicle = driver
-    ? { latitude: driver.latitude, longitude: driver.longitude, label: "Vị trí xe" }
-    : null;
-  const selecting = (isRider && !active) || (isDriver && !driver?.busy && !active);
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
-      <aside className="bg-[#164b40] text-white p-5 lg:p-7 lg:min-h-screen flex lg:flex-col justify-between gap-6">
-        <div>
-          <a href="/" className="text-2xl font-black tracking-tight">
-            swift<span className="text-[#b4d59a]">ride</span>
-          </a>
-          <p className="text-xs tracking-widest text-[#c5d6cc] mt-2">ĐI GẦN HƠN</p>
-          <nav
-            aria-label="Điều hướng chính"
-            className="flex flex-wrap lg:block mt-5 lg:mt-12 gap-2 lg:space-y-3 text-sm"
+    <div className="app-shell">
+      <header className="app-header">
+        <a className="wordmark" href="#ride" aria-label="SwiftRide trang chủ">
+          <span className="brand-symbol" aria-hidden="true">
+            s
+          </span>
+          swift<span>ride</span>
+        </a>
+        <span className="city-label">
+          TP. Hồ Chí Minh <span className="status-dot" />
+        </span>
+        <a className="account-link" href="#profile">
+          <span className="avatar">{user.name.slice(0, 1).toUpperCase()}</span>
+          <span>
+            <strong>{user.name}</strong>
+            <small>{roleName}</small>
+          </span>
+        </a>
+      </header>
+      <nav className="app-nav" aria-label="Điều hướng chính">
+        {nav.map((item) => (
+          <a
+            key={item.id}
+            href={`#${item.id}`}
+            aria-current={view === item.id ? "page" : undefined}
           >
-            <a href="#main" className="block rounded-xl bg-white/10 px-3 py-3">
-              {isOps ? "Theo dõi chuyến" : isDriver ? "Nhận chuyến" : "Đặt xe"}
-            </a>
-            <a href="#history" className="block px-3 py-3">
-              Lịch sử chuyến
-            </a>
-            {isOps && (
-              <a href="#operations" className="block px-3 py-3">
-                Quản lý tài xế
-              </a>
-            )}
-            <a href="#profile" className="block px-3 py-3">
-              Hồ sơ cá nhân
-            </a>
-          </nav>
-        </div>
-        <div className="text-sm lg:border-t lg:border-white/20 lg:pt-6">
-          <p className="font-bold">{user.name}</p>
-          <p className="text-[#c5d6cc] text-xs mb-2">{roleName}</p>
+            <NavIcon name={item.id} />
+            <span>{item.label}</span>
+          </a>
+        ))}
+        <div className="nav-footer">
+          <span className="text-xs">Đi gần hơn. Mỗi ngày.</span>
           {logout}
         </div>
-      </aside>
-      <main id="main" className="p-5 sm:p-8 xl:p-10 max-w-[1500px] w-full mx-auto">
-        <header className="flex flex-wrap items-start justify-between gap-4 mb-8">
-          <div>
-            <p className="text-xs tracking-widest text-[#587467] uppercase mb-2">{roleName}</p>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
-              {isOps
-                ? "Vận hành SwiftRide"
-                : isDriver
-                  ? "Đồng hành cùng thành phố"
-                  : "Hôm nay, mình đi đâu?"}
-            </h1>
-          </div>
-          <span className="rounded-full border border-[#cfdacb] bg-white px-4 py-2 text-xs text-[#426551]">
-            TP. Hồ Chí Minh
-          </span>
-        </header>
+      </nav>
+      <main id="main" className={view === "ride" ? "app-main map-main" : "app-main content-main"}>
         {error && (
-          <div
-            role="alert"
-            className="mb-5 rounded-xl border border-[#e6b8a7] bg-[#fff3ec] p-4 text-sm text-[#842b18] flex justify-between gap-3"
-          >
+          <div role="alert" className="app-alert">
             <p>{error}</p>
             <button className="underline shrink-0" onClick={() => void run(reload)} disabled={busy}>
               Tải lại
             </button>
           </div>
         )}
-        <div className="grid sm:grid-cols-3 gap-3 mb-7">
-          <Stat
-            label={isDriver ? "Trạng thái nhận chuyến" : "Tổng số chuyến"}
-            value={
-              isDriver
-                ? driver?.available
-                  ? "Đang trực tuyến"
-                  : "Đang ngoại tuyến"
-                : String(model.history.total)
-            }
-          />
-          <Stat label="Hành trình đã hoàn tất gần đây" value={String(model.complete)} />
-          <Stat
-            label="Chuyến hiện tại"
-            value={active ? (labels[active.status] ?? active.status) : "Sẵn sàng"}
-          />
-        </div>
-        <div className="grid xl:grid-cols-[minmax(300px,400px)_1fr] gap-6 items-start">
-          <div className="space-y-5">
-            {isRider && <BookingForm model={model} service={service} />}
-            {isDriver && <DriverAvailability model={model} service={service} />}
-            {isOps && (
-              <p className="card p-5 text-sm">
-                Chọn chuyến trong lịch sử để xem trạng thái và theo dõi vị trí xe. Hồ sơ tài xế được
-                nhập và xét duyệt trong phần quản lý.
-              </p>
-            )}
-            {current && (
-              <>
-                <TripDetails
-                  trip={current}
-                  isDriver={isDriver && current.driverId === user.id}
-                  isRider={isRider && current.riderId === user.id}
-                  busy={busy}
-                  act={act}
-                  simulation={model.simulation}
-                />
-                {!active && (
-                  <button
-                    className="btn btn-secondary w-full"
-                    onClick={() => model.setSelected(null)}
-                  >
-                    {isRider ? "Đặt chuyến mới" : "Đóng chi tiết chuyến"}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-          <div className="space-y-5">
+        {view === "ride" ? (
+          <div className="ride-stage">
             <RouteMap
               mapKey={mapKey}
               pickup={current?.pickup ?? (isDriver ? (model.driverPoint ?? vehicle) : model.from)}
@@ -154,49 +130,197 @@ export function RideDashboard({
               simulation={model.simulation}
               onSelect={selecting ? model.selectMap : undefined}
             />
-            {(isDriver || isOps) &&
-              model.simulation &&
-              current &&
-              ["EnRoute", "PickedUp"].includes(current.status) && (
-                <SimulationControls
-                  simulation={model.simulation}
-                  onChange={model.controlSimulation}
-                  busy={busy}
-                />
-              )}
-            <TripHistory
-              busy={busy}
-              loading={model.loading}
-              trips={model.history.items}
-              current={current}
-              isDriver={isDriver}
-              run={run}
-              reload={reload}
-              setSelected={model.setSelected}
-            />
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <button
-                className="btn btn-secondary"
-                disabled={busy || model.page <= 1}
-                onClick={() => model.setPage(model.page - 1)}
-              >
-                Trang trước
-              </button>
-              <span>
-                Trang {model.page} · {model.history.total} chuyến
-              </span>
-              <button
-                className="btn btn-secondary"
-                disabled={busy || model.page * model.history.pageSize >= model.history.total}
-                onClick={() => model.setPage(model.page + 1)}
-              >
-                Trang sau
-              </button>
+            <div className="map-label">
+              <span className="status-dot" /> Tuyến đường thực tế{" "}
+              <span className="text-slate-500">· Xe giả lập</span>
             </div>
+            <section
+              className={`ride-sheet ${collapsed ? "sheet-collapsed" : ""}`}
+              aria-label="Thao tác chuyến đi"
+            >
+              <button
+                className="sheet-toggle"
+                onClick={() => setCollapsed(!collapsed)}
+                aria-expanded={!collapsed}
+              >
+                <span className="sheet-handle" />
+                <span>
+                  {current
+                    ? labels[current.status]
+                    : isDriver
+                      ? "Sẵn sàng đồng hành"
+                      : "Hôm nay, mình đi đâu?"}
+                </span>
+                <span aria-hidden="true">{collapsed ? "+" : "−"}</span>
+              </button>
+              <div className="sheet-content">
+                {model.loading && (
+                  <p className="p-6" role="status">
+                    Đang tải chuyến đi…
+                  </p>
+                )}
+                {isRider && !current && <BookingForm model={model} service={service} />}
+                {isDriver && !active && !current && (
+                  <DriverAvailability model={model} service={service} />
+                )}
+                {isOps && !current && (
+                  <div className="p-6">
+                    <p className="eyebrow">TRUNG TÂM VẬN HÀNH</p>
+                    <h1 className="text-2xl font-bold mt-2">Mọi hành trình trong tầm mắt</h1>
+                    <p className="muted mt-3">
+                      Chọn chuyến để xem vị trí xe, trạng thái và thanh toán tiền mặt.
+                    </p>
+                    <a className="btn mt-5 w-full" href="#history">
+                      Xem danh sách chuyến
+                    </a>
+                  </div>
+                )}
+                {current && (
+                  <>
+                    <TripDetails
+                      trip={current}
+                      isDriver={isDriver && current.driverId === user.id}
+                      isRider={isRider && current.riderId === user.id}
+                      busy={busy}
+                      act={act}
+                      simulation={model.simulation}
+                      assignedDriver={model.assignedDriver}
+                    />
+                    {["PaymentPending", "PaymentReview", "Paid"].includes(current.status) && (
+                      <CashReceipt
+                        trip={current}
+                        payment={model.payment}
+                        unavailable={model.paymentUnavailable}
+                        isDriver={isDriver && current.driverId === user.id}
+                        busy={busy}
+                        service={service}
+                        run={run}
+                      />
+                    )}
+                    {isOps && current.method === "Cod" && current.status === "PaymentReview" && (
+                      <button
+                        className="btn btn-secondary m-5"
+                        disabled={busy}
+                        onClick={() => void run(() => service.retryPayment(current))}
+                      >
+                        Thử lại tạo giao dịch
+                      </button>
+                    )}
+                    {(isDriver || isOps) &&
+                      model.simulation &&
+                      ["EnRoute", "PickedUp"].includes(current.status) && (
+                        <details className="simulation-panel">
+                          <summary>Điều khiển xe giả lập</summary>
+                          <SimulationControls
+                            simulation={model.simulation}
+                            onChange={model.controlSimulation}
+                            busy={busy}
+                          />
+                        </details>
+                      )}
+                    {!active && (
+                      <button
+                        className="btn btn-secondary m-5"
+                        onClick={() => {
+                          model.setSelected(null);
+                          window.location.hash = "ride";
+                        }}
+                      >
+                        {isRider ? "Đặt chuyến mới" : "Đóng chi tiết chuyến"}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </section>
           </div>
-        </div>
-        {isOps && <OpsPanel service={service} run={run} busy={busy} />}
-        <AccountPanel service={service} run={run} busy={busy} initialName={user.name} />
+        ) : (
+          <div className="content-wrap">
+            <header className="page-heading">
+              <p className="eyebrow">SWIFTRIDE / {roleName}</p>
+              <h1>{nav.find((item) => item.id === view)?.label}</h1>
+              <p className="muted">
+                {view === "payments"
+                  ? "Thu và hoàn tiền rõ ràng, từng hành trình."
+                  : view === "history"
+                    ? "Xem lại hành trình và tiếp tục chuyến đang diễn ra."
+                    : "Thông tin rõ ràng. Thao tác trong tầm tay."}
+              </p>
+            </header>
+            {(view === "history" || view === "overview") && (
+              <>
+                {view === "overview" && (
+                  <div className="overview-banner">
+                    <div>
+                      <p className="eyebrow">HOẠT ĐỘNG HỆ THỐNG</p>
+                      <h2>{model.history.total} chuyến đi</h2>
+                      <p>
+                        {active
+                          ? labels[active.status]
+                          : "Theo dõi hành trình, tài xế và các khoản thu tại một nơi."}
+                      </p>
+                    </div>
+                    <a className="btn" href="#operations">
+                      Quản lý tài xế
+                    </a>
+                  </div>
+                )}
+                <TripHistory
+                  busy={busy}
+                  loading={model.loading}
+                  trips={model.history.items}
+                  current={current}
+                  isDriver={isDriver}
+                  run={run}
+                  reload={reload}
+                  setSelected={openRide}
+                />
+                <div className="pagination">
+                  <button
+                    className="btn btn-secondary"
+                    disabled={busy || model.page <= 1}
+                    onClick={() => model.setPage(model.page - 1)}
+                  >
+                    Trang trước
+                  </button>
+                  <span>
+                    Trang {model.page} · {model.history.total} chuyến
+                  </span>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={busy || model.page * model.history.pageSize >= model.history.total}
+                    onClick={() => model.setPage(model.page + 1)}
+                  >
+                    Trang sau
+                  </button>
+                </div>
+              </>
+            )}
+            {view === "overview" && (
+              <OpsPanel service={service} run={run} busy={busy} summaryOnly />
+            )}
+            {view === "operations" && isOps && <OpsPanel service={service} run={run} busy={busy} />}
+            {view === "payments" && (
+              <PaymentPanel
+                service={service}
+                run={run}
+                busy={busy}
+                isOps={isOps}
+                isDriver={isDriver}
+                onTrip={openRide}
+              />
+            )}
+            {view === "profile" && (
+              <>
+                <AccountPanel service={service} run={run} busy={busy} initialName={user.name} />
+                <div className="card p-5 mt-5 flex justify-between items-center">
+                  <span className="muted">Kết thúc phiên làm việc</span>
+                  {logout}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

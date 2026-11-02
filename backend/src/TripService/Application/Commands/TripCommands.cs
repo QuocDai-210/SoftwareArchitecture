@@ -10,7 +10,6 @@ public sealed class TripCommands(
     ITripWriter writer,
     IEventPublisher bus,
     ITripMetrics metrics,
-    SwiftRide.Application.Payments.IPaymentTokenPolicy tokens,
     IMatchingClient matching
 )
 {
@@ -33,9 +32,11 @@ public sealed class TripCommands(
             throw new RuleException("Điểm đón và điểm đến phải khác nhau.", ErrorKind.Validation);
         if (!Enum.IsDefined(request.Method))
             throw new RuleException("Phương thức thanh toán không hợp lệ.", ErrorKind.Validation);
-        tokens.Validate(request.Method, request.PaymentToken);
-        if (request.Method == PaymentMethod.Wallet)
-            request = request with { PaymentToken = null };
+        if (request.Method != PaymentMethod.Cod || request.PaymentToken is not null)
+            throw new RuleException(
+                "Chuyến mới chỉ hỗ trợ thanh toán tiền mặt.",
+                ErrorKind.Validation
+            );
         RequestKeys.Validate(key);
         if (!actor.IsRider)
             throw new RuleException("Cần quyền Rider.", ErrorKind.Forbidden);
@@ -47,6 +48,15 @@ public sealed class TripCommands(
             RequestKeys.Same(previous.RequestHash, hash);
             return new(TripView.From(previous), previous.Id, false);
         }
+        if (
+            (await reader.List(rider, false, ct)).Any(x =>
+                x.Method == PaymentMethod.Cod
+                && x.Status is TripStatus.PaymentPending or TripStatus.PaymentReview
+            )
+        )
+            throw new RuleException(
+                "Bạn còn chuyến chờ xử lý tiền mặt. Hoàn tất trước khi đặt chuyến mới."
+            );
         var trip = new Trip
         {
             Id = Guid.NewGuid(),
@@ -142,6 +152,8 @@ public sealed class TripCommands(
         if (!actor.IsOps)
             throw new RuleException("Cần quyền Ops.", ErrorKind.Forbidden);
         var trip = await reader.Get(id, ct);
+        if (trip.Method != PaymentMethod.Cod)
+            throw new RuleException("Giao dịch online cũ chỉ đọc; cần đối soát ngoài hệ thống.");
         trip.CheckVersion(request.ExpectedVersion);
         trip.Move(TripStatus.PaymentPending);
         await bus.Publish(WorkflowEvents.Completed(trip), trip.CorrelationId, ct);

@@ -11,11 +11,11 @@ export function TripHistory({
   setSelected,
 }: Pick<
   RidesViewModel,
-  "busy" | "loading" | "trips" | "current" | "isDriver" | "run" | "reload" | "setSelected"
->) {
+  "busy" | "loading" | "trips" | "current" | "isDriver" | "run" | "reload"
+> & { setSelected: (id: string) => void }) {
   return (
     <section id="history" className="card overflow-hidden">
-      <div className="p-5 border-b border-[#e4e8e0] flex justify-between items-center">
+      <div className="p-5 border-b border-[#dcebe5] flex justify-between items-center">
         <h2 className="font-bold text-lg">Chuyến đi gần đây</h2>
         <button
           className="text-sm underline min-h-11"
@@ -39,11 +39,11 @@ export function TripHistory({
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-[#e4e8e0]">
+        <ul className="divide-y divide-[#dcebe5]">
           {trips.map((t) => (
             <li key={t.id}>
               <button
-                className={`w-full text-left p-5 hover:bg-[#f6f8f2] ${current?.id === t.id ? "bg-[#f0f5eb]" : ""}`}
+                className={`w-full text-left p-5 hover:bg-[#f4fbf7] ${current?.id === t.id ? "bg-[#e7f8ef]" : ""}`}
                 onClick={() => setSelected(t.id)}
                 aria-pressed={current?.id === t.id}
               >

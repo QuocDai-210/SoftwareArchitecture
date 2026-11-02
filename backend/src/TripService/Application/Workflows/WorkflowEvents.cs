@@ -11,7 +11,8 @@ public static class WorkflowEvents
             trip.Method,
             trip.PaymentToken,
             trip.CorrelationId,
-            trip.Version
+            trip.Version,
+            trip.DriverId
         );
 
     public static Task Release(Trip trip, IEventPublisher bus, CancellationToken ct) =>

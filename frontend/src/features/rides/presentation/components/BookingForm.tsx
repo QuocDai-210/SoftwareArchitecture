@@ -6,7 +6,8 @@ export function BookingForm({ model, service }: { model: RidesViewModel; service
   const disabled = !!model.active || model.busy;
   return (
     <section className="card p-6">
-      <h2 className="text-lg font-bold mb-5">Đặt một chuyến xe</h2>
+      <p className="eyebrow">MỘT CHẠM, MỘT HÀNH TRÌNH</p>
+      <h1 className="text-2xl font-bold mt-2 mb-5">Bạn muốn đi đâu?</h1>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -64,6 +65,16 @@ export function BookingForm({ model, service }: { model: RidesViewModel; service
             {Math.ceil(model.preview.durationMinutes)} phút
           </p>
         )}
+        <div className="service-choice">
+          <span className="service-icon" aria-hidden="true">
+            S
+          </span>
+          <div>
+            <strong>SwiftRide</strong>
+            <p className="text-xs muted">Một hành trình, giá rõ ràng</p>
+          </div>
+          <span className="badge ml-auto">Tiền mặt</span>
+        </div>
         <button
           className="btn w-full"
           type="submit"

@@ -11,5 +11,6 @@ public sealed record RideCompleted(
     PaymentMethod Method,
     string? PaymentToken,
     string CorrelationId,
-    long Attempt = 0
+    long Attempt = 0,
+    string? DriverId = null
 );

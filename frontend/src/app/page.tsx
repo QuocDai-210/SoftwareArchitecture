@@ -5,63 +5,101 @@ export default async function Home() {
   const session = await auth();
   if (!session)
     return (
-      <main id="main" className="min-h-screen grid lg:grid-cols-2">
-        <section className="bg-[#164b40] p-8 sm:p-16 text-white flex flex-col justify-between gap-16">
-          <div className="text-2xl font-black tracking-tight">
-            swift<span className="text-[#b4d59a]">ride</span>
-            <span className="text-xs ml-3 font-normal tracking-widest">ĐI GẦN HƠN</span>
-          </div>
-          <div>
-            <p className="text-[#c5ddbb] text-sm uppercase tracking-[.2em] mb-5">
-              Thành phố của bạn. Nhịp đi của bạn.
-            </p>
-            <h1 className="text-4xl sm:text-6xl font-bold leading-tight max-w-lg">
-              Một chuyến đi.
+      <main id="main" className="welcome-page">
+        <header className="welcome-header">
+          <a className="wordmark" href="/">
+            <span className="brand-symbol" aria-hidden="true">
+              s
+            </span>
+            swift<span>ride</span>
+          </a>
+          <span className="badge">Đi gần hơn. Mỗi ngày.</span>
+        </header>
+        <div className="welcome-body">
+          <section className="welcome-hero">
+            <p className="eyebrow">MỖI ĐIỂM ĐẾN, MỘT KHỞI ĐẦU</p>
+            <h1>
+              Thành phố rộng.
               <br />
-              Trọn vẹn từng bước.
+              Mình đi <span>cùng nhau.</span>
             </h1>
-            <p className="text-[#d0ded5] mt-6 max-w-md leading-relaxed">
-              Đặt xe, xác nhận giá và theo dõi tài xế. Mọi trạng thái đều rõ ràng.
+            <p className="welcome-description">
+              Đặt xe dễ dàng. Giá rõ ràng.
+              <br />
+              An tâm theo dõi từng chặng đường.
             </p>
-          </div>
-          <p className="text-sm text-[#c5d6cc]">SWIFTRIDE · ĐỒ ÁN KIẾN TRÚC PHẦN MỀM</p>
-        </section>
-        <section className="p-8 sm:p-16 flex flex-col justify-center max-w-xl mx-auto w-full">
-          <p className="text-sm text-[#557466] mb-3">CHÀO MỪNG ĐẾN SWIFTRIDE</p>
-          <h2 className="text-3xl font-bold mb-3">Bắt đầu hành trình</h2>
-          <p className="text-[#60756b] leading-relaxed mb-8">
-            User đặt xe, Driver nhận chuyến, Ops quản trị hệ thống. Tài xế được Ops xét duyệt và cấp
-            tài khoản.
-          </p>
-          <form
-            action={async () => {
-              "use server";
-              await signIn("keycloak", { redirectTo: "/" });
-            }}
-          >
-            <button className="btn w-full" type="submit">
-              Đăng nhập để tiếp tục <span aria-hidden="true">↗</span>
-            </button>
-          </form>
-          <form
-            className="mt-4"
-            action={async () => {
-              "use server";
-              await signIn("keycloak", { redirectTo: "/" }, { prompt: "create" });
-            }}
-          >
-            <button className="btn btn-secondary w-full" type="submit">
-              Đăng ký tài khoản User
-            </button>
-          </form>
-          <div className="card p-5 mt-8 text-sm leading-relaxed">
-            <strong>Thông tin sử dụng</strong>
-            <p className="mt-2 text-[#60756b]">
-              Bản đồ dùng đường đi thực tế. Xe di chuyển giả lập để phục vụ đồ án. Đặt điểm đón,
-              điểm đến và theo dõi từng mốc đón/trả khách trên bản đồ.
+            <div className="welcome-route" aria-hidden="true">
+              <svg viewBox="0 0 460 200" fill="none">
+                <path
+                  d="M0 45h460M0 120h460M90 0v200M240 0v200M370 0v200"
+                  stroke="#d0eade"
+                  strokeWidth="20"
+                />
+                <path
+                  d="M65 130h105V65h158v75h70"
+                  stroke="#087b66"
+                  strokeWidth="6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="65" cy="130" r="11" fill="white" stroke="#087b66" strokeWidth="5" />
+                <circle cx="398" cy="140" r="11" fill="#087b66" stroke="white" strokeWidth="5" />
+              </svg>
+              <div className="welcome-route-label">
+                <span className="status-dot" />
+                Từ nơi bạn ở, đến nơi bạn muốn.
+              </div>
+            </div>
+            <div className="welcome-benefits">
+              <span>Giá trước chuyến đi</span>
+              <span>Thanh toán tiền mặt</span>
+              <span>Theo dõi trên bản đồ</span>
+            </div>
+          </section>
+          <section className="welcome-auth card">
+            <span className="service-icon" aria-hidden="true">
+              S
+            </span>
+            <p className="eyebrow mt-6">CHÀO MỪNG ĐẾN SWIFTRIDE</p>
+            <h2 className="text-3xl font-bold mt-3">
+              Chuyến đi bắt đầu
+              <br />
+              từ đây.
+            </h2>
+            <p className="muted text-sm leading-relaxed mt-4 mb-7">
+              Đăng nhập để đặt xe, nhận chuyến hoặc quản lý hoạt động của bạn.
             </p>
-          </div>
-        </section>
+            <form
+              action={async () => {
+                "use server";
+                await signIn("keycloak", { redirectTo: "/" });
+              }}
+            >
+              <button className="btn w-full" type="submit">
+                Đăng nhập để tiếp tục <span aria-hidden="true">↗</span>
+              </button>
+            </form>
+            <form
+              className="mt-3"
+              action={async () => {
+                "use server";
+                await signIn("keycloak", { redirectTo: "/" }, { prompt: "create" });
+              }}
+            >
+              <button className="btn btn-secondary w-full" type="submit">
+                Đăng ký tài khoản User
+              </button>
+            </form>
+            <div className="mt-7 pt-5 border-t border-emerald-100 text-xs leading-relaxed muted">
+              <strong className="text-emerald-900">Bạn muốn trở thành tài xế?</strong>
+              <p className="mt-1">Liên hệ bộ phận vận hành để gửi hồ sơ và được xét duyệt.</p>
+            </div>
+          </section>
+        </div>
+        <footer className="welcome-footer">
+          <span>SWIFTRIDE · ĐI GẦN HƠN</span>
+          <span>Bản đồ thực tế · Xe di chuyển giả lập</span>
+        </footer>
       </main>
     );
   return (

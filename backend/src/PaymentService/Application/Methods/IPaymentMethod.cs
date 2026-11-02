@@ -1,11 +1,21 @@
 namespace SwiftRide.Payments.Application;
 
+public enum CaptureOutcome
+{
+    Settled,
+    Pending,
+    Declined,
+}
+
 public sealed record CaptureResult(
-    bool Success,
+    CaptureOutcome Outcome,
     string? Reason = null,
     bool RequiresCompensation = false,
     string? CheckoutReference = null
-);
+)
+{
+    public bool Success => Outcome == CaptureOutcome.Settled;
+}
 
 public interface IPaymentMethod
 {

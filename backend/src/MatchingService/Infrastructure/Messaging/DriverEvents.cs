@@ -18,5 +18,7 @@ public sealed class DriverEvents(DriverReservations reservations, SimulationWork
         );
 
     public Task Consume(ConsumeContext<RideCompleted> context) =>
-        reservations.Release(context.Message.TripId, null, context.CancellationToken);
+        context.Message.Method == PaymentMethod.Cod
+            ? Task.CompletedTask
+            : reservations.Release(context.Message.TripId, null, context.CancellationToken);
 }

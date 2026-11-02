@@ -10,5 +10,6 @@ public sealed record PaymentRequest(
     [property: JsonRequired] PaymentMethod Method,
     string? PaymentToken,
     string CorrelationId,
-    long Attempt = 0
+    long Attempt = 0,
+    string? DriverId = null
 );

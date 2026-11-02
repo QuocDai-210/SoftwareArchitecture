@@ -50,6 +50,10 @@ def synchronize():
     realm = api("GET", "")
     for key in (
         "displayName",
+        "loginTheme",
+        "internationalizationEnabled",
+        "supportedLocales",
+        "defaultLocale",
         "registrationAllowed",
         "registrationEmailAsUsername",
         "loginWithEmailAllowed",

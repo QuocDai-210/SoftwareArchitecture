@@ -37,9 +37,9 @@ public sealed class DemoCardProvider(
         else
             RequestKeys.Same(op.RequestHash, hash);
         if (op.State == "captured")
-            return new(true, RequiresCompensation: token == "demo-compensate");
+            return new(CaptureOutcome.Settled, RequiresCompensation: token == "demo-compensate");
         if (op.State == "declined")
-            return new(false, "Thẻ demo bị từ chối.");
+            return new(CaptureOutcome.Declined, "Thẻ demo bị từ chối.");
         op.Attempts++;
         var transient =
             (token == "demo-unavailable" && !op.Recovered)
@@ -55,8 +55,8 @@ public sealed class DemoCardProvider(
         if (transient || unknown)
             throw new TimeoutException("Demo provider timeout; retry with same key.");
         return op.State == "captured"
-            ? new(true, RequiresCompensation: token == "demo-compensate")
-            : new(false, "Thẻ demo bị từ chối.");
+            ? new(CaptureOutcome.Settled, RequiresCompensation: token == "demo-compensate")
+            : new(CaptureOutcome.Declined, "Thẻ demo bị từ chối.");
     }
 
     public async Task Refund(Payment payment, CancellationToken ct)

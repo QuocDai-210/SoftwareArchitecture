@@ -6,7 +6,7 @@ export type Trip = {
   destination: Point;
   driverId: string | null;
   status: string;
-  method: "Card" | "Wallet";
+  method: "Card" | "Wallet" | "Cod";
   version: number;
   reason: string | null;
   createdAt: string;
@@ -40,6 +40,19 @@ export type Payment = {
   status: string;
   reason: string | null;
   method: string;
+  driverId: string | null;
+  collectedBy: string | null;
+  collectedAt: string | null;
+  collectionReason: string | null;
+  refundedBy: string | null;
+  refundedAt: string | null;
+};
+export type AssignedDriver = {
+  id: string;
+  name: string;
+  phone: string;
+  plate: string;
+  vehicle: string;
 };
 export type Driver = {
   id: string;
@@ -79,5 +92,17 @@ export type DriverRegistration = Pick<
   "username" | "name" | "email" | "phone" | "plate" | "vehicle"
 >;
 export type Page<T> = { items: T[]; page: number; pageSize: number; total: number };
-export type PaymentStatistic = { status: string; isTopUp: boolean; count: number; amount: number };
+export type PaymentStatistic = {
+  status: string;
+  isTopUp: boolean;
+  method: string;
+  count: number;
+  amount: number;
+};
+export type Journal = {
+  id: string;
+  kind: string;
+  createdAt: string;
+  lines: { account: string; side: "Debit" | "Credit"; amount: number }[];
+};
 export type TripStatistic = { status: string; count: number };

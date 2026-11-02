@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Native Chrome DevTools check: no test framework or browser package.
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
+import { randomBytes, randomUUID } from "node:crypto";
+import { spawn, execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -40,6 +40,18 @@ let socket;
 let sequence = 0;
 const pending = new Map();
 const errors = [];
+const cashKeys = new Map();
+const refundKeys = new Map();
+const injectFaults = process.argv.includes("--faults");
+let faultActive = false;
+function compose(...args) {
+  return execFileSync("docker", ["compose", ...args], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 60000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
 const contexts = new Map();
 const call = (method, params = {}, sessionId) =>
   new Promise((resolve, reject) => {
@@ -119,18 +131,80 @@ async function field(session, label, value) {
   })()`,
   );
 }
-async function request(session, path, body, method = "POST") {
+async function request(session, path, body, method = "POST", key) {
   return evaluate(
     session,
     `(async () => {
     const response = await fetch('/api/backend/' + ${JSON.stringify(path)}, {
       method: ${JSON.stringify(body === undefined ? "GET" : method)},
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ${key ? `'Idempotency-Key': ${JSON.stringify(key)}` : ""} },
       ${body === undefined ? "" : `body: JSON.stringify(${JSON.stringify(body)}),`}
     });
     return { status: response.status, body: await response.json().catch(() => null) };
   })()`,
   );
+}
+async function duplicateCompletion(trip) {
+  const messageId = randomUUID();
+  const envelope = {
+    messageId,
+    conversationId: randomUUID(),
+    correlationId: randomUUID(),
+    messageType: ["urn:message:SwiftRide.Core:RideCompleted"],
+    headers: { SchemaVersion: 1 },
+    message: {
+      eventId: messageId,
+      tripId: trip.id,
+      riderId: trip.riderId,
+      driverId: trip.driverId,
+      amount: trip.quote.amount,
+      method: "Cod",
+      paymentToken: null,
+      correlationId: randomUUID(),
+    },
+  };
+  for (let i = 0; i < 3; i++) {
+    if (i === 2) envelope.messageId = randomUUID();
+    const response = await fetch(
+      "http://localhost:15672/api/exchanges/%2F/SwiftRide.Core%3ARideCompleted/publish",
+      {
+        method: "POST",
+        signal: AbortSignal.timeout(15000),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization:
+            "Basic " + Buffer.from(env.RABBIT_USER + ":" + env.RABBIT_PASSWORD).toString("base64"),
+        },
+        body: JSON.stringify({
+          properties: { content_type: "application/vnd.masstransit+json", delivery_mode: 2 },
+          routing_key: "",
+          payload: JSON.stringify(envelope),
+          payload_encoding: "string",
+        }),
+      },
+    );
+    assert(
+      response.ok && (await response.json()).routed,
+      "Duplicate completion routed through RabbitMQ",
+    );
+  }
+  for (let i = 0; i < 40; i++) {
+    const count = compose(
+      "exec",
+      "-T",
+      "postgres",
+      "psql",
+      "-U",
+      "payment",
+      "-d",
+      "PayDB",
+      "-tAc",
+      `SELECT COUNT(*) FROM "InboxState" WHERE "MessageId" IN ('${messageId}','${envelope.messageId}') AND "Consumed" IS NOT NULL;`,
+    );
+    if (Number(count.trim()) === 2) return;
+    await delay(500);
+  }
+  throw new Error("Duplicate completion not consumed by Payment Inbox");
 }
 async function sessionCheck(session, role) {
   await wait(session, `!!document.querySelector('a[href="#history"]')`, "dashboard after OIDC");
@@ -214,12 +288,33 @@ try {
       if (message.error) p.reject(new Error(message.error.message));
       else p.resolve(message.result);
     }
+    if (message.method === "Network.requestWillBeSent") {
+      const { url, headers } = message.params.request;
+      if (url.includes("/confirm-cash"))
+        cashKeys.set(
+          new URL(url).pathname.split("/").at(-2),
+          headers["Idempotency-Key"] ?? headers["idempotency-key"],
+        );
+    }
+    if (
+      message.method === "Network.requestWillBeSent" &&
+      message.params.request.url.includes("/refund")
+    ) {
+      const { url, headers } = message.params.request;
+      refundKeys.set(
+        new URL(url).pathname.split("/").at(-2),
+        headers["Idempotency-Key"] ?? headers["idempotency-key"],
+      );
+    }
     if (message.method === "Runtime.exceptionThrown")
       errors.push(message.params.exceptionDetails.text);
     if (message.method === "Network.responseReceived") {
       const { status, url } = message.params.response;
       const path = new URL(url).pathname;
-      if (status >= 500 || (status >= 400 && path.startsWith("/api/backend/screens/")))
+      if (
+        !faultActive &&
+        (status >= 500 || (status >= 400 && path.startsWith("/api/backend/screens/")))
+      )
         errors.push(`${status} ${path}`);
     }
   });
@@ -233,6 +328,12 @@ try {
   const driver = await page();
 
   await call("Page.navigate", { url: "http://localhost:3000" }, user);
+  await wait(
+    user,
+    `document.readyState === 'complete' && Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === 'Đăng ký tài khoản User')`,
+    "landing rendered before screenshot",
+  );
+  await screenshot(user, "welcome-mint");
   await click(user, "Đăng ký tài khoản User");
   for (const [selector, value] of Object.entries({
     "#firstName": "Kiểm tra",
@@ -243,6 +344,10 @@ try {
     "#password-confirm": password,
   }))
     await input(user, selector, value);
+  assert(
+    await evaluate(user, `!!document.querySelector('link[href*="swiftride.css"]')`),
+    "Keycloak uses SwiftRide mint theme",
+  );
   await evaluate(user, `document.querySelector('input[type="submit"]').click()`);
   const userId = await sessionCheck(user, "user");
   assert.equal((await request(user, "ops/drivers")).status, 403);
@@ -252,6 +357,8 @@ try {
   );
 
   await login(ops, "ops1", env.OPS_PASSWORD, "ops");
+  await evaluate(ops, `window.location.hash = 'operations'`);
+  await wait(ops, `!!document.querySelector('#operations details')`, "Driver management view");
   await evaluate(ops, `document.querySelector('#operations details').open = true`);
   for (const [label, value] of Object.entries({
     "Tên đăng nhập": driverName,
@@ -389,6 +496,8 @@ try {
   await click(user, "Đồng ý giá");
   await click(driver, "Nhận chuyến");
   await click(driver, "Đang đến đón");
+  await wait(driver, `!!document.querySelector('.simulation-panel')`, "simulation controls");
+  await evaluate(driver, `document.querySelector('.simulation-panel').open = true`);
   await click(driver, "Tạm dừng");
   const trips = await request(driver, "trips");
   assert.equal(trips.status, 200);
@@ -438,15 +547,335 @@ try {
   assert.equal(secondLeg.speed, 20, "Speed persists between legs.");
   await screenshot(driver, "driver-active");
   await click(driver, "Tiếp tục");
+  if (injectFaults) {
+    await wait(
+      driver,
+      `Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === 'Đã trả khách' && !b.disabled)`,
+      "arrival before broker outage",
+    );
+    faultActive = true;
+    compose("stop", "rabbitmq");
+  }
   await click(driver, "Đã trả khách");
   await wait(
-    user,
-    `document.querySelector('[aria-label="Chi tiết chuyến"]')?.innerText.includes('Đã trả khách') || document.body.innerText.includes('Đặt chuyến mới')`,
-    "completed journey",
+    driver,
+    `(async () => (await (await fetch('/api/backend/trips/${trip.id}')).json()).status === 'PaymentPending')()`,
+    "dropoff committed before inspecting Outbox",
   );
+  if (injectFaults) {
+    assert.equal((await request(driver, "trips/" + trip.id)).body.status, "PaymentPending");
+    const queued = compose(
+      "exec",
+      "-T",
+      "sqlserver",
+      "bash",
+      "-c",
+      'SQLCMDPASSWORD="$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -d TripDB -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM OutboxMessage;"',
+    );
+    assert(Number(queued.trim()) > 0, "SQL Outbox retains RideCompleted while RabbitMQ is stopped");
+    compose("restart", "trip");
+    compose("start", "rabbitmq");
+    await wait(
+      driver,
+      `(async () => (await fetch('/api/backend/trips/${trip.id}')).status === 200)()`,
+      "Trip restored from SQL",
+    );
+  }
+  await wait(
+    driver,
+    `(async () => (await (await fetch('/api/backend/payments/${trip.id}')).json()).status === 'Pending')()`,
+    "cash payment created",
+  );
+  const otherRegistration = await request(ops, "ops/drivers", {
+    username: "check-otherdriver-" + suffix,
+    name: "Driver khác",
+    email: "other-" + suffix + "@example.com",
+    phone: "0901111222",
+    plate: "59A-54321",
+    vehicle: "SwiftRide",
+  });
+  assert([200, 201].includes(otherRegistration.status));
+  assert.equal(
+    (
+      await request(ops, "ops/drivers/" + otherRegistration.body.id + "/approve", {
+        temporaryPassword,
+      })
+    ).status,
+    200,
+  );
+  const otherDriver = await page();
+  await login(otherDriver, "check-otherdriver-" + suffix, temporaryPassword, "driver", password);
+  assert.equal((await request(otherDriver, "payments/" + trip.id)).status, 403);
+  assert.equal(
+    (
+      await request(
+        otherDriver,
+        "payments/" + trip.id + "/confirm-cash",
+        { received: true },
+        "POST",
+        "other-driver-cash",
+      )
+    ).status,
+    403,
+  );
+  assert.equal((await request(otherDriver, "trips/" + trip.id)).status, 403);
+  assert.equal((await request(user, "drivers/" + driverId + "/contact")).status, 403);
+  assert.equal(
+    (
+      await request(
+        user,
+        "trips",
+        { pickup: trip.pickup, destination: trip.destination, method: "Card", paymentToken: null },
+        "POST",
+        "legacy-method-rejected",
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        user,
+        "trips",
+        { pickup: trip.pickup, destination: trip.destination, method: "Cod", paymentToken: null },
+        "POST",
+        "pending-cash-blocks-booking",
+      )
+    ).status,
+    409,
+  );
+  const pendingCash = await request(driver, "payments/" + trip.id);
+  assert.equal(pendingCash.body.method, "Cod");
+  assert.equal(pendingCash.body.collectedAt, null);
+  assert.equal(
+    (await request(driver, "drivers/me")).body.busy,
+    true,
+    "Driver stays busy before cash collection",
+  );
+  assert.equal((await request(driver, "payments/" + trip.id + "/ledger")).body.length, 0);
+  assert.equal(
+    (
+      await request(
+        user,
+        "payments/" + trip.id + "/confirm-cash",
+        { received: true },
+        "POST",
+        "forbidden-cash",
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        driver,
+        "payments/" + trip.id + "/confirm-cash",
+        { received: false },
+        "POST",
+        "invalid-cash",
+      )
+    ).status,
+    400,
+  );
+  await wait(
+    driver,
+    `!!document.querySelector('.cash-receipt input[type="checkbox"]')`,
+    "cash confirmation checkbox",
+  );
+  await evaluate(driver, `document.querySelector('.cash-receipt input[type="checkbox"]').click()`);
+  if (injectFaults) compose("stop", "rabbitmq");
+  await click(driver, "Xác nhận đã thu tiền");
+  if (injectFaults) {
+    await wait(
+      driver,
+      `(async () => (await (await fetch('/api/backend/payments/${trip.id}')).json()).status === 'Settled')()`,
+      "cash stored during broker outage",
+    );
+    assert.equal(
+      (await request(driver, "trips/" + trip.id)).body.status,
+      "PaymentPending",
+      "Trip waits for persisted settlement event",
+    );
+    const queued = compose(
+      "exec",
+      "-T",
+      "postgres",
+      "psql",
+      "-U",
+      "payment",
+      "-d",
+      "PayDB",
+      "-tAc",
+      'SELECT COUNT(*) FROM "OutboxMessage";',
+    );
+    assert(Number(queued.trim()) > 0, "PostgreSQL Outbox retains cash settlement");
+    compose("restart", "payment");
+    compose("start", "rabbitmq");
+  }
+  await wait(
+    user,
+    `document.body.innerText.includes('Đặt chuyến mới')`,
+    "COD settled and trip closed",
+  );
+  const settled = (await request(user, "payments/" + trip.id)).body;
+  assert.equal(settled.status, "Settled");
+  assert.equal(settled.collectedBy, driverId);
+  assert(settled.collectedAt);
+  const key = cashKeys.get(trip.id);
+  assert(key, "Capture idempotency key from real UI request");
+  assert.equal(
+    (
+      await request(
+        driver,
+        "payments/" + trip.id + "/confirm-cash",
+        { received: true },
+        "POST",
+        key,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(
+        driver,
+        "payments/" + trip.id + "/confirm-cash",
+        { received: true, reason: "changed" },
+        "POST",
+        key,
+      )
+    ).status,
+    409,
+  );
+  const concurrentReplays = await Promise.all(
+    Array.from({ length: 3 }, () =>
+      request(driver, "payments/" + trip.id + "/confirm-cash", { received: true }, "POST", key),
+    ),
+  );
+  assert(concurrentReplays.every((result) => result.status === 200));
+  await duplicateCompletion(trip);
+  const ledger = (await request(user, "payments/" + trip.id + "/ledger")).body;
+  assert.equal(ledger.length, 1, "One cash charge despite replay");
+  assert.equal(ledger[0].lines[0].account, "CashHeldByDriver:" + driverId);
+  assert.equal((await request(user, "trips/" + trip.id)).body.status, "Paid");
+  await wait(
+    driver,
+    `(async () => !(await (await fetch('/api/backend/drivers/me')).json()).busy)()`,
+    "Driver released after settlement",
+  );
+  faultActive = false;
+  for (const session of [user, driver, ops]) {
+    if (
+      await evaluate(
+        session,
+        `Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === 'Tải lại')`,
+      )
+    )
+      await click(session, "Tải lại");
+  }
+  if (injectFaults)
+    console.log("PASS RabbitMQ outages, Trip/Payment restarts and both durable Outboxes");
   await screenshot(user, "user-complete");
   console.log(
-    "PASS real map/search/reverse/route, stale address guard, booking, Driver acceptance, simulation controls after tracking reads, arrival enforcement and dropoff",
+    "PASS map booking, simulation, arrival enforcement, COD pending, physical collection, ownership and idempotent balanced ledger",
+  );
+
+  await evaluate(ops, `window.location.hash = 'payments'`);
+  await wait(
+    ops,
+    `document.querySelector('#payments')?.innerText.includes('${trip.id.slice(0, 8)}')`,
+    "Ops cash history",
+  );
+  await click(ops, "Hoàn tiền");
+  await field(ops, "Lý do xử lý", "Hoàn tiền mặt theo kiểm thử");
+  await evaluate(
+    ops,
+    `document.querySelector('[aria-label="Xác nhận giao dịch tiền mặt"] input[type="checkbox"]').click()`,
+  );
+  await click(ops, "Ghi nhận đã hoàn tiền");
+  await wait(
+    ops,
+    `(async () => (await (await fetch('/api/backend/payments/${trip.id}')).json()).status === 'Refunded')()`,
+    "cash refund recorded",
+  );
+  const refunded = (await request(user, "payments/" + trip.id)).body;
+  assert.equal(refunded.status, "Refunded");
+  assert(refunded.refundedAt && refunded.refundedBy);
+  const refundKey = refundKeys.get(trip.id);
+  assert(refundKey);
+  const refundPayload = { reason: "Hoàn tiền mặt theo kiểm thử", cashReturned: true };
+  const refundReplays = await Promise.all(
+    Array.from({ length: 3 }, () =>
+      request(ops, "payments/" + trip.id + "/refund", refundPayload, "POST", refundKey),
+    ),
+  );
+  assert(refundReplays.every((result) => result.status === 200));
+  assert.equal(
+    (
+      await request(
+        ops,
+        "payments/" + trip.id + "/refund",
+        { ...refundPayload, reason: "Đổi lý do" },
+        "POST",
+        refundKey,
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await request(
+        ops,
+        "payments/" + trip.id + "/refund",
+        { ...refundPayload, cashReturned: false },
+        "POST",
+        refundKey,
+      )
+    ).status,
+    400,
+  );
+  const driverStats = (await request(driver, "payments/statistics")).body;
+  assert.equal(
+    driverStats.find((stat) => stat.method === "Cod" && stat.status === "Refunded").amount,
+    trip.quote.amount,
+  );
+  const refundLedger = (await request(user, "payments/" + trip.id + "/ledger")).body;
+  assert.equal(refundLedger.length, 2, "Cash refund writes exactly one reversal");
+  const rejectSql = (sql, expected) => {
+    try {
+      compose(
+        "exec",
+        "-T",
+        "postgres",
+        "psql",
+        "-U",
+        "payment",
+        "-d",
+        "PayDB",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-c",
+        sql,
+      );
+      assert.fail("Database accepted invalid ledger mutation");
+    } catch (error) {
+      assert(String(error.stderr).includes(expected), "Database guard " + expected);
+    }
+  };
+  rejectSql(
+    `BEGIN; UPDATE "Journals" SET "Kind" = 'Edited' WHERE "PaymentId" = '${trip.id}'; ROLLBACK;`,
+    "Ledger is append-only",
+  );
+  const invalidLines = JSON.stringify([
+    { account: "A", side: "Debit", amount: 100 },
+    { account: "B", side: "Credit", amount: 99 },
+  ]);
+  rejectSql(
+    `BEGIN; INSERT INTO "Journals" ("Id","PaymentId","Kind","Lines","CreatedAt") VALUES ('${randomUUID()}','${trip.id}','Invalid','${invalidLines}',now()); ROLLBACK;`,
+    "CK_Journal_Balanced",
+  );
+  console.log(
+    "PASS duplicate bus messages, Ops cash refund, audited reversal and database ledger guards",
   );
 
   await click(user, "Đặt chuyến mới");
@@ -457,6 +886,22 @@ try {
     `document.querySelector('[aria-label="Chi tiết chuyến"]')?.innerText.includes('Đã hủy')`,
     "User cancels quote",
   );
+  await call("Network.setBlockedURLs", { urls: ["*/api/backend/profiles/me"] }, user);
+  await evaluate(user, `window.location.hash = 'profile'`);
+  await wait(
+    user,
+    `!!document.querySelector('#profile [role="alert"]')`,
+    "profile load failure shown",
+  );
+  assert(
+    await evaluate(
+      user,
+      `Array.from(document.querySelectorAll('#profile input')).every(input => input.disabled)`,
+    ),
+    "Failed profile load must not allow overwriting saved data",
+  );
+  await call("Network.setBlockedURLs", { urls: [] }, user);
+  await click(user, "Thử lại");
   await field(user, "Họ và tên", "Kiểm tra User");
   await field(user, "Số điện thoại", "0907654321");
   await click(user, "Lưu hồ sơ");
@@ -468,17 +913,53 @@ try {
   assert.equal((await request(user, "profiles/me")).body.phone, "0907654321");
   assert((await request(user, "trips/history?page=1")).body.total >= 2);
   console.log("PASS User cancellation, profile save and paginated history");
+  await evaluate(user, `window.location.hash = 'ride/${trip.id}'`);
+  await call("Page.reload", {}, user);
+  await wait(
+    user,
+    `document.querySelector('.cash-receipt')?.innerText.includes('Đã hoàn tiền mặt')`,
+    "direct trip URL survives reload",
+  );
+  assert.equal((await request(user, "trips/" + trip.id)).body.status, "Paid");
+  console.log("PASS direct trip URL and refunded receipt after reload");
+  const legacyTrip = (await request(ops, "trips")).body.find(
+    (item) =>
+      item.method !== "Cod" && ["Paid", "PaymentPending", "PaymentReview"].includes(item.status),
+  );
+  if (legacyTrip) {
+    await evaluate(ops, `window.location.hash = 'ride/${legacyTrip.id}'`);
+    await wait(
+      ops,
+      `!!document.querySelector('[aria-label="Giao dịch cũ"]')`,
+      "legacy payment remains read-only",
+    );
+    assert(
+      !(await evaluate(ops, `!!document.querySelector('[aria-label="Thanh toán tiền mặt"]')`)),
+    );
+    assert.equal(
+      (
+        await request(ops, `trips/${legacyTrip.id}/retry-payment`, {
+          expectedVersion: legacyTrip.version,
+        })
+      ).status,
+      409,
+    );
+    await evaluate(ops, `window.location.hash = 'payments'`);
+    console.log("PASS legacy online history never becomes COD or accepts payment retry");
+  }
 
   for (const [session, name] of [
     [user, "user-mobile"],
     [driver, "driver-mobile"],
     [ops, "ops-mobile"],
   ]) {
+    await call("Page.bringToFront", {}, session);
     await call(
       "Emulation.setDeviceMetricsOverride",
       { width: 360, height: 800, deviceScaleFactor: 1, mobile: true },
       session,
     );
+    if (name !== "ops-mobile") await evaluate(session, `window.location.hash = 'ride'`);
     await delay(300);
     assert(
       await evaluate(session, "document.documentElement.scrollWidth <= window.innerWidth"),
@@ -501,6 +982,14 @@ try {
     await noAlerts(session, name);
     await screenshot(session, name);
   }
+  await evaluate(driver, `window.location.hash = 'ride'`);
+  if (
+    await evaluate(
+      driver,
+      `Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === 'Đóng chi tiết chuyến')`,
+    )
+  )
+    await click(driver, "Đóng chi tiết chuyến");
   await click(driver, "Chuyển ngoại tuyến");
   console.log("PASS User/Driver/Ops 360px responsive layout, keyboard focus and no visible errors");
   if (process.argv.includes("--refresh")) {
@@ -509,6 +998,7 @@ try {
     assert.equal((await request(user, "profiles/me")).status, 200);
     console.log("PASS browser access-token refresh after expiry");
   }
+  await evaluate(user, `window.location.hash = 'profile'`);
   await click(user, "Đăng xuất");
   await wait(
     user,
@@ -520,6 +1010,13 @@ try {
   assert.equal(errors.length, 0, "Browser exceptions / HTTP 5xx: " + errors.join("; "));
   console.log("Browser checks passed. Screenshots:", screenshots);
 } finally {
+  if (injectFaults && faultActive) {
+    try {
+      compose("start", "rabbitmq", "trip", "payment");
+    } catch {
+      /* verify.sh stops project on failure */
+    }
+  }
   if (socket?.readyState === WebSocket.OPEN) {
     try {
       await call("Browser.close");

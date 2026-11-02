@@ -59,6 +59,7 @@ public static class ScreenEndpoints
                         }
                     }
                     JsonElement? simulation = null;
+                    JsonElement? driver = null;
                     if (
                         trip.TryGetProperty("driverId", out var driverId)
                         && driverId.ValueKind == JsonValueKind.String
@@ -67,6 +68,30 @@ public static class ScreenEndpoints
                         try
                         {
                             var matching = clients.CreateClient("matching");
+                            if (
+                                trip.GetProperty("status").GetString()
+                                is "DriverAccepted"
+                                    or "EnRoute"
+                                    or "PickedUp"
+                                    or "PaymentPending"
+                                    or "PaymentReview"
+                                    or "Paid"
+                            )
+                            {
+                                using var driverResponse = await matching.GetAsync(
+                                    $"/drivers/{Uri.EscapeDataString(driverId.GetString()!)}/contact",
+                                    ct
+                                );
+                                if (driverResponse.IsSuccessStatusCode)
+                                {
+                                    var contact =
+                                        await driverResponse.Content.ReadFromJsonAsync<JsonElement>(
+                                            ct
+                                        );
+                                    if (contact.ValueKind == JsonValueKind.Object)
+                                        driver = contact;
+                                }
+                            }
                             using var simulationResponse = await matching.GetAsync(
                                 $"/simulations/{Uri.EscapeDataString(driverId.GetString()!)}",
                                 ct
@@ -93,6 +118,7 @@ public static class ScreenEndpoints
                             trip,
                             payment,
                             simulation,
+                            driver,
                             paymentUnavailable = deferred,
                         }
                     );

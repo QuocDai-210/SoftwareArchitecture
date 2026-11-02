@@ -1,4 +1,4 @@
-import type { Trip, Simulation } from "../../domain/models";
+import type { Trip, Simulation, AssignedDriver } from "../../domain/models";
 import { availableActions, type TripAction } from "../../domain/trip-rules";
 import { labels, money } from "../format";
 const actionLabels: Record<TripAction, string> = {
@@ -17,6 +17,7 @@ export function TripDetails({
   busy,
   act,
   simulation,
+  assignedDriver,
 }: {
   trip: Trip;
   isDriver: boolean;
@@ -24,18 +25,19 @@ export function TripDetails({
   busy: boolean;
   act: (t: Trip, action: TripAction) => void;
   simulation: Simulation | null;
+  assignedDriver: AssignedDriver | null;
 }) {
   const b = t.quote?.breakdown;
   return (
     <section className="card p-6" aria-label="Chi tiết chuyến">
       <div className="flex justify-between gap-3 items-start">
         <h2 className="font-bold text-lg">Chi tiết chuyến</h2>
-        <span className="text-xs bg-[#edf3e7] px-2 py-1 rounded-lg">{t.id.slice(0, 8)}</span>
+        <span className="text-xs bg-[#e6f8ee] px-2 py-1 rounded-lg">{t.id.slice(0, 8)}</span>
       </div>
       <p className="text-sm font-bold text-[#12695b] my-4" role="status" aria-live="polite">
         {labels[t.status]}
       </p>
-      <div className="border-l-2 border-[#90ad8b] pl-4 space-y-4 text-sm">
+      <div className="border-l-2 border-[#9fd7be] pl-4 space-y-4 text-sm">
         <p>
           <span className="block text-xs text-[#62766b]">ĐIỂM ĐÓN</span>
           {t.pickup.label}
@@ -45,9 +47,43 @@ export function TripDetails({
           {t.destination.label}
         </p>
       </div>
+      {assignedDriver &&
+        [
+          "DriverAccepted",
+          "EnRoute",
+          "PickedUp",
+          "PaymentPending",
+          "PaymentReview",
+          "Paid",
+        ].includes(t.status) && (
+          <div className="driver-card">
+            <span className="avatar">{assignedDriver.name.slice(0, 1)}</span>
+            <div>
+              <p className="font-bold">{assignedDriver.name}</p>
+              <p className="text-xs muted">
+                {assignedDriver.vehicle || "Xe của bạn"} ·{" "}
+                {assignedDriver.plate || "Chưa có biển số"}
+              </p>
+              {assignedDriver.phone && (
+                <a className="text-sm underline" href={`tel:${assignedDriver.phone}`}>
+                  Gọi tài xế
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+      {t.deadline &&
+        ["AwaitingDriverAcceptance", "AwaitingRiderConfirmation"].includes(t.status) && (
+          <p className="text-xs muted mt-4">
+            Còn {Math.max(0, Math.ceil((new Date(t.deadline).getTime() - Date.now()) / 1000))} giây
+            để xác nhận.
+          </p>
+        )}
       {t.quote && (
-        <div className="bg-[#f3f6ee] rounded-xl p-4 my-5">
-          <p className="text-xs text-[#62766b]">Giá chuyến đi</p>
+        <div className="bg-[#f0faf5] rounded-xl p-4 my-5">
+          <p className="text-xs text-[#62766b]">
+            Giá chuyến đi · {t.method === "Cod" ? "Tiền mặt" : t.method}
+          </p>
           <p className="text-3xl font-bold my-2">{money(t.quote.amount)}</p>
           {b && (
             <details className="text-xs text-[#526c5b]">
@@ -103,7 +139,7 @@ export function TripDetails({
           </button>
         ))}
       </div>
-      <details className="mt-5 border-t border-[#e4e8e0] pt-4 text-xs">
+      <details className="mt-5 border-t border-[#dcebe5] pt-4 text-xs">
         <summary className="cursor-pointer text-[#526c5b] min-h-8">Lịch sử trạng thái</summary>
         <ol className="space-y-2 mt-2">
           {t.history.map((h, i) => (

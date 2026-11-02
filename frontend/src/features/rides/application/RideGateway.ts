@@ -1,5 +1,7 @@
 import type {
   Driver,
+  Journal,
+  AssignedDriver,
   Payment,
   Point,
   Trip,
@@ -16,7 +18,7 @@ import type { TripAction } from "../domain/trip-rules";
 export type Booking = {
   pickup: Point;
   destination: Point;
-  method: "Card" | "Wallet";
+  method: "Cod";
   paymentToken: string | null;
 };
 export interface RideGateway {
@@ -34,22 +36,21 @@ export interface RideGateway {
   rejectDriver(id: string, reason: string): Promise<DriverApplication>;
   suspendDriver(subject: string, suspended: boolean): Promise<void>;
   history(page: number): Promise<Page<Trip>>;
+  ledger(id: string): Promise<Journal[]>;
   payments(page: number): Promise<Page<Payment>>;
   paymentStatistics(): Promise<PaymentStatistic[]>;
   tripStatistics(): Promise<TripStatistic[]>;
-  checkout(id: string): Promise<{ paymentId: string; url: string }>;
-  topUp(amount: number, key: string): Promise<Payment>;
-  reconcile(id: string): Promise<Payment>;
-  paymentByReference(reference: string): Promise<Payment>;
+  confirmCash(id: string, reason: string | undefined, key: string): Promise<Payment>;
   refund(id: string, reason: string, key: string): Promise<Payment>;
   retryPayment(trip: Trip): Promise<void>;
   trips(): Promise<Trip[]>;
   driver(): Promise<Driver>;
-  balance(): Promise<number>;
   screen(
     id: string,
   ): Promise<{
+    trip: Trip;
     payment: Payment | null;
+    driver: AssignedDriver | null;
     paymentUnavailable: boolean;
     simulation: Simulation | null;
   }>;

@@ -26,7 +26,9 @@ try {
   );
   const require = createRequire(import.meta.url);
   const { RideService } = require(join(output, "application/RideService.js"));
-  const { availableActions } = require(join(output, "domain/trip-rules.js"));
+  const { availableActions, terminal, isActiveTrip } = require(
+    join(output, "domain/trip-rules.js"),
+  );
   const attempts = [];
   const gateway = {
     async book(booking, key) {
@@ -48,7 +50,7 @@ try {
   const booking = {
     pickup: { latitude: 10, longitude: 106, label: "From" },
     destination: { latitude: 11, longitude: 106, label: "To" },
-    method: "Wallet",
+    method: "Cod",
     paymentToken: null,
   };
   await assert.rejects(service.book({ ...booking, destination: booking.pickup }), /khác nhau/);
@@ -67,6 +69,31 @@ try {
     assert.deepEqual(availableActions({ status }, "rider"), []);
     assert.deepEqual(availableActions({ status }, "driver"), []);
   }
+  assert(
+    !terminal.has("PaymentPending") && !terminal.has("PaymentReview"),
+    "cash collection remains active until settled",
+  );
+  assert(terminal.has("Paid"));
+  assert(isActiveTrip({ status: "PaymentPending", method: "Cod" }));
+  assert(
+    !isActiveTrip({ status: "PaymentPending", method: "Wallet" }),
+    "frozen legacy payment never blocks new COD booking",
+  );
+  const cashAttempts = [];
+  gateway.confirmCash = async (id, reason, key) => {
+    cashAttempts.push({ id, reason, key });
+    if (cashAttempts.length === 1) throw new Error("Lost cash response");
+    return { status: "Settled" };
+  };
+  await assert.rejects(service.confirmCash("trip"), /Lost cash response/);
+  await service.confirmCash("trip");
+  assert.equal(cashAttempts[0].key, cashAttempts[1].key, "cash retry retains idempotency key");
+  await service.confirmCash("trip", "Ops correction");
+  assert.notEqual(
+    cashAttempts[1].key,
+    cashAttempts[2].key,
+    "different cash payload needs separate key",
+  );
   await service.toggleAvailability({ available: false }, 10, 106);
   assert.deepEqual(attempts.slice(-2), [
     ["location", 10, 106],

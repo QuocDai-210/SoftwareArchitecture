@@ -1,86 +1,94 @@
-# Đối chiếu PDF và nghiệm thu
+# Đối chiếu PDF và nghiệm thu COD
 
-Nguồn: `RideLite-KienTrucPhanMem.pdf`, 11 trang. Phạm vi hiện tại ưu tiên Geoapify
-và ba vai trò User/Driver/Ops; VNPAY tạm hoãn theo yêu cầu. Payment Service cùng
-PostgreSQL và lõi sổ cái vẫn giữ vì PDF yêu cầu.
+Nguồn: `RideLite-KienTrucPhanMem.pdf`, 11 trang. Theo yêu cầu cập nhật, phương thức
+Card/Wallet được thay bằng COD cho chuyến mới. Payment Service, PostgreSQL, sổ cái,
+idempotency và luồng hoàn tiền vẫn giữ. Giao diện mint–trắng tham khảo trải nghiệm
+đặt xe be, giữ thương hiệu SwiftRide.
 
-## Ranh giới kiến trúc
+## Đối chiếu yêu cầu
 
-| PDF      | Yêu cầu                                      | Mã nguồn / cách kiểm tra                                                                          |
-| -------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| §1, §2.4 | Ba service nghiệp vụ, Payment bắt buộc       | Trip, Matching & Pricing, Payment; container và database riêng trong Compose                      |
-| §2.2     | Tạo chuyến trong SQL Server                  | `TripCommands`, EF migrations, Saga bền vững                                                      |
-| §2.2–§4  | Ghép gần nhất, Driver từ chối, k=3           | MongoDB 2dsphere/reservation nguyên tử; `MatchingPolicy`, `TripState`; lần từ chối thứ 4 thất bại |
-| §2.2     | User xác nhận hoặc từ chối báo giá           | `confirm-quote`, `cancel`, hạn báo giá, giao diện chi tiết giá                                    |
-| §2.2     | Đến đón, đón, trả khách                      | State, `TripCommands.Move`, `SimulationWorkflow.EnsureArrival`                                    |
-| §2.2     | Thanh toán và đóng chuyến                    | `RideCompleted`, `PaymentSettled`, Payment/Wallet/ledger cũ; VNPAY chưa nghiệm thu                |
-| §2.3     | Công thức giá đầy đủ                         | `FareCalculator`: `((cd*d+ct*t)*s+toll)*promotion*(1+tax)`; assert 91.575 VND                     |
-| §3       | Presentation, Edge, Application, Integration | Next.js/Tailwind, YARP, Application/Domain, adapter HTTP/RabbitMQ                                 |
-| §3       | Polyglot persistence                         | Trip/SQL Server, Matching/MongoDB, Payment/PostgreSQL; không ghi chéo DB                          |
-| §3, §5   | Gateway, JWT, rate limit, aggregation        | Next server proxy; YARP; service tự kiểm quyền; `/screens/trips/{id}`                             |
-| §5       | API Trip, match, quote, payment/refund       | Endpoint tại `<Service>/Api/Endpoints/`; OpenAPI cho Ops qua Gateway                              |
-| §6       | SOLID                                        | Port ở Application, adapter ở Infrastructure; Strategy giá, State, port theo use case             |
-| §7       | State, Strategy, Repository, Factory         | TripState, pricing decorators, repositories, PaymentMethodFactory                                 |
-| §7       | Pub/Sub, Gateway, Saga, Outbox               | RabbitMQ/MassTransit, YARP, process manager, EF transactional Outbox                              |
-| §8, §8.1 | .NET, EF, MongoDB, layout phân tầng          | 17 project sản phẩm; Domain/Application không có framework; frontend chia tầng                    |
-| §9       | Nhất quán, retry, idempotency, DLQ           | Transaction nội bộ, event liên service, fencing token, retry giới hạn, error queue/replay         |
-| §9       | Bảo mật, quan sát                            | Keycloak OIDC/PKCE, token ở server, ownership, CorrelationId; OTel/LGTM theo profile              |
+| PDF      | Yêu cầu                           | Mã và hành vi                                                                                               |
+| -------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| §1, §2.4 | Đúng ba service, Payment bắt buộc | Trip/SQL Server, Matching & Pricing/MongoDB, Payment/PostgreSQL; database/container độc lập                 |
+| §2.2     | Đặt xe, báo giá, xác nhận         | Geoapify thật, Trip Requested, quote có hạn, User chấp nhận hoặc từ chối                                    |
+| §2.2, §4 | Driver từ chối và tìm lại         | Geo-query 2dsphere, reservation nguyên tử, k=3; từ chối lần thứ tư thất bại                                 |
+| §2.2     | Đến đón, đón, trả khách           | State machine; xe giả lập trên tuyến thật; server chặn đón/trả trước khi đến                                |
+| §2.2     | Thanh toán, đóng chuyến           | RideCompleted tạo COD Pending; Driver xác nhận thu; PaymentSettled đưa Trip sang Paid rồi giải phóng Driver |
+| §2.3     | Công thức giá đầy đủ              | `((cd*d+ct*t)*s+toll)*promotion*(1+tax)`; decimal, làm tròn cuối; assert 91.575 VND                         |
+| §3       | Client, Gateway, integration      | Next.js/Auth.js, YARP/JWT/rate limit, REST và RabbitMQ; trình duyệt không gọi service trực tiếp             |
+| §3.3     | Database-per-service              | Mỗi service có tài khoản và dữ liệu riêng; không truy vấn/ghi chéo database                                 |
+| §5       | Payment và refund                 | COD Pending/Settled/Refunded, ledger double-entry; Ops xác nhận tiền đã hoàn thực tế                        |
+| §6       | SOLID                             | Port nhỏ theo nhu cầu, adapter DI, State/Strategy; framework chỉ ở tầng ngoài                               |
+| §7       | Design pattern                    | State, Strategy, Repository, Factory, Pub/Sub, Gateway, Saga và transactional Outbox                        |
+| §8       | .NET và cấu trúc phân tầng        | .NET 10, EF/MongoDB.Driver; 17 project sản phẩm, frontend phân tầng                                         |
+| §9       | Retry, idempotency, DLQ           | Lock giao dịch, unique journal, consumer Inbox, Outbox, retry hữu hạn/backoff/jitter và error queue         |
+| §9       | Bảo mật, quan sát                 | OIDC/PKCE, token phía server, quyền tài nguyên, CorrelationId, OTel/LGTM theo profile                       |
 
-[Kiến trúc](architecture.md) giải thích chiều phụ thuộc và trade-off;
-[bản đồ mã nguồn](source-guide.md) chỉ folder/file theo chức năng.
-[Đề xuất gom chức năng](service-consolidation-proposal.md) chờ review;
-không gộp service, container hoặc database trong lần này.
+[Bản đồ mã nguồn](source-guide.md) và [kiến trúc](architecture.md) chỉ từng tầng,
+pattern và quyền sở hữu dữ liệu. [Makefile](../Makefile) quản lý chung các nhóm phát
+triển mà không gộp API/process/database.
 
-## Bổ sung theo phạm vi môn học
+## Luồng và kiểm thử bắt buộc
 
-- User đăng ký công khai; Driver phải do Ops nhập và duyệt hồ sơ. Driver đổi mật khẩu
-  tạm khi đăng nhập lần đầu. Ba vai trò không kế thừa quyền nhau.
-- Keycloak giữ dữ liệu trong volume; script đồng bộ giữ subject và mật khẩu cũ.
-- Geoapify autocomplete/reverse/routing; Leaflet tiles có attribution, chọn điểm
-  trên bản đồ hoặc dùng định vị trình duyệt. Sửa địa chỉ xóa tọa độ đã chọn.
-- Xe giả lập trên đường thật; tốc độ 1/5/10/20, pause/resume, lưu tiến độ trong MongoDB.
-  Không cộng thời gian downtime; optimistic revision tránh ghi đè giữa tick/control.
-- User theo dõi xe của chuyến mình; Driver/Ops điều khiển. Chặn đón/trả khi chưa đến.
-- Xe chưa có hành trình trả JSON `null`, tránh Gateway đọc body rỗng. Giao diện cập
-  nhật từ phản hồi điều khiển và bỏ kết quả polling cũ để giữ tốc độ/pause vừa chọn.
-- Hồ sơ cá nhân; lịch sử và quản trị hồ sơ Driver có phân trang phía server.
-- Driver mới ghi rõ `Suspended=false`; khởi động Matching bổ sung trường thiếu cho
-  bản ghi cũ, giữ nguyên quyết định khóa đã có để bộ lọc ghép xe hoạt động đúng.
-- Gateway tách hạn mức đặt xe/đọc/ghi để polling không chặn lệnh Driver; vẫn giữ
-  10 yêu cầu đặt xe/phút theo danh tính.
-- RAM dự án tối đa 12 GB; build tuần tự, chỉ bật service cần thiết, tắt sau kiểm thử.
-- Format 100 cột; mỗi câu lệnh một dòng; nhóm ngoặc ngắn gom một dòng.
+- User đăng ký công khai; Ops nhập/duyệt/từ chối/khóa Driver; Driver đổi mật khẩu tạm.
+- Theme Keycloak và web mint–trắng; màn hình riêng cho bản đồ, lịch sử, tiền mặt và hồ sơ.
+- Tìm địa chỉ, reverse geocoding, định vị, route preview; sửa địa chỉ xóa tọa độ cũ.
+- Xe giả lập có pause/resume và tốc độ 1/5/10/20, lưu MongoDB; restart không bù downtime.
+- Driver không tự đổi vị trí khi bận; không xác nhận đón/trả trước khi đến.
+- Trả khách chưa đồng nghĩa đã thu; COD Pending vẫn là chuyến cần xử lý, Driver giữ busy.
+- Xác nhận thu cần checkbox thực nhận; Ops xác nhận thay cần lý do. Sai quyền bị chặn.
+- Gửi lặp thao tác hoặc message không tạo khoản thu/hoàn thứ hai; số tiền lấy từ server.
+- SQL/PostgreSQL Outbox giữ sự kiện khi RabbitMQ ngừng; restart Trip/Payment vẫn phục hồi.
+- Ledger cân bằng và append-only ở database; hoàn COD tạo một bút toán đảo có dấu vết Ops.
+- Hồ sơ, phân trang, link trực tiếp chuyến, 360 px, keyboard/focus và đăng xuất.
+- Tổng RAM dự án tối đa 12 GB; build tuần tự; tắt dịch vụ kiểm thử, giữ volume.
+- Format 100 cột, mỗi câu lệnh một dòng; nhóm ngoặc ngắn gom một dòng.
 
-## Kết quả lần cập nhật hiện tại
+## Lệnh nghiệm thu
 
-`./scripts/verify.sh` chạy thành công từ đầu đến cuối. Kiểm thử gồm 160 lượt đọc
-trước khi điều khiển xe; container kiểm thử đã tự dừng, giữ nguyên volume.
+```bash
+./scripts/verify.sh --core
+./scripts/verify.sh
+```
 
-| Kiểm tra             | Kết quả                                                                                                                                                                    |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Backend solution     | Build thành công, 0 warning, 0 error                                                                                                                                       |
-| Nghiệp vụ / adapter  | 144 assert qua; có BSON roundtrip của simulation/Driver và retry lỗi bản đồ                                                                                                |
-| Frontend             | TypeScript strict, production build, assert service qua                                                                                                                    |
-| Kiến trúc            | 17 project backend, 31 file frontend qua kiểm tra chiều phụ thuộc                                                                                                          |
-| RAM Compose          | 12 service, tổng hạn mức 9,53/12 GB; mặc định 7,38 GB                                                                                                                      |
-| Setup                | Giữ giá trị cũ, chỉ sinh secret nội bộ, key bên ngoài để trống, quyền 0600                                                                                                 |
-| Geoapify             | Autocomplete và routing thật trả HTTP 200                                                                                                                                  |
-| Docker / trình duyệt | PASS: container healthy, User đăng ký, Ops duyệt Driver, bản đồ thật, trọn hành trình, hủy, hồ sơ, 360 px, bàn phím, logout; không có lỗi hiển thị hoặc exception/HTTP 5xx |
+`verify.sh` build Release, kiểm tra TypeScript/production frontend/native assert,
+kiểm tra kiến trúc/RAM, build image tuần tự rồi chạy Chrome với `--faults`.
+Runner lỗi có chủ đích dừng RabbitMQ, restart Trip/Payment, kiểm tra Inbox/Outbox,
+phát message trùng và thử sửa sổ cái sai. Sau khi thành công hoặc lỗi, script dừng
+container dự án và giữ volume. Ảnh/log nằm trong `/tmp`, không đưa vào repo.
 
-Log build/check và ảnh trình duyệt nằm trong thư mục tạm hệ điều hành, không đưa
-vào repo. `0 warning/0 error` là kết quả build; không có nghĩa mọi log vận hành đều
-không có cảnh báo. Chưa chạy tải, HA hoặc thiết bị di động thật.
+Khi hệ thống đã chạy, dùng `node scripts/browser-check.mjs` cho luồng thường hoặc
+thêm `--faults` cho kiểm tra sự cố. Không chạy thử sự cố trong lúc người khác dùng hệ thống.
 
-Các kết quả payment/fault/observability từ phiên bản demo trước không được tính là
-nghiệm thu lại phiên bản hiện tại. Runner cũ còn trong source để đối chiếu, cần cấu
-hình fixture/client cũ nếu chạy; `verify.sh` hiện kiểm tra luồng bản đồ/User/Driver/Ops.
-Chưa tuyên bố nghiệm thu toàn bộ PDF khi phần thanh toán thật đang hoãn.
+## Kết quả phiên COD
+
+Ngày 03/11/2026, `./scripts/verify.sh` hoàn tất thành công:
+
+- Backend Release: **0 error, 0 warning**; TypeScript và frontend production build đạt.
+- **157 assert nghiệp vụ** đạt; kiểm tra kiến trúc và assert frontend đạt.
+- Chrome chạy đủ User/Driver/Ops: đăng ký, duyệt tài xế, bản đồ Geoapify thật,
+  mô phỏng hành trình, COD chờ thu/xác nhận thu, hoàn tiền và sổ cái cân bằng.
+- Thử dừng RabbitMQ, restart Trip/Payment, phục hồi hai Outbox, phát message trùng
+  và chặn sửa sổ cái đều đạt; không tạo bút toán thu/hoàn thứ hai.
+- Tải hồ sơ lỗi khóa nhập/lưu; thử lại, lưu hồ sơ, link chuyến trực tiếp, phân trang,
+  giao diện 360 px, focus bàn phím và đăng xuất đều đạt. Không có exception trình duyệt
+  hoặc HTTP 5xx ngoài thời gian chủ động gây sự cố.
+- C#, frontend/JavaScript và Python đạt kiểm tra format theo cấu hình repo.
+  Tổng hạn mức container gồm observability: **9,53/12 GB**; observability mặc định tắt.
+
+Log và ảnh nghiệm thu nằm trong `/tmp`, không sinh file log trong repo. Runner tự dừng
+container sau kiểm thử, giữ nguyên volume; dùng `make up` để mở lại hệ thống.
 
 ## Trình tự bảo vệ
 
-1. Giải thích ba service và quyền sở hữu ba database; chỉ chiều phụ thuộc Clean Architecture.
-2. Đăng ký User; Ops tạo, duyệt Driver; Driver đổi mật khẩu và bật nhận chuyến.
-3. Chọn địa chỉ/bản đồ/định vị; xem tuyến và báo giá; xác nhận hoặc hủy.
-4. Driver nhận, đến đón, pause/resume/tăng tốc, xác nhận đón và trả; User theo dõi xe.
-5. Xem lịch sử, hồ sơ, thống kê và quản trị Driver; kiểm tra màn hình 360 px.
-6. Chỉ mã minh họa SOLID/pattern, Outbox/Saga và giới hạn payment đang hoãn.
+1. Chỉ ba service, ba database và chiều phụ thuộc Clean Architecture.
+2. Đăng ký User; Ops nhập/duyệt Driver; Driver đổi mật khẩu và bật nhận chuyến.
+3. Chọn địa chỉ/bản đồ/định vị; xem tuyến, nhận báo giá và xác nhận.
+4. Driver nhận, đến đón, điều khiển xe giả lập, đón và trả khách.
+5. Chỉ khoản COD chờ thu; Driver xác nhận thực nhận; xem Trip Paid và Driver được giải phóng.
+6. Ops xem biên nhận, ghi nhận hoàn tiền thực tế; kiểm tra journal đảo và lịch sử còn nguyên.
+7. Trình bày kết quả kiểm thử lỗi broker/restart/idempotency; chỉ vị trí State/Strategy/Factory/Outbox.
+
+Giới hạn: một loại xe, xe di chuyển giả lập trên bản đồ thật, một instance local;
+chưa kiểm thử tải/HA/thiết bị GPS thật. Online payment không hoạt động trong bản COD.
+Dữ liệu online cũ giữ nguyên, chỉ đọc và cần Ops đối soát bên ngoài nếu còn dang dở.

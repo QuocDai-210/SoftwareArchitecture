@@ -8,7 +8,7 @@ export const labels: Record<string, string> = {
   EnRoute: "Tài xế đang đến",
   PickedUp: "Đang di chuyển",
   DroppedOff: "Đã trả khách",
-  PaymentPending: "Đang thanh toán",
+  PaymentPending: "Chờ thu tiền mặt",
   PaymentReview: "Thanh toán chờ xử lý",
   Paid: "Chuyến hoàn tất",
   Cancelled: "Đã hủy",

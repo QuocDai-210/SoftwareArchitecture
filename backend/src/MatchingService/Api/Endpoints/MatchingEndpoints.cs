@@ -5,6 +5,12 @@ public static class MatchingEndpoints
     public static void MapMatchingEndpoints(this WebApplication app)
     {
         app.MapOperationsEndpoints();
+        app.MapGet(
+                "/drivers/{id}/contact",
+                (string id, ClaimsPrincipal user, DriverQueries queries, CancellationToken ct) =>
+                    queries.Contact(id, user.Actor(), ct)
+            )
+            .RequireAuthorization("service");
         app.MapPost(
                 "/match",
                 (MatchRequest request, FindDriver useCase, CancellationToken ct) =>

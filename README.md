@@ -4,14 +4,15 @@
 Trip Service/SQL Server, Matching & Pricing/MongoDB, Payment Service/PostgreSQL,
 RabbitMQ, Saga và Outbox. Giữ riêng container, mã nguồn và database từng service.
 
-Ưu tiên hiện tại: bản đồ thật Geoapify, đặt xe, hành trình và ba vai trò User/Driver/Ops.
-Thanh toán giữ lõi cũ để bám PDF; VNPAY và giao diện thanh toán tạm hoãn.
-[Đề xuất gom chức năng](docs/service-consolidation-proposal.md) đang chờ review;
-chưa gộp microservice hoặc container.
+Giao diện mint–trắng tham khảo trải nghiệm đặt xe be: bản đồ làm trung tâm, bảng
+thao tác nổi, điều hướng riêng cho User/Driver/Ops và theme Keycloak đồng bộ.
+Chuyến mới chỉ thanh toán COD; Payment Service vẫn sở hữu sổ cái PostgreSQL.
+[Quản lý chung bằng Makefile](docs/service-consolidation-proposal.md): bật/tắt, build,
+log và kiểm tra tại một nơi; API, database và các tầng mã nguồn vẫn độc lập.
 
 ## Chạy hệ thống
 
-Cần Docker Engine/Compose có quyền truy cập, mạng tải package/image và Geoapify key.
+Cần Docker Engine/Compose có quyền truy cập, GNU Make, mạng tải package/image và Geoapify key.
 Build/check trên host cần .NET SDK 10 và Node.js 24 trở lên. SQL Server cần x86_64.
 
 1. Chạy `python3 scripts/setup.py`. Script tạo secret nội bộ, bổ sung biến thiếu,
@@ -21,15 +22,11 @@ Build/check trên host cần .NET SDK 10 và Node.js 24 trở lên. SQL Server c
    `NEXT_PUBLIC_GEOAPIFY_MAP_KEY` trong `.env`. Key trình duyệt cần cho phép origin
    `http://localhost:3000`; key server cần dùng được cho geocoding/routing.
    `setup.py` không sinh API key bên ngoài. Không đưa `.env` vào Git.
-3. Build lần lượt, sau đó khởi động và đồng bộ danh tính:
+3. Tại thư mục gốc repo, build tuần tự rồi khởi động và đồng bộ danh tính:
 
 ```bash
-docker compose --profile observability stop
-for service in rabbitmq trip matching payment gateway web; do
-  docker compose build "$service" || exit 1
-done
-docker compose up --no-build -d --wait --wait-timeout 300
-python3 -B scripts/sync-identity.py
+make build
+make up
 ```
 
 Mở http://localhost:3000. Dùng các hồ sơ/cửa sổ trình duyệt riêng cho ba vai trò:
@@ -45,6 +42,14 @@ khoảng cách và thời gian lấy từ Geoapify; xác nhận giá rồi Drive
 Driver bấm “Đang đến đón”, chờ xe đến nơi, xác nhận đón và trả khách.
 Xe di chuyển giả lập trên đường thật; Driver/Ops chỉnh tốc độ 1×/5×/10×/20×,
 tạm dừng và tiếp tục. User chỉ theo dõi xe của chuyến mình.
+Sau trả khách, khoản COD ở trạng thái chờ thu. Driver tích xác nhận đã nhận đủ tiền,
+bấm “Xác nhận đã thu tiền”; Payment ghi sổ rồi Trip hoàn tất và giải phóng Driver.
+Ops xem tiền mặt, xác nhận thay có lý do hoặc ghi nhận hoàn tiền đã trả thực tế.
+Các thao tác tài chính dùng idempotency key; tải lại/gửi lặp không tạo khoản thu thứ hai.
+
+Điều hướng `#ride`, `#history`, `#payments`, `#operations`, `#profile` tương ứng
+bản đồ, lịch sử, tiền mặt, quản lý Driver và hồ sơ. Link `#ride/{tripId}` mở trực tiếp
+chuyến được phép xem. Trên điện thoại có thể thu gọn bảng thao tác để xem bản đồ.
 
 Hồ sơ cá nhân; lịch sử và danh sách Driver có phân trang. Driver gửi heartbeat mỗi 10 giây;
 vị trí quá 60 giây không được ghép xe. Không thể tự đổi vị trí khi đang phục vụ chuyến.
@@ -59,6 +64,30 @@ client kiểm thử password grant cũ. Đăng xuất web xóa phiên web; Keycl
 | http://localhost:8081              | Keycloak; `admin` / `KEYCLOAK_ADMIN_PASSWORD` |
 | http://localhost:15672             | RabbitMQ; `RABBIT_USER` / `RABBIT_PASSWORD`   |
 | http://localhost:3001/d/swiftride  | Grafana khi bật observability                 |
+
+## Quản lý chung
+
+`make` hiển thị hướng dẫn. Makefile gọi Docker Compose hiện có, quản lý các nhóm
+sau và giữ nguyên tên container, volume, mạng, tài khoản DB:
+
+| Lệnh            | Phạm vi                                                 |
+| --------------- | ------------------------------------------------------- |
+| `make up`       | Toàn hệ thống, tắt observability, đồng bộ Keycloak      |
+| `make trip`     | Trip API + SQL Server/sql-init + Keycloak/RabbitMQ      |
+| `make matching` | Matching API + MongoDB + Keycloak/RabbitMQ              |
+| `make payment`  | Payment API + PostgreSQL + Keycloak/RabbitMQ            |
+| `make stop`     | Dừng toàn bộ container dự án, giữ dữ liệu               |
+| `make status`   | Trạng thái tất cả container dự án                       |
+| `make logs`     | Theo dõi log dự án; 100 dòng gần nhất mỗi container     |
+| `make build`    | Kiểm tra kiến trúc/RAM, dừng dự án, build image tuần tự |
+| `make check`    | Chạy `scripts/verify.sh`                                |
+
+`make trip`, `make matching`, `make payment` là **chuyển chế độ phát triển**: dừng
+các container dự án đang chạy trước khi bật nhóm được chọn và dependency bắt buộc.
+Dùng từng lệnh riêng; `make up` phục vụ luồng đặt xe trên web và tích hợp liên service.
+Nhóm riêng phục vụ làm việc với API/database của nhóm đó; nhóm Trip chưa đủ để
+kiểm tra ghép xe/thanh toán khi Matching/Payment đang tắt. Các lệnh Compose trực tiếp
+vẫn dùng được. `make build` và `make check` cũng dừng hệ thống để giữ ngân sách RAM.
 
 ## RAM và vòng đời service
 
@@ -92,21 +121,27 @@ Format mục tiêu 100 ký tự, mỗi câu lệnh một dòng; nhóm ngoặc ng
 # Kiến trúc và assert nghiệp vụ; không cần Docker
 ./scripts/verify.sh --core
 
-# Build, core/frontend checks, Docker và Chrome kiểm tra User/Driver/Ops + bản đồ
+# Build, checks, Docker/Chrome: ba vai trò, bản đồ, COD, hoàn tiền và lỗi broker
 ./scripts/verify.sh
 
 # Khi hệ thống đã chạy và đã sync identity; cần Chrome/Chromium, có thể đặt CHROME_BIN
 node scripts/browser-check.mjs
+# Thêm thử dừng broker, restart Trip/Payment và kiểm tra Outbox
+node scripts/browser-check.mjs --faults
 # Thêm kiểm tra refresh sau 300 giây
 node scripts/browser-check.mjs --refresh
 ```
 
 `verify.sh` dừng service trước build và sau kiểm thử, kể cả khi lỗi. Muốn xem web sau
-kiểm thử: `docker compose up --no-build -d --wait`. Runner trình duyệt tạo tài khoản,
+kiểm thử: `make up`. Runner trình duyệt tạo tài khoản,
 hồ sơ và chuyến kiểm tra có tên `check-*`; ảnh/log nằm ngoài repo trong thư mục tạm.
-Bộ kiểm thử payment/fault cũ vẫn giữ trong source, cần fixture và cấu hình cũ;
-không nằm trong nghiệm thu bản đồ/User/Driver/Ops hiện tại.
+`verify.sh` dùng runner trình duyệt COD với `--faults`; không cần mở password grant.
+Các runner Wallet/Card cũ (`scripts/demo.py`, `scripts/faults.py`, `--integration`
+của backend checks) chỉ lưu để tham khảo phiên bản trước, không dùng nghiệm thu COD.
+`replay.py` vẫn hỗ trợ đưa message từ error queue về hàng đợi qua Shovel với publisher confirms.
 
-Giới hạn: xe giả lập, chạy local một instance, chưa HA/load test, chưa nghiệm thu
-VNPAY. Ba database nghiệp vụ và Payment Service vẫn giữ theo PDF. Backend/frontend
+Giới hạn: một loại xe, xe giả lập, chạy local một instance, chưa HA/load test.
+Card/Wallet/VNPAY và nạp ví đã tắt ở runtime; giao dịch cũ giữ nguyên, chỉ đọc và cần
+Ops đối soát bên ngoài nếu còn dang dở. Không cần key VNPAY/ngrok để chạy COD.
+Ba database nghiệp vụ và Payment Service vẫn giữ theo PDF. Backend/frontend
 có lockfile; dùng `dotnet restore --locked-mode`, `npm ci` khi cài dependency.

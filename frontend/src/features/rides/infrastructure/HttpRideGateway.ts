@@ -1,6 +1,8 @@
 import type { RideGateway, Booking } from "../application/RideGateway";
 import type {
   Driver,
+  Journal,
+  AssignedDriver,
   Payment,
   Trip,
   Point,
@@ -74,6 +76,9 @@ export class HttpRideGateway implements RideGateway {
   history(page: number) {
     return api<Page<Trip>>(`trips/history?page=${page}`);
   }
+  ledger(id: string) {
+    return api<Journal[]>(`payments/${id}/ledger`);
+  }
   payments(page: number) {
     return api<Page<Payment>>(`payments/history?page=${page}`);
   }
@@ -85,20 +90,11 @@ export class HttpRideGateway implements RideGateway {
       (result) => result.statuses,
     );
   }
-  checkout(id: string) {
-    return api<{ paymentId: string; url: string }>(`payments/${id}/checkout`);
-  }
-  topUp(amount: number, key: string) {
-    return api<Payment>("wallets/me/topups", { amount }, "POST", key);
-  }
-  reconcile(id: string) {
-    return api<Payment>(`payments/${id}/reconcile`, {});
-  }
-  paymentByReference(reference: string) {
-    return api<Payment>(`payments/by-reference/${reference}`);
+  confirmCash(id: string, reason: string | undefined, key: string) {
+    return api<Payment>(`payments/${id}/confirm-cash`, { received: true, reason }, "POST", key);
   }
   refund(id: string, reason: string, key: string) {
-    return api<Payment>(`payments/${id}/refund`, { reason }, "POST", key);
+    return api<Payment>(`payments/${id}/refund`, { reason, cashReturned: true }, "POST", key);
   }
   async retryPayment(trip: Trip) {
     await api(`trips/${trip.id}/retry-payment`, { expectedVersion: trip.version });
@@ -109,12 +105,11 @@ export class HttpRideGateway implements RideGateway {
   driver() {
     return api<Driver>("drivers/me");
   }
-  async balance() {
-    return (await api<{ balance: number }>("wallets/me")).balance;
-  }
   screen(id: string) {
     return api<{
+      trip: Trip;
       payment: Payment | null;
+      driver: AssignedDriver | null;
       paymentUnavailable: boolean;
       simulation: Simulation | null;
     }>(`screens/trips/${id}`);

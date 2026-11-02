@@ -32,9 +32,13 @@ Simulation lưu tiến độ, tốc độ, trạng thái pause và revision tron
 không bù thời gian downtime. Trip kiểm tra xe đến điểm đón/trả qua API Matching.
 User đăng ký công khai; Driver chỉ được Keycloak cấp quyền sau Ops duyệt hồ sơ.
 Ops và Driver không kế thừa quyền User. Keycloak giữ danh tính trong volume riêng.
-Thanh toán giữ phần lõi theo PDF; tích hợp VNPAY và UI thanh toán đang hoãn.
-Giữ ranh giới microservice; [đề xuất gom chức năng](service-consolidation-proposal.md)
-chờ review trước mọi thay đổi gộp service/container.
+Chuyến mới chỉ nhận `Cod`; giữ Factory/Strategy để mở rộng khi có yêu cầu.
+Payment tạo khoản chờ thu sau trả khách; chỉ Driver được phân công hoặc Ops có lý do
+xác nhận tiền mặt. Trip chỉ chuyển Paid khi nhận PaymentSettled hợp lệ.
+Card/Wallet/VNPAY giữ dữ liệu lịch sử; endpoint ghi và worker online không được đăng ký.
+Giữ ranh giới microservice; [quản lý chung qua Makefile](service-consolidation-proposal.md)
+điều phối Compose, giữ riêng API/database và các tầng mã nguồn. Nhóm phát triển riêng
+chỉ bật API, database và hạ tầng bắt buộc; `make up` bật luồng đầy đủ.
 
 ## Clean Architecture và chiều phụ thuộc
 
@@ -64,7 +68,7 @@ Frontend giữ chiều phụ thuộc tương tự: presentation gọi `RideServi
 | --------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | Trip            | Trip, snapshot báo giá, lịch sử trạng thái, phiên bản, tiến trình Saga, Inbox/Outbox | Index duy nhất Rider + idempotency key; mỗi Rider tối đa một chuyến đang thực hiện; optimistic concurrency |
 | Matching        | Driver, GeoJSON, online/busy, TripId/ReservationId, hạn giữ chỗ                      | Index 2dsphere; cập nhật nguyên tử theo reservation; không dùng TTL xóa tài xế                             |
-| Payment         | Payment, Wallet, Journal, provider operation demo, Inbox/Outbox                      | Một payment/chuyến; khóa transaction theo TripId; khóa số dư; journal cân bằng và append-only              |
+| Payment         | Payment COD, dấu vết thu/hoàn, Journal, dữ liệu online cũ, Inbox/Outbox              | Một payment/chuyến; khóa transaction theo TripId; khóa số dư; journal cân bằng và append-only              |
 
 Trip và Payment giữ strong consistency trong transaction nội bộ; giữa service dùng eventual consistency. Client hiển thị trạng thái trung gian thay vì đoán thành công. EF value converter lưu snapshot bất biến và lịch sử trong JSON text; có ValueComparer cho các collection thay đổi.
 
@@ -129,11 +133,15 @@ sequenceDiagram
     Driver->>T: Đang đến, pickup, dropoff qua Gateway
     T->>T: DroppedOff, PaymentPending + Outbox cùng transaction
     T->>B: Worker phát RideCompleted
-    B->>M: Giải phóng tài xế, idempotent
     B->>P: RideCompleted, có thể giao nhiều lần
-    P->>P: Provider dùng cùng khóa; Payment + Journal + Outbox
+    P->>P: Tạo Payment Pending, chưa có Journal
+    Driver->>G: Xác nhận đã thu COD + Idempotency-Key
+    G->>P: Actor Driver; số tiền lấy từ Payment
+    P->>P: Khóa Payment; ghi dấu vết + Journal + Outbox cùng transaction
     P->>B: PaymentSettled
     B->>T: Kiểm tra ID, số tiền, tiền tệ; đổi Paid
+    T->>B: ReservationReleased qua Outbox
+    B->>M: Giải phóng Driver đúng reservation
 ```
 
 Mũi tên actor tới Trip trong sơ đồ rút gọn vẫn đi qua Next.js/Gateway. Không có client truy cập trực tiếp service.
@@ -142,28 +150,26 @@ Mũi tên actor tới Trip trong sơ đồ rút gọn vẫn đi qua Next.js/Gate
 
 Payload enum dùng chuỗi, JSON camelCase; tiền VND nguyên đồng. Lỗi nghiệp vụ dùng Problem Details và CorrelationId.
 
-| Endpoint                                                               | Quyền                                 | Payload chính                                                                                                                            |
-| ---------------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /trips`                                                          | Rider                                 | pickup/destination `{latitude,longitude,label}`, method, paymentToken; header Idempotency-Key                                            |
-| `GET /trips`, `GET /trips/{id}`                                        | Chủ chuyến, Driver được giao hoặc Ops | Danh sách tối đa 50 chuyến; không trả token/hashes                                                                                       |
-| `POST /trips/{id}/confirm-quote`                                       | Rider sở hữu                          | expectedVersion, quoteId                                                                                                                 |
-| `POST /trips/{id}/cancel`                                              | Rider sở hữu                          | expectedVersion; chỉ trước bước nhận chuyến                                                                                              |
-| `POST /trips/{id}/driver-accept`, `/driver-reject`                     | Driver được mời                       | expectedVersion                                                                                                                          |
-| `POST /trips/{id}/en-route`, `/pickup`, `/dropoff`                     | Driver được giao                      | expectedVersion                                                                                                                          |
-| `POST /trips/{id}/retry-payment`                                       | Ops                                   | expectedVersion; chỉ PaymentReview                                                                                                       |
-| `GET /drivers/me/offers`                                               | Driver                                | Lời mời đang có hiệu lực                                                                                                                 |
-| `PUT /drivers/me/location`                                             | Driver                                | latitude, longitude                                                                                                                      |
-| `PUT /drivers/me/availability`                                         | Driver                                | available                                                                                                                                |
-| `GET /drivers/me`                                                      | Driver                                | Vị trí, online/busy của mình                                                                                                             |
-| `POST /quote`                                                          | Đã đăng nhập                          | pickup, destination; giá do server quyết định                                                                                            |
-| `POST /match`                                                          | Service, mạng nội bộ                  | pickup, excludedDrivers; trả `{driver: ... hoặc null}`                                                                                   |
-| `POST /reservations`, `/reservations/confirm`, `/reservations/release` | Service, mạng nội bộ                  | tripId, reservationId, driverId                                                                                                          |
-| `POST /payments`                                                       | Service                               | tripId, riderId, amount, method, paymentToken, correlationId; khóa `trip:{id}:charge`                                                    |
-| `GET /payments/{id}`, `/ledger`                                        | Rider sở hữu, Service hoặc Ops        | Giao dịch/bút toán; Driver không xem sổ cái Rider                                                                                        |
-| `POST /payments/{id}/refund`                                           | Ops                                   | reason; Idempotency-Key                                                                                                                  |
-| `GET /wallets/me`                                                      | Rider                                 | Số dư ví mẫu                                                                                                                             |
-| `GET /screens/trips/{id}`                                              | Người có quyền xem chuyến             | Gateway kiểm tra quyền chuyến trước khi lấy vị trí xe bằng service token; gom trip/payment; báo paymentUnavailable khi Payment tạm ngừng |
-| `POST /payments/{id}/demo-recover`                                     | Ops, Development                      | Cho phép provider demo ngừng lỗi để kiểm tra replay                                                                                      |
+| Endpoint                                                               | Quyền                                           | Payload chính                                                                                                                                              |
+| ---------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /trips`                                                          | Rider                                           | pickup/destination `{latitude,longitude,label}`, method, paymentToken; header Idempotency-Key                                                              |
+| `GET /trips`, `GET /trips/{id}`                                        | Chủ chuyến, Driver được giao hoặc Ops           | Danh sách tối đa 50 chuyến; không trả token/hashes                                                                                                         |
+| `POST /trips/{id}/confirm-quote`                                       | Rider sở hữu                                    | expectedVersion, quoteId                                                                                                                                   |
+| `POST /trips/{id}/cancel`                                              | Rider sở hữu                                    | expectedVersion; chỉ trước bước nhận chuyến                                                                                                                |
+| `POST /trips/{id}/driver-accept`, `/driver-reject`                     | Driver được mời                                 | expectedVersion                                                                                                                                            |
+| `POST /trips/{id}/en-route`, `/pickup`, `/dropoff`                     | Driver được giao                                | expectedVersion                                                                                                                                            |
+| `POST /trips/{id}/retry-payment`                                       | Ops                                             | expectedVersion; chỉ PaymentReview                                                                                                                         |
+| `GET /drivers/me/offers`                                               | Driver                                          | Lời mời đang có hiệu lực                                                                                                                                   |
+| `PUT /drivers/me/location`                                             | Driver                                          | latitude, longitude                                                                                                                                        |
+| `PUT /drivers/me/availability`                                         | Driver                                          | available                                                                                                                                                  |
+| `GET /drivers/me`                                                      | Driver                                          | Vị trí, online/busy của mình                                                                                                                               |
+| `POST /quote`                                                          | Đã đăng nhập                                    | pickup, destination; giá do server quyết định                                                                                                              |
+| `POST /match`                                                          | Service, mạng nội bộ                            | pickup, excludedDrivers; trả `{driver: ... hoặc null}`                                                                                                     |
+| `POST /reservations`, `/reservations/confirm`, `/reservations/release` | Service, mạng nội bộ                            | tripId, reservationId, driverId                                                                                                                            |
+| `POST /payments`                                                       | Service                                         | tripId, riderId, amount, method, paymentToken, correlationId; khóa `trip:{id}:charge`                                                                      |
+| `GET /payments/{id}`, `/ledger`                                        | User sở hữu, Driver được giao, Service hoặc Ops | Giao dịch/bút toán của User hoặc Driver được giao; Ops xem toàn bộ                                                                                         |
+| `POST /payments/{id}/refund`                                           | Ops                                             | reason, cashReturned=true; Idempotency-Key                                                                                                                 |
+| `GET /screens/trips/{id}`                                              | Người có quyền xem chuyến                       | Gateway kiểm tra quyền chuyến trước khi lấy vị trí xe bằng service token; gom trip/payment/simulation/Driver; báo paymentUnavailable khi Payment tạm ngừng |
 
 `400` dữ liệu sai; `401` chưa xác thực; `403` sai quyền; `404` không tồn tại; `409` trạng thái/phiên bản/key xung đột; `429` vượt hạn; `503` dịch vụ tạm thời lỗi. Gateway tách ba hạn mức theo danh tính/IP: 10 tạo chuyến/phút, 360 lượt đọc/phút và 60 lượt ghi khác/phút. Polling theo dõi xe không tiêu hao hạn mức lệnh điều khiển. UI proxy giới hạn body 16 KiB; service vẫn kiểm tra tọa độ, tuyến, phương thức, số tiền và khóa.
 
@@ -173,22 +179,35 @@ Event dùng MassTransit envelope: message ID, CorrelationId, timestamp/trace con
 
 Công thức chuẩn: `((cd*d + ct*t)*s + cm)*η*(1+T)`. Dùng decimal, chỉ làm tròn cuối cùng AwayFromZero. Strategy không được trả số âm; kiểm thử hợp đồng cho cả ba implementation, không coi một runtime guard là bằng chứng LSP.
 
-| Bút toán   | Nợ                      | Có                      |
-| ---------- | ----------------------- | ----------------------- |
-| Nạp ví mẫu | DemoFunding             | WalletLiability:{rider} |
-| Thu Wallet | WalletLiability:{rider} | TripPayable             |
-| Thu Card   | ProviderReceivable      | TripPayable             |
-| Hoàn tiền  | Đảo từng dòng khoản thu | Đảo từng dòng khoản thu |
+| Bút toán | Nợ                          | Có                      |
+| -------- | --------------------------- | ----------------------- |
+| Thu COD  | CashHeldByDriver:{driverId} | TripPayable             |
+| Hoàn COD | Đảo từng dòng khoản thu     | Đảo từng dòng khoản thu |
 
-Khóa unique, advisory transaction lock theo TripId và row lock số dư ngăn thu trùng/âm ví. PostgreSQL CHECK kiểm tra số dư và bút toán; trigger cấm UPDATE/DELETE Journal. Sổ cái không bị chỉnh sửa để “sửa số tiền”.
+`RideCompleted` có DriverId từ Trip; Payment lưu snapshot này để kiểm tra quyền,
+không nhận tài xế hoặc số tiền từ màn hình xác nhận thu. `Pending` không phát
+PaymentSettled. Driver giữ busy trong thời gian chờ thu; Trip phát giải phóng sau Paid.
+Ops xác nhận thay cần lý do; hoàn tiền cần xác nhận đã trả tiền thực tế. Hệ thống ghi
+nhận tiền mặt, không tự chuyển tiền vật lý. Hoàn toàn bộ một lần; Trip giữ Paid và
+Payment hiển thị Refunded để giữ lịch sử chuyến đã thực hiện.
 
-Provider Card demo ghi vào transaction riêng trong PayDB, mô phỏng tác động bên ngoài tồn tại dù transaction thanh toán bị rollback. `demo-unknown` ghi capture trước rồi timeout; lần sau đọc lại operation cùng key. Đây không phải tích hợp cổng thật và không có cam kết giữa hai hệ thống tiền thật.
+`POST /payments/{id}/confirm-cash`: Driver được phân công hoặc Ops, body
+`{received:true, reason?:string}`, header `Idempotency-Key`. Ops bắt buộc reason.
+PaymentView bổ sung DriverId, CollectedBy/At/Reason và RefundedBy/At; không trả hash/key.
+`GET /payments/history`, `/payments/statistics`, `/{id}/ledger` đều giới hạn theo Actor.
+Endpoint `/drivers/{id}/contact` chỉ nhận service token; Gateway kiểm tra quyền Trip
+trước khi đọc, chỉ gửi tên, điện thoại, xe và biển số đến người được xem chuyến.
 
-Trip là process manager của Saga, không dùng distributed transaction. Bồi thường reservation qua event khi hủy/từ chối/hết hạn. `demo-compensate` mô phỏng lỗi vĩnh viễn sau capture: hoàn provider và ghi cả Charge/Refund; Trip vào PaymentReview. Broker chậm không phải lý do hoàn tiền.
+Advisory transaction lock theo PaymentId và index journal `(PaymentId, Kind)` ngăn
+thu/hoàn trùng. PostgreSQL kiểm tra bút toán cân bằng và append-only. Bản ghi,
+bút toán và Outbox cùng transaction; consumer idempotent, retry lỗi tạm thời có giới
+hạn/backoff/jitter. Broker ngừng hoặc process restart không làm mất khoản thu đã commit.
+Saga giữ trạng thái trung gian và giải phóng reservation khi hủy/thất bại; lỗi thanh
+toán chuyển PaymentReview, Ops phát lại cùng khóa, không đánh dấu Paid giả.
 
-Trip/Payment dùng EF transactional outbox và consumer inbox của MassTransit: thay đổi dữ liệu và event cùng transaction; broker at-least-once, consumer vẫn kiểm tra idempotency nghiệp vụ. Matching chỉ nhận event để cập nhật Mongo idempotent, không có yêu cầu ghi data + publish event nên không thêm Mongo Outbox/replica set.
-
-HTTP nội bộ timeout từng attempt 5 giây, tối đa 3 retry có backoff/jitter, deadline HttpClient 20 giây. Message retry exponential 3 lần; lỗi nghiệp vụ không retry. Sau đó queue `_error` giữ message, phát Fault để Trip vào PaymentReview. Replay bằng Shovel `on-confirm` giữ message ID; operator phải sửa nguyên nhân trước. Saga không thay thế transaction hoặc Outbox.
+Migration COD chỉ thêm cột nullable, giữ nguyên enum Card/Wallet và dữ liệu cũ.
+Không tự chuyển giao dịch cũ sang COD, không xóa volume. Adapter online giữ ngoài
+runtime để tham khảo/mở rộng; muốn bật lại cần bổ sung cấu hình và nghiệm thu riêng.
 
 ## SOLID và pattern
 
@@ -202,12 +221,12 @@ HTTP nội bộ timeout từng attempt 5 giây, tối đa 3 retry có backoff/ji
 
 `Trip.Status`, version, deadline và retry có setter riêng; chuyển trạng thái đi qua Domain. Wallet debit/credit qua phương thức kiểm tra số tiền và số dư. Payment giữ luật hoàn tiền/bồi thường; Application điều phối provider, journal và transaction. Compiler cùng kiểm tra kiến trúc bảo vệ chiều phụ thuộc; console/assert kiểm tra hành vi.
 
-State = TripState; Strategy = IPricingStrategy; Repository = TripRepository/MongoDriverRepository/PaymentRepository; Factory = PaymentMethodFactory với hai implementation; Observer/Pub-Sub = consumer sự kiện; API Gateway = YARP; Saga = TripWorkflow + thông báo thanh toán + bồi thường; Outbox = EF Bus/Consumer Outbox.
+State = TripState; Strategy = IPricingStrategy; Repository = TripRepository/MongoDriverRepository/PaymentRepository; Factory = PaymentMethodFactory đăng ký CashMethod ở runtime COD; Observer/Pub-Sub = consumer sự kiện; API Gateway = YARP; Saga = TripWorkflow + thông báo thanh toán + bồi thường; Outbox = EF Bus/Consumer Outbox.
 
 ## Bảo mật, quan sát và trade-off
 
 - OIDC Authorization Code + PKCE ở web; JWT resource server tại Gateway và service; client credentials cho nội bộ. Secret ngoài source; API không nhận dữ liệu thẻ thật.
-- Kiểm tra quyền tài nguyên tại service; không cho Rider tự chọn số tiền hoặc Driver cập nhật chuyến người khác. API fault injection chỉ hoạt động Development và yêu cầu Ops.
+- Kiểm tra quyền tài nguyên tại service; không cho Rider tự chọn số tiền hoặc Driver cập nhật chuyến người khác. Không đăng ký endpoint fault injection hoặc thanh toán online trong runtime COD.
 - Log không chứa body/token; tắt EF command log thông thường, không bật SensitiveDataLogging. CorrelationId được kiểm tra định dạng GUID và truyền tiếp; W3C trace context đi qua HTTP và MassTransit.
 - Dashboard có tỷ lệ thành công, matching p95, API p95, thanh toán lỗi, broker backlog, Outbox còn lưu và log. Dùng Tempo Explore để tìm trace theo trace ID.
 - Polyglot persistence bám PDF nhưng tăng chi phí RAM, backup, migration và vận hành. Docker Compose phục vụ demo, không phải HA.

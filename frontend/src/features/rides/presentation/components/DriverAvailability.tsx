@@ -13,7 +13,12 @@ export function DriverAvailability({
     model.busy || model.loading || !model.driver || model.driver.busy || !!model.active;
   return (
     <section className="card p-6 space-y-4">
-      <h2 className="text-lg font-bold">Vị trí và nhận chuyến</h2>
+      <div className="flex justify-between gap-2 items-center">
+        <h1 className="text-lg font-bold">Vị trí và nhận chuyến</h1>
+        <span className="badge">
+          {model.driver?.available ? "Đang trực tuyến" : "Đang ngoại tuyến"}
+        </span>
+      </div>
       <p className="text-sm text-[#62766b]">
         Chọn vị trí xe trên bản đồ hoặc tìm địa chỉ. Lời mời nhận chuyến có hiệu lực 60 giây.
       </p>

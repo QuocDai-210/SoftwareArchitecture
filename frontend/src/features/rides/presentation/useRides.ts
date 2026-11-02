@@ -1,8 +1,17 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RideService } from "../application/RideService";
-import type { Driver, Trip, Point, Simulation, Page, RoadRoute } from "../domain/models";
-import { terminal, type TripAction } from "../domain/trip-rules";
+import type {
+  Driver,
+  Trip,
+  Point,
+  Simulation,
+  Page,
+  RoadRoute,
+  Payment,
+  AssignedDriver,
+} from "../domain/models";
+import { isActiveTrip, type TripAction } from "../domain/trip-rules";
 
 export type RideUser = { id: string; name: string; roles: string[] };
 
@@ -19,6 +28,9 @@ export function useRides(user: RideUser, service: RideService) {
   const [from, setFrom] = useState<Point | null>(null);
   const [to, setTo] = useState<Point | null>(null);
   const [selecting, setSelecting] = useState<"pickup" | "destination">("pickup");
+  const [payment, setPayment] = useState<Payment | null>(null);
+  const [assignedDriver, setAssignedDriver] = useState<AssignedDriver | null>(null);
+  const [paymentUnavailable, setPaymentUnavailable] = useState(false);
   const [simulation, setSimulation] = useState<Simulation | null>(null);
   const [preview, setPreview] = useState<RoadRoute | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
@@ -30,13 +42,18 @@ export function useRides(user: RideUser, service: RideService) {
     pageSize: 10,
     total: 0,
   });
+  const [selectedDetail, setSelectedDetail] = useState<Trip | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const lock = useRef(false);
   const sequence = useRef(0);
   const screenSequence = useRef(0);
-  const active = trips.find((t) => !terminal.has(t.status));
+  const active = trips.find(isActiveTrip);
   const current =
-    trips.find((t) => t.id === selected) ?? history.items.find((t) => t.id === selected) ?? active;
+    (isDriver && active ? active : null) ??
+    trips.find((t) => t.id === selected) ??
+    history.items.find((t) => t.id === selected) ??
+    (selectedDetail?.id === selected ? selectedDetail : null) ??
+    (!selected ? active : undefined);
 
   const reload = useCallback(async () => {
     const request = ++sequence.current;
@@ -120,10 +137,13 @@ export function useRides(user: RideUser, service: RideService) {
     };
   }, [service, from, to, !!active, isRider]);
 
-  const currentId = current?.id;
+  const currentId = isDriver && active ? active.id : (selected ?? current?.id);
   const currentStatus = current?.status;
   useEffect(() => {
     setSimulation(null);
+    setPayment(null);
+    setAssignedDriver(null);
+    setPaymentUnavailable(false);
     if (!currentId) return;
     let mounted = true;
     let pending = false;
@@ -134,7 +154,11 @@ export function useRides(user: RideUser, service: RideService) {
       try {
         const data = await service.screen(currentId);
         if (mounted && request === screenSequence.current) {
+          setSelectedDetail(data.trip);
           setSimulation(data.simulation);
+          setPayment(data.payment);
+          setAssignedDriver(data.driver);
+          setPaymentUnavailable(data.paymentUnavailable);
         }
       } catch (e) {
         if (mounted) setError((e as Error).message);
@@ -143,11 +167,12 @@ export function useRides(user: RideUser, service: RideService) {
       }
     };
     void poll();
-    const interval = terminal.has(currentStatus ?? "")
-      ? null
-      : setInterval(() => {
-          if (!document.hidden) void poll();
-        }, 1000);
+    const interval =
+      current && !isActiveTrip(current)
+        ? null
+        : setInterval(() => {
+            if (!document.hidden) void poll();
+          }, 1000);
     return () => {
       mounted = false;
       if (interval) clearInterval(interval);
@@ -196,11 +221,12 @@ export function useRides(user: RideUser, service: RideService) {
     const trip = await service.book({
       pickup: from,
       destination: to,
-      method: "Wallet",
+      method: "Cod",
       paymentToken: null,
     });
     setTrips((previous) => [trip, ...previous.filter((t) => t.id !== trip.id)]);
     setSelected(trip.id);
+    window.location.hash = `ride/${trip.id}`;
     setPage(1);
   }
 
@@ -254,9 +280,7 @@ export function useRides(user: RideUser, service: RideService) {
     setSelected(null);
     setTo(point);
   }
-  const complete = trips.filter((t) =>
-    ["DroppedOff", "PaymentPending", "PaymentReview", "Paid"].includes(t.status),
-  ).length;
+  const complete = trips.filter((t) => t.status === "Paid").length;
   return {
     isDriver,
     isRider,
@@ -273,6 +297,9 @@ export function useRides(user: RideUser, service: RideService) {
     to,
     setTo: chooseTo,
     simulation,
+    payment,
+    assignedDriver,
+    paymentUnavailable,
     preview,
     routeLoading,
     routeError,

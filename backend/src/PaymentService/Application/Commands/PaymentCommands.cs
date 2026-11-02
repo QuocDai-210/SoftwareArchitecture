@@ -16,6 +16,10 @@ public sealed class PaymentCommands(
     public async Task<Payment> Charge(PaymentRequest request, string key, CancellationToken ct)
     {
         RequestKeys.Validate(key);
+        if (request.Method != PaymentMethod.Cod || request.PaymentToken is not null)
+            throw new RuleException("Thanh toán online đã tắt; cần Ops đối soát giao dịch cũ.");
+        if (string.IsNullOrWhiteSpace(request.DriverId) || request.DriverId.Length > 100)
+            throw new RuleException("Thiếu tài xế thu COD.", ErrorKind.Validation);
         if (
             request.TripId == Guid.Empty
             || string.IsNullOrWhiteSpace(request.RiderId)
@@ -26,11 +30,6 @@ public sealed class PaymentCommands(
             throw new RuleException("Yêu cầu thanh toán không hợp lệ.", ErrorKind.Validation);
         if (key != $"trip:{request.TripId}:charge")
             throw new RuleException("Khóa thanh toán phải gắn với chuyến.", ErrorKind.Validation);
-        request = request with
-        {
-            Amount = decimal.Round(request.Amount, 0),
-            PaymentToken = request.Method == PaymentMethod.Wallet ? null : request.PaymentToken,
-        };
         var hash = RequestKeys.Hash(
             JsonSerializer.Serialize(
                 new
@@ -40,6 +39,7 @@ public sealed class PaymentCommands(
                     request.Amount,
                     request.Method,
                     request.PaymentToken,
+                    request.DriverId,
                 },
                 ApplicationJson.Options
             )
@@ -50,16 +50,6 @@ public sealed class PaymentCommands(
         if (payment is not null)
         {
             RequestKeys.Same(payment.RequestHash, hash);
-            if (
-                payment.CheckoutReference is not null
-                && payment.Status == PaymentStatus.Declined
-                && request.Attempt > payment.Attempt
-            )
-            {
-                var retry = await factory.Create(request.Method).Capture(request, ct);
-                if (retry.CheckoutReference is not null)
-                    payment.AwaitCheckout(retry.CheckoutReference, request.Attempt);
-            }
             await PublishResult(payment, ct);
             await unit.Save(ct);
             await tx.Commit(ct);
@@ -78,6 +68,8 @@ public sealed class PaymentCommands(
             capture.Success,
             capture.Reason
         );
+        if (capture.Outcome == CaptureOutcome.Pending && request.Method == PaymentMethod.Cod)
+            payment.AwaitCash(request.DriverId!);
         writer.Add(payment);
         if (capture.CheckoutReference is not null)
             payment.AwaitCheckout(capture.CheckoutReference, request.Attempt);
@@ -112,12 +104,18 @@ public sealed class PaymentCommands(
         RequestKeys.Validate(key);
         if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 200)
             throw new RuleException("Cần lý do hoàn tiền, tối đa 200 ký tự.", ErrorKind.Validation);
+        if (!request.CashReturned)
+            throw new RuleException("Cần xác nhận đã trả tiền mặt thực tế.", ErrorKind.Validation);
         var hash = RequestKeys.Hash(request.Reason);
         await using var tx = await unit.Begin(ct);
         await writer.Lock(id, ct);
         var payment =
             await writer.FindTracked(id, ct)
             ?? throw new RuleException("Không có giao dịch.", ErrorKind.NotFound);
+        if (payment.Method != PaymentMethod.Cod)
+            throw new RuleException(
+                "Giao dịch online cũ chỉ hỗ trợ đọc và đối soát ngoài hệ thống."
+            );
         if (payment.Status is PaymentStatus.Refunded or PaymentStatus.RefundPending)
         {
             if (payment.RefundKey != key)
@@ -129,17 +127,10 @@ public sealed class PaymentCommands(
             throw new RuleException("Chỉ hoàn khoản đã thanh toán.");
         if (payment.IsTopUp)
             throw new RuleException("Chức năng này chỉ hoàn tiền chuyến.", ErrorKind.Validation);
-        if (payment.CheckoutReference is not null)
-        {
-            payment.RequestRefund(key, hash, request.Reason);
-            await unit.Save(ct);
-            await tx.Commit(ct);
-            return payment;
-        }
         await factory.Create(payment.Method).Refund(payment, ct);
         var charge = (await reader.Journals(payment.Id, ct)).Single(x => x.Kind == "Charge");
         AddJournal(payment.Id, "Refund", Ledger.Reverse(charge.Lines));
-        payment.Refund(key, hash, request.Reason);
+        payment.Refund(key, hash, request.Reason, actor.Id);
         await bus.Publish(
             new PaymentRefunded(Guid.NewGuid(), id, id, payment.Amount, payment.CorrelationId),
             payment.CorrelationId,

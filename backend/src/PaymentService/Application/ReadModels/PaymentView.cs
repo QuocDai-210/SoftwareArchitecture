@@ -11,7 +11,13 @@ public sealed record PaymentView(
     string? Reason,
     DateTimeOffset CreatedAt,
     bool IsTopUp,
-    bool RequiresCheckout
+    bool RequiresCheckout,
+    string? DriverId,
+    string? CollectedBy,
+    DateTimeOffset? CollectedAt,
+    string? CollectionReason,
+    string? RefundedBy,
+    DateTimeOffset? RefundedAt
 )
 {
     public static PaymentView From(Payment p) =>
@@ -26,6 +32,12 @@ public sealed record PaymentView(
             p.Reason,
             p.CreatedAt,
             p.IsTopUp,
-            p.Status == PaymentStatus.Pending && p.CheckoutReference is not null
+            false,
+            p.DriverId,
+            p.CollectedBy,
+            p.CollectedAt,
+            p.CollectionReason,
+            p.RefundedBy,
+            p.RefundedAt
         );
 }

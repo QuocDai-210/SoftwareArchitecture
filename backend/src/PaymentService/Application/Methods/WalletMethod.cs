@@ -12,8 +12,8 @@ public sealed class WalletMethod(IWalletStore wallets) : IPaymentMethod
     {
         var wallet = await wallets.GetLocked(request.RiderId, ct);
         if (wallet is null || !wallet.TryDebit(request.Amount))
-            return new(false, "Ví không đủ tiền.");
-        return new(true);
+            return new(CaptureOutcome.Declined, "Ví không đủ tiền.");
+        return new(CaptureOutcome.Settled);
     }
 
     public async Task Refund(Payment payment, CancellationToken ct)

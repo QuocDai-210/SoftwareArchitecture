@@ -24,9 +24,10 @@
 | Lưu hành trình giả lập và revision               | `MatchingService/Infrastructure/Persistence/MongoSimulationStore.cs`                                               |
 | Hồ sơ User và lịch sử có phân trang              | `TripService/Application/{Commands/ProfileCommands.cs,Queries/TripQueries.cs}`, `Infrastructure/Persistence/`      |
 | Số dư, trạng thái thanh toán, cân bằng Nợ/Có     | `PaymentService/Domain/`                                                                                           |
-| Thu tiền, hoàn tiền, idempotency                 | `PaymentService/Application/Commands/PaymentCommands.cs`                                                           |
-| Card/Wallet và registry lựa chọn                 | `PaymentService/Application/Methods/`                                                                              |
-| Cổng thẻ demo, giả lập timeout                   | `PaymentService/Infrastructure/Providers/`                                                                         |
+| Xác nhận thu COD, quyền Driver/Ops, idempotency  | `PaymentService/Application/Commands/CashCollection.cs`                                                            |
+| Tạo giao dịch, hoàn tiền và Outbox               | `PaymentService/Application/Commands/PaymentCommands.cs`                                                           |
+| Chiến lược COD và registry lựa chọn              | `PaymentService/Application/Methods/`                                                                              |
+| Adapter online cũ, không đăng ký ở runtime COD   | `PaymentService/Infrastructure/Providers/`                                                                         |
 | PostgreSQL, row/advisory lock, trigger sổ cái    | `PaymentService/Infrastructure/Persistence/`                                                                       |
 | Sự kiện giữa các service                         | `Shared/SwiftRide.Contracts/Events/`                                                                               |
 | Consumer RabbitMQ                                | `<Service>/Infrastructure/Messaging/`                                                                              |
@@ -35,7 +36,7 @@
 | JWT, chuyển HttpContext thành Actor              | `Shared/SwiftRide.Infrastructure/Security/`                                                                        |
 | Inbox/Outbox, retry broker, telemetry            | `Shared/SwiftRide.Infrastructure/{Messaging,Persistence,Resilience,Observability}/`                                |
 | Gateway routes, rate limit, upstream             | `ApiGateway/Composition/ServiceRegistration.cs`                                                                    |
-| Gom chuyến, vị trí xe và dữ liệu thanh toán cũ   | `ApiGateway/Endpoints/ScreenEndpoints.cs`                                                                          |
+| Gom chuyến, vị trí xe, Driver và thanh toán COD  | `ApiGateway/Endpoints/ScreenEndpoints.cs`                                                                          |
 | Mô hình và thao tác chuyến trên web              | `frontend/src/features/rides/domain/`                                                                              |
 | Retry đặt xe, điều phối thao tác web             | `frontend/src/features/rides/application/RideService.ts`                                                           |
 | HTTP web gọi backend proxy                       | `frontend/src/features/rides/infrastructure/HttpRideGateway.ts`                                                    |
@@ -48,8 +49,19 @@
 | Bản đồ web, chọn địa chỉ và điều khiển xe        | `frontend/src/features/rides/presentation/components/{RouteMap,AddressField,SimulationControls}.tsx`               |
 | Giao diện quản trị Driver                        | `frontend/src/features/rides/presentation/components/OpsPanel.tsx`                                                 |
 | Giới hạn RAM và kiểm thử ba vai trò              | `scripts/check-resources.py`, `scripts/browser-check.mjs`, `scripts/verify.sh`                                     |
+| Quản lý nhóm API/database                        | `Makefile`, `docker-compose.yml`                                                                                   |
 | Bảo vệ ranh giới tầng                            | `scripts/check-architecture.py`                                                                                    |
 | Kiểm thử nghiệp vụ/hợp đồng adapter              | `backend/tests/SwiftRide.Checks/`; `scripts/check-frontend.mjs`                                                    |
+
+Các điểm vào mới:
+
+- `PaymentService/Application/Methods/CashMethod.cs`: chiến lược COD, chờ xác nhận thu.
+- `PaymentService/Application/Commands/CashCollection.cs`: quyền thu, idempotency, journal và Outbox.
+- `PaymentService/Domain/Payment.cs`: trạng thái và dấu vết thu/hoàn tiền.
+- `MatchingService/Application/ReadModels/DriverContact.cs`: dữ liệu Driver gửi cho chuyến có quyền xem.
+- `frontend/src/features/rides/presentation/components/CashReceipt.tsx`: xác nhận tiền mặt trên chuyến.
+- `frontend/src/features/rides/presentation/components/PaymentPanel.tsx`: lịch sử, tổng thu/hoàn và biên nhận.
+- `deploy/keycloak/themes/swiftride/login/`: theme mint–trắng kế thừa Keycloak.
 
 ## Quy tắc đặt file
 

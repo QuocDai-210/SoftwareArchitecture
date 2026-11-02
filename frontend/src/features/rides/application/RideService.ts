@@ -2,6 +2,7 @@ import type { Driver, Trip, DriverRegistration, Point } from "../domain/models";
 import { availableActions, type TripAction } from "../domain/trip-rules";
 import type { Booking, RideGateway } from "./RideGateway";
 export class RideService {
+  private readonly cashKeys = new Map<string, string>();
   private pending: { payload: string; key: string } | null = null;
   constructor(private readonly gateway: RideGateway) {}
   route(pickup: Point, destination: Point) {
@@ -46,6 +47,9 @@ export class RideService {
   history(page: number) {
     return this.gateway.history(page);
   }
+  ledger(id: string) {
+    return this.gateway.ledger(id);
+  }
   payments(page: number) {
     return this.gateway.payments(page);
   }
@@ -55,17 +59,14 @@ export class RideService {
   tripStatistics() {
     return this.gateway.tripStatistics();
   }
-  checkout(id: string) {
-    return this.gateway.checkout(id);
-  }
-  topUp(amount: number, key: string) {
-    return this.gateway.topUp(amount, key);
-  }
-  reconcile(id: string) {
-    return this.gateway.reconcile(id);
-  }
-  paymentByReference(reference: string) {
-    return this.gateway.paymentByReference(reference);
+  confirmCash(id: string, reason?: string) {
+    const payload = `${id}|${reason ?? ""}`;
+    let key = this.cashKeys.get(payload);
+    if (!key) {
+      key = crypto.randomUUID();
+      this.cashKeys.set(payload, key);
+    }
+    return this.gateway.confirmCash(id, reason, key);
   }
   refund(id: string, reason: string, key: string) {
     return this.gateway.refund(id, reason, key);
@@ -78,9 +79,6 @@ export class RideService {
   }
   driver() {
     return this.gateway.driver();
-  }
-  balance() {
-    return this.gateway.balance();
   }
   screen(id: string) {
     return this.gateway.screen(id);

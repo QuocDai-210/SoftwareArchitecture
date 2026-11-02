@@ -6,7 +6,8 @@ public sealed class TripPaymentNotifications(
     ITripReader reader,
     ITripWriter writer,
     ITripMetrics metrics,
-    IPaymentMetrics paymentMetrics
+    IPaymentMetrics paymentMetrics,
+    IEventPublisher bus
 )
 {
     public async Task Settled(PaymentSettled message, CancellationToken ct)
@@ -21,6 +22,7 @@ public sealed class TripPaymentNotifications(
         )
             throw new RuleException("PaymentSettled không khớp chuyến.");
         trip.Move(TripStatus.Paid);
+        await WorkflowEvents.Release(trip, bus, ct);
         await writer.Save(ct);
         metrics.Outcome("paid");
     }

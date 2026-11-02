@@ -4,6 +4,15 @@ namespace SwiftRide.Matching.Application;
 
 public sealed class DriverQueries(IDriverReader reader)
 {
+    public Task<DriverContact?> Contact(string id, Actor actor, CancellationToken ct)
+    {
+        if (!actor.IsService)
+            throw new RuleException("API chỉ dành cho service.", ErrorKind.Forbidden);
+        if (string.IsNullOrWhiteSpace(id) || id.Length > 100)
+            throw new RuleException("Mã tài xế không hợp lệ.", ErrorKind.Validation);
+        return reader.Contact(id, ct);
+    }
+
     public async Task<DriverView> Me(Actor actor, CancellationToken ct)
     {
         if (!actor.IsDriver)

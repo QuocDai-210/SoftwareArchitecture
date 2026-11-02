@@ -111,7 +111,11 @@ export function RouteMap({
       );
       if (signature !== fitted.current && selected.length > 0) {
         map.current.fitBounds(L.latLngBounds(selected.map((p) => [p.latitude, p.longitude])), {
-          padding: [35, 35],
+          paddingTopLeft: window.innerWidth >= 1024 ? [435, 55] : [40, 60],
+          paddingBottomRight:
+            window.innerWidth >= 1024
+              ? [45, 45]
+              : [40, Math.min(map.current.getSize().y * 0.5, 340)],
           maxZoom: 15,
         });
         fitted.current = signature;
@@ -122,20 +126,16 @@ export function RouteMap({
     };
   }, [ready, pickup, destination, route, simulation]);
   return (
-    <section className="card overflow-hidden" aria-label="Bản đồ hành trình">
-      <div ref={container} className="h-[380px] sm:h-[480px] relative z-0" />
+    <section className="route-map" aria-label="Bản đồ hành trình">
+      <div ref={container} className="map-canvas relative z-0" />
       {(!mapKey || error || tilesFailed) && (
-        <p role="status" className="p-4 text-sm">
+        <p role="status" className="map-notice">
           {error ||
             (tilesFailed
               ? "Một số ô bản đồ chưa tải được. Có thể tiếp tục tìm địa chỉ hoặc chọn điểm."
               : "Bản đồ chưa sẵn sàng. Dùng tìm địa chỉ để đặt xe.")}
         </p>
       )}
-      <p className="p-4 text-xs text-[#62766b]">
-        Xanh lá: điểm đón · Cam: điểm đến · Xanh dương: xe.{" "}
-        {onSelect && "Chạm bản đồ để chọn vị trí."}
-      </p>
     </section>
   );
 }

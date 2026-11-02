@@ -1,226 +1,355 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RideService } from "../../application/RideService";
-import type { Page, Payment } from "../../domain/models";
+import type { Page, Payment, PaymentStatistic, Journal } from "../../domain/models";
 import { money } from "../format";
 
+const statuses: Record<string, string> = {
+  Pending: "Chờ thu",
+  Settled: "Đã thu",
+  Refunded: "Đã hoàn",
+  RefundPending: "Chờ hoàn",
+  Declined: "Chưa thanh toán",
+  Compensated: "Đã bồi hoàn",
+};
 export function PaymentPanel({
   service,
   run,
   busy,
   isOps,
-  paymentReference,
+  isDriver,
+  onTrip,
 }: {
   service: RideService;
   run: (action: () => Promise<void>) => Promise<void>;
   busy: boolean;
   isOps: boolean;
-  paymentReference?: string;
+  isDriver: boolean;
+  onTrip: (id: string) => void;
 }) {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page<Payment>>({ items: [], total: 0, page: 1, pageSize: 10 });
-  const [amount, setAmount] = useState(100000);
+  const [statistics, setStatistics] = useState<PaymentStatistic[]>([]);
+  const [selected, setSelected] = useState<Payment | null>(null);
+  const [action, setAction] = useState<"collect" | "refund">("collect");
   const [reason, setReason] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
-  const topup = useRef<{ amount: number; key: string } | null>(null);
+  const [journals, setJournals] = useState<{
+    id: string;
+    payment: Payment;
+    items: Journal[];
+  } | null>(null);
+  const actionForm = useRef<HTMLFormElement>(null);
+  const receipt = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const target = selected ? actionForm.current : journals ? receipt.current : null;
+    target?.scrollIntoView({ block: "center" });
+    target?.querySelector<HTMLElement>("input,button")?.focus();
+  }, [selected, journals]);
   const refunds = useRef(new Map<string, string>());
   const reload = useCallback(async () => {
-    setData(await service.payments(page));
+    const [payments, stats] = await Promise.all([
+      service.payments(page),
+      service.paymentStatistics(),
+    ]);
+    setData(payments);
+    setStatistics(stats);
   }, [service, page]);
   useEffect(() => {
-    let active = true;
-    service
-      .payments(page)
-      .then((result) => {
-        if (active) setData(result);
+    let mounted = true;
+    Promise.all([service.payments(page), service.paymentStatistics()])
+      .then(([payments, stats]) => {
+        if (mounted) {
+          setData(payments);
+          setStatistics(stats);
+        }
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (mounted) setError(e.message);
       });
     return () => {
-      active = false;
+      mounted = false;
     };
   }, [service, page]);
-  useEffect(() => {
-    if (!paymentReference) return;
-    let active = true;
-    service
-      .paymentByReference(paymentReference)
-      .then((payment) => service.reconcile(payment.id))
-      .then(() => {
-        if (active) return reload();
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [service, paymentReference, reload]);
-  async function checkout(id: string) {
-    const result = await service.checkout(id);
-    const url = new URL(result.url);
-    if (url.origin !== "https://sandbox.vnpayment.vn")
-      throw new Error("Địa chỉ thanh toán không hợp lệ.");
-    window.location.assign(url.href);
+  function choose(payment: Payment, next: "collect" | "refund") {
+    setSelected(payment);
+    setAction(next);
+    setReason("");
+    setConfirmed(false);
   }
-  function act(action: () => Promise<void>) {
-    void run(async () => {
-      setError("");
-      await action();
-      await reload();
-    });
-  }
+  const amount = (status: string) =>
+    statistics
+      .filter((s) => s.method === "Cod" && s.status === status)
+      .reduce((total, s) => total + s.amount, 0);
   return (
-    <section id="payments" className="card p-6 mt-6">
-      <div className="flex flex-wrap justify-between gap-4">
-        <h2 className="font-bold text-lg">{isOps ? "Đối soát giao dịch" : "Ví và thanh toán"}</h2>
-        <button className="text-sm underline" disabled={busy} onClick={() => act(reload)}>
-          Làm mới
-        </button>
+    <section id="payments" className="space-y-5">
+      <div className="stats-grid">
+        {[
+          {
+            label: isDriver || isOps ? "Đã thu, chưa hoàn" : "Đã thanh toán",
+            value: amount("Settled"),
+          },
+          { label: "Chờ thu tiền mặt", value: amount("Pending") },
+          { label: "Đã hoàn tiền", value: amount("Refunded") },
+        ].map((stat) => (
+          <div className="card p-5" key={stat.label}>
+            <p className="muted text-sm">{stat.label}</p>
+            <p className="text-2xl font-bold mt-3">{money(stat.value)}</p>
+          </div>
+        ))}
       </div>
-      {paymentReference && (
-        <p className="text-sm my-3" role="status">
-          Đã quay về từ VNPAY. Kết quả dưới đây do backend đối soát với VNPAY.
-        </p>
-      )}
       {error && (
-        <p role="alert" className="text-red-800 text-sm my-3">
+        <p role="alert" className="app-alert">
           {error}
         </p>
       )}
-      {!isOps && (
+      <div className="card p-5 sm:p-6">
+        <div className="flex justify-between gap-3 items-center mb-5">
+          <h2 className="text-lg font-bold">{isOps ? "Đối soát tiền mặt" : "Lịch sử tiền mặt"}</h2>
+          <button className="btn btn-secondary" disabled={busy} onClick={() => void run(reload)}>
+            Làm mới
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <caption className="sr-only">Lịch sử thu và hoàn tiền</caption>
+            <thead>
+              <tr>
+                <th className="p-3">Chuyến đi</th>
+                <th className="p-3">Số tiền</th>
+                <th className="p-3">Trạng thái</th>
+                <th className="p-3">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map((payment) => (
+                <tr key={payment.id} className="border-t border-slate-100">
+                  <td className="p-3">
+                    <a
+                      className="font-bold underline"
+                      href={`#ride/${payment.id}`}
+                      onClick={() => onTrip(payment.id)}
+                    >
+                      {payment.id.slice(0, 8)}
+                    </a>
+                    <p className="muted text-xs mt-1">
+                      {new Date(payment.createdAt).toLocaleString("vi-VN")}
+                    </p>
+                  </td>
+                  <td className="p-3 whitespace-nowrap font-semibold">{money(payment.amount)}</td>
+                  <td className="p-3">
+                    <span className="badge">
+                      {payment.method === "Cod"
+                        ? (statuses[payment.status] ?? payment.status)
+                        : "Giao dịch cũ · " + payment.method}
+                    </span>
+                    {payment.method !== "Cod" &&
+                      ["Pending", "RefundPending", "Declined"].includes(payment.status) && (
+                        <p className="muted mt-2">Cần Ops đối soát ngoài hệ thống.</p>
+                      )}
+                    {payment.collectedAt && (
+                      <p className="muted text-xs mt-2">
+                        Thu: {new Date(payment.collectedAt).toLocaleString("vi-VN")}
+                      </p>
+                    )}
+                    {payment.collectionReason && (
+                      <p className="text-xs mt-1">{payment.collectionReason}</p>
+                    )}
+                    {payment.refundedAt && (
+                      <p className="muted text-xs mt-2">
+                        Hoàn: {new Date(payment.refundedAt).toLocaleString("vi-VN")}
+                      </p>
+                    )}
+                    {payment.reason && <p className="text-xs mt-1">{payment.reason}</p>}
+                  </td>
+                  <td className="p-3">
+                    <div className="flex flex-wrap gap-2">
+                      {payment.method === "Cod" &&
+                        payment.status === "Pending" &&
+                        (isOps || isDriver) && (
+                          <button
+                            className="btn"
+                            disabled={busy}
+                            onClick={() => choose(payment, "collect")}
+                          >
+                            Xác nhận thu
+                          </button>
+                        )}
+                      {isOps && payment.method === "Cod" && payment.status === "Settled" && (
+                        <button
+                          className="btn btn-secondary"
+                          disabled={busy}
+                          onClick={() => choose(payment, "refund")}
+                        >
+                          Hoàn tiền
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-secondary"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(async () => {
+                            setJournals({
+                              id: payment.id,
+                              payment,
+                              items: await service.ledger(payment.id),
+                            });
+                          })
+                        }
+                      >
+                        Biên nhận
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!data.items.length && (
+          <div className="empty-state">
+            <h3>Chưa có giao dịch</h3>
+            <p>Khoản thu sẽ xuất hiện sau khi trả khách.</p>
+          </div>
+        )}
+        <div className="pagination">
+          <button
+            className="btn btn-secondary"
+            disabled={busy || page <= 1}
+            onClick={() => setPage(page - 1)}
+          >
+            Trang trước
+          </button>
+          <span>
+            Trang {page} · {data.total} giao dịch
+          </span>
+          <button
+            className="btn btn-secondary"
+            disabled={busy || page * data.pageSize >= data.total}
+            onClick={() => setPage(page + 1)}
+          >
+            Trang sau
+          </button>
+        </div>
+      </div>
+      {selected && (
         <form
-          className="flex flex-wrap gap-3 items-end my-5"
+          ref={actionForm}
+          className="card p-6 space-y-4"
+          aria-label="Xác nhận giao dịch tiền mặt"
           onSubmit={(event) => {
             event.preventDefault();
-            act(async () => {
-              if (topup.current?.amount !== amount)
-                topup.current = { amount, key: crypto.randomUUID() };
-              const payment = await service.topUp(amount, topup.current.key);
-              topup.current = null;
+            void run(async () => {
+              if (action === "collect")
+                await service.confirmCash(selected.id, reason.trim() || undefined);
+              else {
+                const payload = `${selected.id}|${reason.trim()}`;
+                const key = refunds.current.get(payload) ?? crypto.randomUUID();
+                refunds.current.set(payload, key);
+                await service.refund(selected.id, reason.trim(), key);
+              }
+              setSelected(null);
+              setJournals(null);
               await reload();
-              await checkout(payment.id);
             });
           }}
         >
-          <label className="text-sm">
-            Số tiền nạp (VND)
+          <h2 className="text-xl font-bold">
+            {action === "refund" ? "Ghi nhận hoàn tiền mặt" : "Xác nhận đã thu tiền"} ·{" "}
+            {money(selected.amount)}
+          </h2>
+          {(isOps || action === "refund") && (
+            <label className="block text-sm">
+              Lý do xử lý
+              <input
+                className="field mt-2"
+                required
+                maxLength={200}
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            </label>
+          )}
+          <label className="check-label">
             <input
-              className="field mt-2"
-              type="number"
-              min={10000}
-              max={5000000}
-              step={1}
+              type="checkbox"
               required
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
+              checked={confirmed}
+              onChange={(event) => setConfirmed(event.target.checked)}
             />
+            {action === "refund"
+              ? "Tôi xác nhận tiền mặt đã được trả đủ cho khách."
+              : "Tôi xác nhận đã kiểm tra và nhận đủ tiền mặt."}
           </label>
-          <button className="btn" disabled={busy}>
-            Nạp ví qua VNPAY sandbox
-          </button>
+          <div className="flex gap-3">
+            <button className="btn" disabled={busy || !confirmed}>
+              {action === "refund" ? "Ghi nhận đã hoàn tiền" : "Xác nhận đã thu tiền"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy}
+              onClick={() => setSelected(null)}
+            >
+              Đóng
+            </button>
+          </div>
         </form>
       )}
-      {isOps && (
-        <label className="block text-sm my-4">
-          Lý do hoàn toàn bộ tiền chuyến
-          <input
-            className="field mt-2"
-            value={reason}
-            maxLength={200}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </label>
+      {journals && (
+        <section ref={receipt} className="card p-6 space-y-3" aria-label="Biên nhận thanh toán">
+          <div className="flex justify-between">
+            <h2 className="font-bold">Biên nhận · {journals.id.slice(0, 8)}</h2>
+            <button className="btn btn-secondary" onClick={() => setJournals(null)}>
+              Đóng
+            </button>
+          </div>
+          <p className="text-2xl font-bold">{money(journals.payment.amount)}</p>
+          <p className="badge">
+            {journals.payment.method === "Cod" ? "Tiền mặt" : journals.payment.method} ·{" "}
+            {statuses[journals.payment.status] ?? journals.payment.status}
+          </p>
+          {journals.payment.collectedAt && (
+            <p className="text-sm muted">
+              Xác nhận thu: {new Date(journals.payment.collectedAt).toLocaleString("vi-VN")}
+            </p>
+          )}
+          {isOps && journals.payment.collectedBy && (
+            <p className="text-xs break-all muted">
+              Người xác nhận: {journals.payment.collectedBy}
+            </p>
+          )}
+          {journals.payment.refundedAt && (
+            <p className="text-sm muted">
+              Hoàn tiền: {new Date(journals.payment.refundedAt).toLocaleString("vi-VN")} ·{" "}
+              {journals.payment.reason}
+            </p>
+          )}
+          {!journals.items.length && <p>Chưa ghi nhận thu tiền.</p>}
+          {journals.items.map((journal) => (
+            <div key={journal.id}>
+              <h3 className="font-semibold">
+                {journal.kind === "Charge" ? "Thu tiền" : "Hoàn tiền"} ·{" "}
+                {new Date(journal.createdAt).toLocaleString("vi-VN")}
+              </h3>
+              {!isOps && <p className="mt-2 font-semibold">{money(journals.payment.amount)}</p>}
+              {isOps && (
+                <dl className="space-y-2 mt-3">
+                  {journal.lines.map((line, index) => (
+                    <div key={index} className="flex justify-between gap-3 text-sm">
+                      <dt className="break-all">
+                        {line.side === "Debit" ? "Nợ" : "Có"} · {line.account}
+                      </dt>
+                      <dd className="whitespace-nowrap">{money(line.amount)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </div>
+          ))}
+        </section>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
-          <caption className="sr-only">Lịch sử giao dịch</caption>
-          <thead>
-            <tr>
-              <th className="p-3">Giao dịch</th>
-              <th className="p-3">Số tiền</th>
-              <th className="p-3">Trạng thái</th>
-              <th className="p-3">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((payment) => (
-              <tr key={payment.id} className="border-t border-[#e4e8e0]">
-                <td className="p-3">
-                  {payment.isTopUp ? "Nạp ví" : "Cước xe"} · {payment.id.slice(0, 8)}
-                  <p className="text-xs">{new Date(payment.createdAt).toLocaleString("vi-VN")}</p>
-                </td>
-                <td className="p-3 whitespace-nowrap">{money(payment.amount)}</td>
-                <td className="p-3">
-                  {payment.status}
-                  {payment.reason && <p className="text-xs">{payment.reason}</p>}
-                </td>
-                <td className="p-3 flex flex-wrap gap-2">
-                  {payment.requiresCheckout && (
-                    <button
-                      className="btn"
-                      disabled={busy}
-                      onClick={() => act(() => checkout(payment.id))}
-                    >
-                      Thanh toán
-                    </button>
-                  )}
-                  {["Pending", "RefundPending"].includes(payment.status) && (
-                    <button
-                      className="btn btn-secondary"
-                      disabled={busy}
-                      onClick={() =>
-                        act(async () => {
-                          await service.reconcile(payment.id);
-                        })
-                      }
-                    >
-                      Đối soát
-                    </button>
-                  )}
-                  {isOps && !payment.isTopUp && payment.status === "Settled" && (
-                    <button
-                      className="btn btn-secondary"
-                      disabled={busy || !reason.trim()}
-                      onClick={() =>
-                        act(async () => {
-                          const payload = payment.id + "|" + reason.trim();
-                          const key = refunds.current.get(payload) ?? crypto.randomUUID();
-                          refunds.current.set(payload, key);
-                          await service.refund(payment.id, reason.trim(), key);
-                        })
-                      }
-                    >
-                      Hoàn toàn bộ
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {!data.items.length && <p className="text-sm my-4">Chưa có giao dịch.</p>}
-      <div className="flex justify-between items-center gap-3 mt-4 text-sm">
-        <button
-          className="btn btn-secondary"
-          disabled={busy || page <= 1}
-          onClick={() => setPage(page - 1)}
-        >
-          Trang trước
-        </button>
-        <span>
-          Trang {page} · {data.total} giao dịch
-        </span>
-        <button
-          className="btn btn-secondary"
-          disabled={busy || page * data.pageSize >= data.total}
-          onClick={() => setPage(page + 1)}
-        >
-          Trang sau
-        </button>
-      </div>
     </section>
   );
 }

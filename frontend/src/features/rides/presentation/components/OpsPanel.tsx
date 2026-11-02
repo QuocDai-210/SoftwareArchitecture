@@ -24,10 +24,12 @@ export function OpsPanel({
   service,
   run,
   busy,
+  summaryOnly = false,
 }: {
   service: RideService;
   run: (action: () => Promise<void>) => Promise<void>;
   busy: boolean;
+  summaryOnly?: boolean;
 }) {
   const [applications, setApplications] = useState<DriverApplication[]>([]);
   const [registration, setRegistration] = useState(empty);
@@ -57,6 +59,20 @@ export function OpsPanel({
       await reload();
     });
   }
+  if (summaryOnly)
+    return (
+      <section className="card p-6 mt-5">
+        <h2 className="font-bold text-lg">Trạng thái chuyến đi</h2>
+        <div className="stats-grid mt-4">
+          {trips.map((stat) => (
+            <div key={stat.status} className="rounded-xl bg-emerald-50 p-4">
+              <p className="muted text-sm">{labels[stat.status] ?? stat.status}</p>
+              <p className="text-2xl font-bold mt-2">{stat.count}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
   return (
     <section id="operations" className="card p-6 mt-6 space-y-5">
       <div className="flex justify-between gap-3">
@@ -71,7 +87,7 @@ export function OpsPanel({
         </p>
       )}
       <div className="grid sm:grid-cols-2 gap-4">
-        <div className="bg-[#f3f6ee] rounded-xl p-4">
+        <div className="bg-[#f0faf5] rounded-xl p-4">
           <h3 className="font-bold">Chuyến đi</h3>
           {trips.map((stat) => (
             <p key={stat.status} className="text-sm mt-2">
@@ -79,7 +95,7 @@ export function OpsPanel({
             </p>
           ))}
         </div>
-        <div className="bg-[#f3f6ee] rounded-xl p-4">
+        <div className="bg-[#f0faf5] rounded-xl p-4">
           <h3 className="font-bold">Hồ sơ tài xế · {total} hồ sơ</h3>
           <p className="text-sm mt-2">
             {
@@ -148,7 +164,7 @@ export function OpsPanel({
           </thead>
           <tbody>
             {applications.map((driver) => (
-              <tr className="border-t border-[#e4e8e0]" key={driver.id}>
+              <tr className="border-t border-[#dcebe5]" key={driver.id}>
                 <td className="p-3">
                   {driver.name}
                   <p className="text-xs">

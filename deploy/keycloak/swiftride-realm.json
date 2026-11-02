@@ -163,5 +163,9 @@
   "registrationEmailAsUsername": false,
   "loginWithEmailAllowed": true,
   "passwordPolicy": "length(12) and upperCase(1) and lowerCase(1) and digits(1)",
-  "defaultRole": { "name": "default-roles-swiftride" }
+  "defaultRole": { "name": "default-roles-swiftride" },
+  "loginTheme": "swiftride",
+  "internationalizationEnabled": true,
+  "supportedLocales": ["vi", "en"],
+  "defaultLocale": "vi"
 }

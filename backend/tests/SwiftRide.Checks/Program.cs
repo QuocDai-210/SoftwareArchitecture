@@ -169,7 +169,12 @@ foreach (var target in Enum.GetValues<TripStatus>())
 foreach (var method in Enum.GetValues<PaymentMethod>())
 {
     var lines = Ledger.Charge(
-        method == PaymentMethod.Card ? "CardClearing" : "WalletLiability:rider",
+        method switch
+        {
+            PaymentMethod.Card => "CardClearing",
+            PaymentMethod.Wallet => "WalletLiability:rider",
+            _ => "CashHeldByDriver:driver",
+        },
         91575
     );
     Ledger.Validate(lines);
