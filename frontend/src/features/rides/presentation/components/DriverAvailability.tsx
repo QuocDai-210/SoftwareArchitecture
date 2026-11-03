@@ -12,15 +12,15 @@ export function DriverAvailability({
   const disabled =
     model.busy || model.loading || !model.driver || model.driver.busy || !!model.active;
   return (
-    <section className="card p-6 space-y-4">
+    <section className="card p-5 space-y-4">
       <div className="flex justify-between gap-2 items-center">
-        <h1 className="text-lg font-bold">Vị trí và nhận chuyến</h1>
+        <h1 className="text-lg font-bold">Nhận chuyến</h1>
         <span className="badge">
           {model.driver?.available ? "Đang trực tuyến" : "Đang ngoại tuyến"}
         </span>
       </div>
       <p className="text-sm text-[#62766b]">
-        Chọn vị trí xe trên bản đồ hoặc tìm địa chỉ. Lời mời nhận chuyến có hiệu lực 60 giây.
+        Chọn vị trí xe hoặc dùng nút định vị trên bản đồ để bắt đầu.
       </p>
       <AddressField
         label="Đặt vị trí xe"
@@ -30,13 +30,6 @@ export function DriverAvailability({
         disabled={disabled}
       />
       <div className="flex flex-wrap gap-3">
-        <button
-          className="btn btn-secondary"
-          disabled={disabled}
-          onClick={() => model.locate(true)}
-        >
-          Dùng vị trí hiện tại
-        </button>
         <button
           className="btn btn-secondary"
           disabled={disabled || !model.driverPoint}

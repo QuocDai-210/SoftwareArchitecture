@@ -52,7 +52,10 @@ Các thao tác tài chính dùng idempotency key; tải lại/gửi lặp không
 
 Điều hướng `#ride`, `#history`, `#payments`, `#operations`, `#profile` tương ứng
 bản đồ, lịch sử, tiền mặt, quản lý Driver và hồ sơ. Link `#ride/{tripId}` mở trực tiếp
-chuyến được phép xem. Trên điện thoại có thể thu gọn bảng thao tác để xem bản đồ.
+chuyến được phép xem. Bản đồ nền sáng chiếm toàn màn hình, chỉ vẽ một tuyến theo
+chặng hiện tại. Bảng thao tác nằm bên trái trên desktop, phía dưới trên điện thoại;
+có thể thu gọn bằng nút hoặc bàn phím, vẫn thấy trạng thái và giá/COD. Nút zoom và
+định vị/xem toàn tuyến nằm bên phải. Bảng tự mở khi nhận chuyến hoặc đổi trạng thái.
 
 Hồ sơ cá nhân; lịch sử và danh sách Driver có phân trang. Driver gửi heartbeat mỗi 10 giây;
 vị trí quá 60 giây không được ghép xe. Không thể tự đổi vị trí khi đang phục vụ chuyến.

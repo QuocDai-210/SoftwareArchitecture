@@ -28,26 +28,34 @@ export function TripDetails({
   assignedDriver: AssignedDriver | null;
 }) {
   const b = t.quote?.breakdown;
+  const hasCashReceipt =
+    t.method === "Cod" && ["PaymentPending", "PaymentReview", "Paid"].includes(t.status);
   return (
-    <section className="card p-6" aria-label="Chi tiết chuyến">
-      <div className="flex justify-between gap-3 items-start">
-        <h2 className="font-bold text-lg">Chi tiết chuyến</h2>
-        <span className="text-xs bg-[#e6f8ee] px-2 py-1 rounded-lg">{t.id.slice(0, 8)}</span>
-      </div>
-      <p className="text-sm font-bold text-[#12695b] my-4" role="status" aria-live="polite">
+    <section className="card p-5" aria-label="Chi tiết chuyến">
+      <h2 className="sr-only">Chi tiết chuyến</h2>
+      <p className="sr-only" role="status" aria-live="polite">
         {labels[t.status]}
       </p>
-      <div className="border-l-2 border-[#9fd7be] pl-4 space-y-4 text-sm">
-        <p>
-          <span className="block text-xs text-[#62766b]">ĐIỂM ĐÓN</span>
-          {t.pickup.label}
-        </p>
-        <p>
-          <span className="block text-xs text-[#62766b]">ĐIỂM ĐẾN</span>
-          {t.destination.label}
-        </p>
-      </div>
+      <details className="trip-route text-sm">
+        <summary className="cursor-pointer min-h-11">
+          <span>
+            <span className="block truncate">Đón: {t.pickup.label}</span>
+            <span className="block truncate muted mt-1">Đến: {t.destination.label}</span>
+          </span>
+        </summary>
+        <div className="border-l-2 border-[#9fd7be] pl-4 space-y-3 mt-3">
+          <p>
+            <span className="block text-xs muted">ĐIỂM ĐÓN</span>
+            {t.pickup.label}
+          </p>
+          <p>
+            <span className="block text-xs muted">ĐIỂM ĐẾN</span>
+            {t.destination.label}
+          </p>
+        </div>
+      </details>
       {assignedDriver &&
+        !isDriver &&
         [
           "DriverAccepted",
           "EnRoute",
@@ -80,11 +88,15 @@ export function TripDetails({
           </p>
         )}
       {t.quote && (
-        <div className="bg-[#f0faf5] rounded-xl p-4 my-5">
-          <p className="text-xs text-[#62766b]">
-            Giá chuyến đi · {t.method === "Cod" ? "Tiền mặt" : t.method}
-          </p>
-          <p className="text-3xl font-bold my-2">{money(t.quote.amount)}</p>
+        <div className={hasCashReceipt ? "mt-4" : "bg-[#f0faf5] rounded-xl p-4 my-4"}>
+          {!hasCashReceipt && (
+            <>
+              <p className="text-xs text-[#62766b]">
+                Giá chuyến đi · {t.method === "Cod" ? "Tiền mặt · COD" : t.method}
+              </p>
+              <p className="text-2xl font-bold my-2">{money(t.quote.amount)}</p>
+            </>
+          )}
           {b && (
             <details className="text-xs text-[#526c5b]">
               <summary className="cursor-pointer min-h-8">
@@ -141,6 +153,7 @@ export function TripDetails({
       </div>
       <details className="mt-5 border-t border-[#dcebe5] pt-4 text-xs">
         <summary className="cursor-pointer text-[#526c5b] min-h-8">Lịch sử trạng thái</summary>
+        <p className="break-all mt-2 muted">Mã chuyến: {t.id}</p>
         <ol className="space-y-2 mt-2">
           {t.history.map((h, i) => (
             <li key={i}>

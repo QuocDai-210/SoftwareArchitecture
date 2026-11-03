@@ -117,6 +117,25 @@ Ngày 03/11/2026, `./scripts/verify.sh` hoàn tất với mã thoát 0 trên c�
   tải/HA. PostgreSQL dùng chung instance là điểm lỗi chung. Không coi nghiệm thu
   đồ án là bằng chứng sẵn sàng vận hành thương mại.
 
+## Nghiệm thu bản đồ tối giản
+
+Ngày 04/11/2026, frontend production và image `web` build thành công, không có lỗi
+hoặc cảnh báo build. TypeScript, assert frontend, kiểm tra kiến trúc và format đạt.
+Thay đổi thuộc tầng presentation, giữ Leaflet/Geoapify và ba service độc lập.
+
+- Bản đồ Positron toàn màn hình, một tuyến theo chặng; nút zoom/định vị 44 px.
+- Bảng thao tác desktop/mobile thu gọn bằng nút hoặc Enter; trạng thái, giá và tiền
+  mặt vẫn rõ khi đóng. Bản đồ điều chỉnh theo kích thước bảng, không vẽ chồng hai tuyến.
+- Lộ trình đầy đủ, lịch sử, chi tiết giá và điều khiển xe giả lập mở khi cần.
+  Biên nhận COD lên đầu; tại 360 × 800 px, Driver thấy ngay checkbox và nút thu tiền.
+- Chrome đạt đăng ký User, Ops duyệt Driver, Geoapify thật, mô phỏng, đón/trả đúng
+  vị trí, COD chờ thu/thu/hoàn, quyền sở hữu và sổ cái chống ghi trùng.
+- Ba vai trò đạt bố cục 360 px, focus bàn phím, link chuyến và đăng xuất; kiểm tra
+  thêm bản đồ ở 360 × 600 px. Không có exception trình duyệt hoặc HTTP 5xx.
+
+Kiểm tra bằng `node scripts/browser-check.mjs`; ca sự cố broker không chạy lại trong
+phiên chỉnh giao diện này. Ảnh/log ở `/tmp`; container kiểm thử được dừng, giữ dữ liệu.
+
 ## Trình tự bảo vệ
 
 1. Chỉ ba service, ba database và chiều phụ thuộc Clean Architecture.

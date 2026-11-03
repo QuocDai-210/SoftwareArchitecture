@@ -266,6 +266,83 @@ async function screenshot(session, name) {
   );
   writeFileSync(join(screenshots, name + ".png"), Buffer.from(image.data, "base64"));
 }
+async function mapLayout(session, name, hasQuote = false) {
+  await wait(
+    session,
+    `document.querySelector('.sheet-toggle')?.getAttribute('aria-expanded') === 'true' &&
+      !!document.querySelector('.leaflet-control-zoom-in')`,
+    name + ": expanded actions",
+  );
+  assert(
+    await evaluate(
+      session,
+      `(() => {
+        const map = document.querySelector('.map-canvas').getBoundingClientRect();
+        const sheet = document.querySelector('.ride-sheet').getBoundingClientRect();
+        const controls = ['.map-locate', '.leaflet-control-zoom-in', '.leaflet-control-zoom-out'];
+        return map.top === 0 && map.height === innerHeight && sheet.bottom <= innerHeight &&
+          controls.every(selector => {
+            const button = document.querySelector(selector);
+            if (!button) return false;
+            const r = button.getBoundingClientRect();
+            return r.width >= 44 && r.height >= 44 && r.top >= 64 &&
+              button.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+          });
+      })()`,
+    ),
+    name + ": full map and accessible controls outside sheet",
+  );
+  await evaluate(session, `document.querySelector('.sheet-toggle').focus()`);
+  for (const type of ["keyDown", "keyUp"])
+    await call(
+      "Input.dispatchKeyEvent",
+      {
+        type,
+        key: "Enter",
+        code: "Enter",
+        windowsVirtualKeyCode: 13,
+        ...(type === "keyDown" ? { text: "\r" } : {}),
+      },
+      session,
+    );
+  await wait(
+    session,
+    `document.querySelector('.sheet-toggle')?.getAttribute('aria-expanded') === 'false' &&
+      document.querySelector('.sheet-content').hidden`,
+    name + ": keyboard collapses actions",
+  );
+  assert(
+    await evaluate(
+      session,
+      `document.querySelector('.sheet-content').getClientRects().length === 0 &&
+        !document.activeElement.closest('.sheet-content')`,
+    ),
+    name + ": collapsed actions are hidden from focus",
+  );
+  if (hasQuote)
+    assert(
+      await evaluate(
+        session,
+        `document.querySelector('.sheet-title small').textContent.includes('Tiền mặt')`,
+      ),
+      name + ": cash fare remains visible when collapsed",
+    );
+  await wait(
+    session,
+    `document.querySelectorAll('.leaflet-tile-loaded').length > 0 &&
+      document.querySelectorAll('.leaflet-tile:not(.leaflet-tile-loaded)').length === 0`,
+    name + ": collapsed map tiles loaded",
+  );
+  await screenshot(session, name + "-collapsed");
+  await evaluate(session, `document.querySelector('.sheet-toggle').click()`);
+  await wait(
+    session,
+    `document.querySelector('.sheet-toggle')?.getAttribute('aria-expanded') === 'true' &&
+      !document.querySelector('.sheet-content').hidden &&
+      document.querySelectorAll('.leaflet-tile-loaded').length > 0`,
+    name + ": map survives panel resize",
+  );
+}
 try {
   const portFile = join(profile, "DevToolsActivePort");
   for (let i = 0; i < 100 && !existsSync(portFile); i++) {
@@ -357,6 +434,7 @@ try {
   );
 
   await login(ops, "ops1", env.OPS_PASSWORD, "ops");
+  await wait(ops, `!!document.querySelector('.overview-banner')`, "Ops opens overview first");
   await evaluate(ops, `window.location.hash = 'operations'`);
   await wait(ops, `!!document.querySelector('#operations details')`, "Driver management view");
   await evaluate(ops, `document.querySelector('#operations details').open = true`);
@@ -485,6 +563,7 @@ try {
     (t) => t.status === "AwaitingRiderConfirmation",
   );
   assert(quoted, "User receives a quote.");
+  await mapLayout(user, "user-quote-desktop", true);
   for (const [session, name] of [
     [user, "User"],
     [ops, "Ops"],
@@ -508,6 +587,12 @@ try {
   await delay(2200);
   const after = await request(driver, "simulations/" + driverId);
   assert.equal(after.body.progress, before.body.progress, "Paused vehicle must not move.");
+  await wait(
+    driver,
+    `document.querySelectorAll('.ride-route').length === 1 && !!document.querySelector('.vehicle-marker')`,
+    "one route and one vehicle during pickup leg",
+  );
+  await mapLayout(driver, "driver-pickup-desktop", true);
   assert.equal(
     (await request(user, "simulations/" + driverId, { speed: 20, paused: false }, "PUT")).status,
     403,
@@ -689,6 +774,25 @@ try {
     `!!document.querySelector('.cash-receipt input[type="checkbox"]')`,
     "cash confirmation checkbox",
   );
+  await call(
+    "Emulation.setDeviceMetricsOverride",
+    { width: 360, height: 800, deviceScaleFactor: 1, mobile: true },
+    driver,
+  );
+  await mapLayout(driver, "driver-cash-mobile", true);
+  assert(
+    await evaluate(
+      driver,
+      `(() => {
+        const button = document.querySelector('.cash-receipt button');
+        const r = button.getBoundingClientRect();
+        const sheet = document.querySelector('.ride-sheet').getBoundingClientRect();
+        return button.disabled && r.top >= sheet.top && r.bottom <= sheet.bottom;
+      })()`,
+    ),
+    "Mobile cash action is visible and requires physical collection checkbox",
+  );
+  await screenshot(driver, "driver-cash-mobile");
   await evaluate(driver, `document.querySelector('.cash-receipt input[type="checkbox"]').click()`);
   if (injectFaults) compose("stop", "rabbitmq");
   await click(driver, "Xác nhận đã thu tiền");
@@ -966,7 +1070,8 @@ try {
       { width: 360, height: 800, deviceScaleFactor: 1, mobile: true },
       session,
     );
-    if (name !== "ops-mobile") await evaluate(session, `window.location.hash = 'ride'`);
+    await evaluate(session, `window.location.hash = 'ride/${trip.id}'`);
+    await mapLayout(session, name, true);
     await delay(300);
     assert(
       await evaluate(session, "document.documentElement.scrollWidth <= window.innerWidth"),
@@ -989,6 +1094,12 @@ try {
     await noAlerts(session, name);
     await screenshot(session, name);
   }
+  await call(
+    "Emulation.setDeviceMetricsOverride",
+    { width: 360, height: 600, deviceScaleFactor: 1, mobile: true },
+    user,
+  );
+  await mapLayout(user, "user-short-mobile", true);
   await evaluate(driver, `window.location.hash = 'ride'`);
   if (
     await evaluate(

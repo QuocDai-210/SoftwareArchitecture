@@ -10,6 +10,9 @@ export function RouteMap({
   route,
   simulation,
   onSelect,
+  onLocate,
+  locateLabel = "Xem toàn tuyến",
+  busy = false,
 }: {
   mapKey: string;
   pickup: Point | null;
@@ -17,26 +20,38 @@ export function RouteMap({
   route?: RoadRoute | null;
   simulation: Simulation | null;
   onSelect?: (latitude: number, longitude: number) => void;
+  onLocate?: () => void;
+  locateLabel?: string;
+  busy?: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<LeafletMap | null>(null);
   const layers = useRef<LayerGroup | null>(null);
   const select = useRef(onSelect);
+  const fit = useRef<(() => void) | null>(null);
+  const fitted = useRef("");
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [tilesFailed, setTilesFailed] = useState(false);
-  const fitted = useRef("");
   select.current = onSelect;
   useEffect(() => {
     if (!mapKey || !container.current) return;
     let disposed = false;
     setReady(false);
+    setTilesFailed(false);
+    fitted.current = "";
     import("leaflet")
       .then((L) => {
         if (disposed || !container.current) return;
-        const instance = L.map(container.current).setView([10.7769, 106.7009], 13);
+        const instance = L.map(container.current, { zoomControl: false }).setView(
+          [10.7769, 106.7009],
+          13,
+        );
+        L.control
+          .zoom({ position: "topright", zoomInTitle: "Phóng to", zoomOutTitle: "Thu nhỏ" })
+          .addTo(instance);
         L.tileLayer(
-          `https://maps.geoapify.com/v1/tile/osm-carto/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(mapKey)}`,
+          `https://maps.geoapify.com/v1/tile/positron/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(mapKey)}`,
           {
             maxZoom: 20,
             attribution:
@@ -57,6 +72,7 @@ export function RouteMap({
       map.current?.remove();
       map.current = null;
       layers.current = null;
+      fit.current = null;
     };
   }, [mapKey]);
   useEffect(() => {
@@ -67,67 +83,123 @@ export function RouteMap({
       const group = layers.current;
       group.clearLayers();
       for (const [point, color, label] of [
-        [pickup, "#166534", "Điểm đón"],
-        [destination, "#b45309", "Điểm đến"],
+        [pickup, "#087b66", "Điểm đón"],
+        [destination, "#183b35", "Điểm đến"],
       ] as const) {
         if (point)
-          L.circleMarker([point.latitude, point.longitude], { radius: 8, color, fillOpacity: 1 })
+          L.circleMarker([point.latitude, point.longitude], {
+            radius: 7,
+            color: "#fff",
+            weight: 3,
+            fillColor: color,
+            fillOpacity: 1,
+          })
             .bindTooltip(label)
             .addTo(group);
       }
-      if (route)
+      const visibleRoute = simulation?.route ?? route;
+      if (visibleRoute)
         L.polyline(
-          route.coordinates.map((p) => [p[1], p[0]] as [number, number]),
-          { color: "#16836d", weight: 5 },
+          visibleRoute.coordinates.map((p) => [p[1], p[0]] as [number, number]),
+          { color: "#087b66", weight: 4, className: "ride-route" },
         ).addTo(group);
-      if (simulation) {
-        const points = simulation.route.coordinates;
-        L.polyline(
-          points.map((p) => [p[1], p[0]] as [number, number]),
-          { color: "#b45309", weight: 4, dashArray: "6 5" },
-        ).addTo(group);
-        const position = [
-          simulation.currentPosition.longitude,
-          simulation.currentPosition.latitude,
-        ];
-        if (position)
-          L.circleMarker([position[1], position[0]], {
-            radius: 11,
-            color: "#1e40af",
-            fillOpacity: 1,
-          })
-            .bindTooltip("Xe")
-            .addTo(group);
-      }
-      const signature = JSON.stringify([
-        pickup,
-        destination,
-        route?.coordinates.length,
-        simulation?.tripId,
-        simulation?.stage,
-      ]);
-      const selected = [pickup, destination, simulation?.currentPosition ?? null].filter(
-        (point): point is Point => point !== null,
-      );
-      if (signature !== fitted.current && selected.length > 0) {
-        map.current.fitBounds(L.latLngBounds(selected.map((p) => [p.latitude, p.longitude])), {
-          paddingTopLeft: window.innerWidth >= 1024 ? [435, 55] : [40, 60],
-          paddingBottomRight:
-            window.innerWidth >= 1024
-              ? [45, 45]
-              : [40, Math.min(map.current.getSize().y * 0.5, 340)],
-          maxZoom: 15,
+      if (simulation)
+        L.marker([simulation.currentPosition.latitude, simulation.currentPosition.longitude], {
+          title: "Xe",
+          alt: "Xe",
+          icon: L.divIcon({
+            className: "vehicle-marker",
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
+            html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 10 2-5h12l2 5v9h-3v-3H7v3H4zm0 0h16M7 13h2m6 0h2"/></svg>',
+          }),
+        })
+          .bindTooltip("Xe")
+          .addTo(group);
+      fit.current = () => {
+        const instance = map.current;
+        if (!instance || !container.current) return;
+        const frame = container.current.getBoundingClientRect();
+        const sheet = container.current
+          .closest(".ride-stage")
+          ?.querySelector(".ride-sheet")
+          ?.getBoundingClientRect();
+        const desktop = window.innerWidth >= 1024;
+        const signature = JSON.stringify([
+          pickup,
+          destination,
+          visibleRoute?.coordinates,
+          simulation?.tripId,
+          simulation?.stage,
+          frame.width,
+          frame.height,
+          sheet?.width,
+          sheet?.height,
+        ]);
+        if (signature === fitted.current) return;
+        const points: [number, number][] =
+          visibleRoute?.coordinates.map((p) => [p[1], p[0]] as [number, number]) ?? [];
+        for (const point of [pickup, destination, simulation?.currentPosition]) {
+          if (point) points.push([point.latitude, point.longitude]);
+        }
+        if (!points.length) return;
+        const bottom = desktop ? 30 : frame.bottom - (sheet?.top ?? frame.bottom - 90) + 16;
+        const left = desktop ? (sheet?.right ?? 80) - frame.left + 24 : 24;
+        instance.fitBounds(L.latLngBounds(points), {
+          paddingTopLeft: [Math.min(left, frame.width * 0.5), 80],
+          paddingBottomRight: [desktop ? 80 : 70, Math.min(bottom, frame.height - 140)],
+          maxZoom: 17,
+          animate: false,
         });
         fitted.current = signature;
-      }
+      };
+      fit.current();
     });
     return () => {
       disposed = true;
     };
   }, [ready, pickup, destination, route, simulation]);
+  useEffect(() => {
+    if (!ready || !container.current) return;
+    const observer = new ResizeObserver(() => {
+      map.current?.invalidateSize({ pan: false });
+      fit.current?.();
+    });
+    observer.observe(container.current);
+    const sheet = container.current.closest(".ride-stage")?.querySelector(".ride-sheet");
+    if (sheet) observer.observe(sheet);
+    return () => observer.disconnect();
+  }, [ready]);
   return (
     <section className="route-map" aria-label="Bản đồ hành trình">
       <div ref={container} className="map-canvas relative z-0" />
+      <button
+        type="button"
+        className="map-locate"
+        disabled={busy || (!onLocate && !ready)}
+        aria-label={onLocate ? locateLabel : "Xem toàn tuyến"}
+        title={onLocate ? locateLabel : "Xem toàn tuyến"}
+        onClick={() => {
+          fitted.current = "";
+          if (onLocate) onLocate();
+          else fit.current?.();
+        }}
+      >
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="7" />
+          <circle cx="12" cy="12" r="2" />
+          <path d="M12 2v3m0 14v3M2 12h3m14 0h3" />
+        </svg>
+        <span className="sr-only">{onLocate ? locateLabel : "Xem toàn tuyến"}</span>
+      </button>
       {(!mapKey || error || tilesFailed) && (
         <p role="status" className="map-notice">
           {error ||

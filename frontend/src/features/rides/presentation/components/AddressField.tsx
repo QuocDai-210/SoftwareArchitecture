@@ -9,12 +9,14 @@ export function AddressField({
   onChange,
   service,
   disabled,
+  onFocus,
 }: {
   label: string;
   value: Point | null;
   onChange: (point: Point | null) => void;
   service: RideService;
   disabled: boolean;
+  onFocus?: () => void;
 }) {
   const [text, setText] = useState(value?.label ?? "");
   const [results, setResults] = useState<Point[]>([]);
@@ -59,6 +61,7 @@ export function AddressField({
           maxLength={120}
           disabled={disabled}
           autoComplete="off"
+          onFocus={onFocus}
           onChange={(e) => {
             setText(e.target.value);
             setResults([]);

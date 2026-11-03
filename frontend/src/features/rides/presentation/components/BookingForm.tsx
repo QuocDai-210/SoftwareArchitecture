@@ -3,11 +3,10 @@ import type { RideService } from "../../application/RideService";
 import { AddressField } from "./AddressField";
 
 export function BookingForm({ model, service }: { model: RidesViewModel; service: RideService }) {
-  const disabled = !!model.active || model.busy;
+  const disabled = !!model.active || model.busy || model.loading;
   return (
-    <section className="card p-6">
-      <p className="eyebrow">MỘT CHẠM, MỘT HÀNH TRÌNH</p>
-      <h1 className="text-2xl font-bold mt-2 mb-5">Bạn muốn đi đâu?</h1>
+    <section className="card p-5 booking-form">
+      <h1 className="text-xl font-bold mb-4">Bạn muốn đi đâu?</h1>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -15,40 +14,39 @@ export function BookingForm({ model, service }: { model: RidesViewModel; service
         }}
         className="space-y-4"
       >
-        <AddressField
-          label="Điểm đón"
-          value={model.from}
-          onChange={model.setFrom}
-          service={service}
-          disabled={disabled}
-        />
-        <button
-          type="button"
-          className="text-sm underline min-h-11"
-          disabled={disabled}
-          onClick={() => model.locate()}
-        >
-          Dùng vị trí hiện tại làm điểm đón
-        </button>
-        <AddressField
-          label="Điểm đến"
-          value={model.to}
-          onChange={model.setTo}
-          service={service}
-          disabled={disabled}
-        />
-        <label className="block text-sm font-bold">
-          Chọn điểm khi chạm bản đồ
-          <select
-            className="field mt-2"
-            value={model.selecting}
-            onChange={(e) => model.setSelecting(e.target.value as "pickup" | "destination")}
+        <div className="booking-stops">
+          <AddressField
+            label="Điểm đón"
+            value={model.from}
+            onChange={model.setFrom}
+            service={service}
             disabled={disabled}
-          >
-            <option value="pickup">Điểm đón</option>
-            <option value="destination">Điểm đến</option>
-          </select>
-        </label>
+            onFocus={() => model.setSelecting("pickup")}
+          />
+          <AddressField
+            label="Điểm đến"
+            value={model.to}
+            onChange={model.setTo}
+            service={service}
+            disabled={disabled}
+            onFocus={() => model.setSelecting("destination")}
+          />
+        </div>
+        <fieldset className="map-target">
+          <legend className="sr-only">Chọn điểm khi chạm bản đồ</legend>
+          <span>Chạm bản đồ:</span>
+          {(["pickup", "destination"] as const).map((target) => (
+            <button
+              key={target}
+              type="button"
+              disabled={disabled}
+              aria-pressed={model.selecting === target}
+              onClick={() => model.setSelecting(target)}
+            >
+              {target === "pickup" ? "Điểm đón" : "Điểm đến"}
+            </button>
+          ))}
+        </fieldset>
         {model.routeLoading && (
           <p className="text-sm" role="status">
             Đang tìm đường đi…
@@ -65,27 +63,14 @@ export function BookingForm({ model, service }: { model: RidesViewModel; service
             {Math.ceil(model.preview.durationMinutes)} phút
           </p>
         )}
-        <div className="service-choice">
-          <span className="service-icon" aria-hidden="true">
-            S
-          </span>
-          <div>
-            <strong>SwiftRide</strong>
-            <p className="text-xs muted">Một hành trình, giá rõ ràng</p>
-          </div>
-          <span className="badge ml-auto">Tiền mặt</span>
+        <div className="booking-summary">
+          <strong>SwiftRide</strong>
+          <span className="badge">Tiền mặt · COD</span>
         </div>
         <button
           className="btn w-full"
           type="submit"
-          disabled={
-            disabled ||
-            model.loading ||
-            model.routeLoading ||
-            !model.preview ||
-            !model.from ||
-            !model.to
-          }
+          disabled={disabled || model.routeLoading || !model.preview || !model.from || !model.to}
         >
           {model.busy
             ? "Đang gửi yêu cầu…"

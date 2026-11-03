@@ -114,6 +114,15 @@ button:disabled {
   padding-top: 76px;
   padding-left: 188px;
 }
+.map-shell {
+  padding: 0;
+}
+.map-shell .app-header {
+  height: 64px;
+}
+.map-shell .city-label {
+  display: none;
+}
 .app-header {
   position: fixed;
   inset: 0 0 auto;
@@ -241,14 +250,15 @@ button:disabled {
   font-size: 13px;
 }
 .map-main > .app-alert {
-  position: relative;
+  position: fixed;
+  top: 76px;
+  right: 80px;
+  left: 488px;
   z-index: 30;
-  margin: 12px;
 }
 .ride-stage {
   position: relative;
-  height: calc(100dvh - 76px);
-  min-height: 680px;
+  height: 100dvh;
   overflow: hidden;
 }
 .route-map {
@@ -272,64 +282,125 @@ button:disabled {
   background: white;
   box-shadow: 0 4px 18px #163b271c;
 }
-.map-label {
+.map-locate {
   position: absolute;
-  right: 24px;
-  top: 24px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-radius: 30px;
-  background: #ffffffed;
-  font-size: 11px;
+  right: 20px;
+  top: 184px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: white;
   z-index: 10;
-  box-shadow: 0 3px 18px #163b2710;
+  box-shadow: 0 4px 20px #163b2720;
+}
+.vehicle-marker {
+  display: grid;
+  place-items: center;
+  border: 2px solid white;
+  border-radius: 12px;
+  color: white;
+  background: var(--brand);
+  box-shadow: 0 2px 8px #183b3540;
+}
+.vehicle-marker svg {
+  width: 24px;
+  height: 24px;
 }
 .ride-sheet {
   position: absolute;
-  left: 24px;
-  top: 24px;
-  width: 380px;
-  max-height: calc(100% - 48px);
+  left: 104px;
+  top: 84px;
+  width: 360px;
+  max-height: calc(100% - 108px);
+  display: flex;
+  flex-direction: column;
   background: white;
   border: 1px solid #d7e6de;
   border-radius: 24px;
   box-shadow: 0 10px 45px #183b3520;
   z-index: 20;
-  overflow-y: auto;
-  scrollbar-width: thin;
+  overflow: hidden;
 }
 .sheet-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  flex-shrink: 0;
+  padding: 18px 20px;
+  text-align: left;
+  font-size: 14px;
+}
+.sheet-handle {
   display: none;
 }
+.sheet-title {
+  min-width: 0;
+}
+.sheet-title strong,
+.sheet-title small {
+  display: block;
+}
+.sheet-title small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.sheet-chevron {
+  font-size: 22px;
+  color: var(--brand);
+}
+.sheet-content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
 .sheet-content > .card {
+  padding-top: 4px;
   border: 0;
   border-radius: 24px;
 }
 .sheet-content > .card + .card {
   border-top: 1px solid var(--line);
 }
-.service-choice {
+.booking-stops {
+  display: grid;
+  gap: 16px;
+}
+.map-target {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  border: 1px solid #b4e4d0;
-  background: #f4fcf8;
-  border-radius: 15px;
-  padding: 13px;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.map-target button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.map-target button[aria-pressed="true"] {
+  color: var(--brand);
+  border-color: var(--brand);
+  background: #eff8f4;
+}
+.booking-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
 }
-.service-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  background: #b9f2df;
-  font-weight: 800;
-  font-size: 21px;
-  color: #087158;
+.trip-route > summary > span {
+  display: inline-block;
+  width: calc(100% - 20px);
+  vertical-align: top;
 }
 .driver-card {
   display: flex;
@@ -341,7 +412,7 @@ button:disabled {
   border-radius: 14px;
 }
 .cash-receipt {
-  padding: 24px;
+  padding: 20px;
   background: #effbf5;
   border-top: 1px solid #d1ebdf;
 }
@@ -439,13 +510,45 @@ button:disabled {
   border-radius: 12px !important;
   overflow: hidden;
 }
+.route-map .leaflet-top.leaflet-right {
+  top: 80px;
+  right: 20px;
+}
+.route-map .leaflet-top .leaflet-control-zoom {
+  margin: 0;
+}
+.route-map .leaflet-bar.leaflet-control-zoom a {
+  width: 44px;
+  height: 44px;
+  line-height: 44px;
+  color: var(--ink);
+}
 .leaflet-control-attribution {
   font-size: 9px !important;
 }
 @media (min-width: 1024px) {
-  .route-map .leaflet-top.leaflet-left {
-    left: 424px;
-    top: 16px;
+  .map-shell .app-nav {
+    inset: 84px auto auto 16px;
+    width: 64px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 4px 20px #163b2710;
+  }
+  .map-shell .app-nav > a {
+    justify-content: center;
+    padding: 12px;
+  }
+  .map-shell .app-nav > a span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .map-shell .nav-footer {
+    display: none;
   }
 }
 @media (max-width: 1023px) {
@@ -453,6 +556,9 @@ button:disabled {
     padding-left: 0;
     padding-top: 64px;
     padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+  .map-shell {
+    padding: 0;
   }
   .app-header {
     height: 64px;
@@ -506,31 +612,35 @@ button:disabled {
   .nav-footer {
     display: none;
   }
-  .ride-stage {
-    height: calc(100dvh - 136px - env(safe-area-inset-bottom));
-    min-height: 490px;
+  .map-main > .app-alert {
+    top: 72px;
+    left: 12px;
+    right: 76px;
+  }
+  .map-notice {
+    top: 76px;
+    bottom: auto;
+    left: 12px;
+    right: 76px;
+  }
+  .route-map .leaflet-bottom {
+    bottom: calc(76px + env(safe-area-inset-bottom));
   }
   .ride-sheet {
     left: 12px;
     right: 12px;
     top: auto;
-    bottom: 14px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
     width: auto;
-    max-height: 65%;
+    max-height: min(60%, calc(100% - 330px - env(safe-area-inset-bottom)));
     border-radius: 24px;
   }
   .sheet-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    width: 100%;
     padding: 23px 20px 13px;
     position: relative;
-    font-weight: 700;
-    font-size: 14px;
   }
   .sheet-handle {
+    display: block;
     position: absolute;
     top: 8px;
     left: calc(50% - 18px);
@@ -538,18 +648,6 @@ button:disabled {
     width: 36px;
     background: #c5dcd0;
     border-radius: 4px;
-  }
-  .sheet-collapsed .sheet-content {
-    display: none;
-  }
-  .sheet-content > .card {
-    padding-top: 12px;
-  }
-  .map-label {
-    top: 16px;
-    right: 14px;
-    font-size: 10px;
-    padding: 10px 12px;
   }
   .content-main {
     padding: 26px 16px;

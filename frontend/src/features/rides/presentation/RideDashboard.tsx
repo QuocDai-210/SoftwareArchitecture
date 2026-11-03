@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { RideService } from "../application/RideService";
 import { useRides, type RideUser } from "./useRides";
-import { labels } from "./format";
+import { labels, money } from "./format";
 import { BookingForm } from "./components/BookingForm";
 import { DriverAvailability } from "./components/DriverAvailability";
 import { TripHistory } from "./components/TripHistory";
@@ -31,6 +31,9 @@ export function RideDashboard({
     model;
   const [view, setView] = useState<View>(isOps ? "overview" : "ride");
   const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    setCollapsed(false);
+  }, [current?.id, current?.status]);
   const nav: { id: View; label: string }[] = [
     { id: "ride", label: isOps ? "Bản đồ" : isDriver ? "Nhận chuyến" : "Đặt xe" },
     { id: "history", label: "Lịch sử chuyến" },
@@ -76,7 +79,7 @@ export function RideDashboard({
       ? "Driver · Tài xế"
       : "User · Người đặt xe";
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${view === "ride" ? "map-shell" : ""}`}>
       <header className="app-header">
         <a className="wordmark" href="#ride" aria-label="SwiftRide trang chủ">
           <span className="brand-symbol" aria-hidden="true">
@@ -100,6 +103,7 @@ export function RideDashboard({
           <a
             key={item.id}
             href={`#${item.id}`}
+            title={item.label}
             aria-current={view === item.id ? "page" : undefined}
           >
             <NavIcon name={item.id} />
@@ -129,31 +133,46 @@ export function RideDashboard({
               route={current?.quote?.route ?? model.preview}
               simulation={model.simulation}
               onSelect={selecting ? model.selectMap : undefined}
+              onLocate={selecting ? () => model.locate(isDriver) : undefined}
+              locateLabel={isDriver ? "Dùng vị trí hiện tại" : "Dùng vị trí hiện tại làm điểm đón"}
+              busy={busy}
             />
-            <div className="map-label">
-              <span className="status-dot" /> Tuyến đường thực tế{" "}
-              <span className="text-slate-500">· Xe giả lập</span>
-            </div>
-            <section
-              className={`ride-sheet ${collapsed ? "sheet-collapsed" : ""}`}
-              aria-label="Thao tác chuyến đi"
-            >
+            <section className="ride-sheet" aria-label="Thao tác chuyến đi">
               <button
                 className="sheet-toggle"
                 onClick={() => setCollapsed(!collapsed)}
                 aria-expanded={!collapsed}
+                aria-controls="ride-sheet-content"
+                aria-label={collapsed ? "Mở thao tác chuyến đi" : "Thu gọn thao tác chuyến đi"}
               >
                 <span className="sheet-handle" />
-                <span>
-                  {current
-                    ? labels[current.status]
-                    : isDriver
-                      ? "Sẵn sàng đồng hành"
-                      : "Hôm nay, mình đi đâu?"}
+                <span className="sheet-title">
+                  <strong>
+                    {current
+                      ? labels[current.status]
+                      : isOps
+                        ? "Theo dõi chuyến"
+                        : isDriver
+                          ? "Vị trí và nhận chuyến"
+                          : "Đặt xe"}
+                  </strong>
+                  {collapsed && (
+                    <small>
+                      {current?.quote
+                        ? `${money(current.quote.amount)} · ${current.method === "Cod" ? "Tiền mặt" : current.method}`
+                        : isDriver
+                          ? driver?.available
+                            ? "Đang trực tuyến"
+                            : "Đang ngoại tuyến"
+                          : "Mở bảng để tiếp tục"}
+                    </small>
+                  )}
                 </span>
-                <span aria-hidden="true">{collapsed ? "+" : "−"}</span>
+                <span className="sheet-chevron" aria-hidden="true">
+                  {collapsed ? "+" : "−"}
+                </span>
               </button>
-              <div className="sheet-content">
+              <div className="sheet-content" id="ride-sheet-content" hidden={collapsed}>
                 {model.loading && (
                   <p className="p-6" role="status">
                     Đang tải chuyến đi…
@@ -164,9 +183,8 @@ export function RideDashboard({
                   <DriverAvailability model={model} service={service} />
                 )}
                 {isOps && !current && (
-                  <div className="p-6">
-                    <p className="eyebrow">TRUNG TÂM VẬN HÀNH</p>
-                    <h1 className="text-2xl font-bold mt-2">Mọi hành trình trong tầm mắt</h1>
+                  <div className="p-5">
+                    <h1 className="text-xl font-bold">Chọn chuyến cần theo dõi</h1>
                     <p className="muted mt-3">
                       Chọn chuyến để xem vị trí xe, trạng thái và thanh toán tiền mặt.
                     </p>
@@ -177,15 +195,6 @@ export function RideDashboard({
                 )}
                 {current && (
                   <>
-                    <TripDetails
-                      trip={current}
-                      isDriver={isDriver && current.driverId === user.id}
-                      isRider={isRider && current.riderId === user.id}
-                      busy={busy}
-                      act={act}
-                      simulation={model.simulation}
-                      assignedDriver={model.assignedDriver}
-                    />
                     {["PaymentPending", "PaymentReview", "Paid"].includes(current.status) && (
                       <CashReceipt
                         trip={current}
@@ -206,6 +215,15 @@ export function RideDashboard({
                         Thử lại tạo giao dịch
                       </button>
                     )}
+                    <TripDetails
+                      trip={current}
+                      isDriver={isDriver && current.driverId === user.id}
+                      isRider={isRider && current.riderId === user.id}
+                      busy={busy}
+                      act={act}
+                      simulation={model.simulation}
+                      assignedDriver={model.assignedDriver}
+                    />
                     {(isDriver || isOps) &&
                       model.simulation &&
                       ["EnRoute", "PickedUp"].includes(current.status) && (
