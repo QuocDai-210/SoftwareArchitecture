@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace SwiftRide.Trips.Infrastructure;
 
 [DbContext(typeof(TripDb))]
-[Migration("202611020001_Initial")]
+[Migration("202611030001_PostgreSql")]
 public sealed class InitialMigration : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

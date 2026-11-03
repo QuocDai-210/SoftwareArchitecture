@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Actual local container faults. Run after verify.sh on demo data only."""
+"""Legacy Card/Wallet faults; not used for COD acceptance. See browser-check.mjs --faults."""
 
 import argparse
 import subprocess
@@ -22,10 +22,14 @@ def broker_outage():
                 "compose",
                 "exec",
                 "-T",
-                "sqlserver",
-                "bash",
-                "-c",
-                'SQLCMDPASSWORD="$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -d TripDB -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM OutboxMessage;"',
+                "postgres",
+                "psql",
+                "-U",
+                "trip",
+                "-d",
+                "TripDB",
+                "-tAc",
+                'SELECT COUNT(*) FROM "OutboxMessage";',
             ],
             cwd=ROOT,
             text=True,
@@ -82,7 +86,7 @@ def restart_payment():
                     "postgres",
                     "psql",
                     "-U",
-                    "payment",
+                    "payment_app",
                     "-d",
                     "PayDB",
                     "-Atc",
@@ -102,7 +106,7 @@ def restart_payment():
                         "postgres",
                         "psql",
                         "-U",
-                        "payment",
+                        "payment_app",
                         "-d",
                         "PayDB",
                         "-Atc",

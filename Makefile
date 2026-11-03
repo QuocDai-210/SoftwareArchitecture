@@ -14,18 +14,18 @@ help:
 
 up:
 	python3 -B scripts/check-resources.py
-	docker compose stop observability
+	docker compose stop sqlserver observability
 	OTEL_SDK_DISABLED=true docker compose up --no-build -d --wait --wait-timeout 300
 	python3 -B scripts/sync-identity.py
 
 trip matching payment:
 	python3 -B scripts/check-resources.py
-	docker compose --profile observability stop
+	docker compose --profile "*" stop
 	OTEL_SDK_DISABLED=true docker compose up --no-build -d --wait --wait-timeout 300 $@
 	python3 -B scripts/sync-identity.py
 
 stop:
-	docker compose --profile observability stop
+	docker compose --profile "*" stop
 
 status:
 	docker compose --profile observability ps --all
@@ -36,7 +36,7 @@ logs:
 build:
 	python3 -B scripts/check-architecture.py
 	python3 -B scripts/check-resources.py
-	docker compose --profile observability stop
+	docker compose --profile "*" stop
 	@set -e; \
 	for service in rabbitmq trip matching payment gateway web; do \
 		docker compose build "$$service"; \

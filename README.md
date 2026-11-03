@@ -1,7 +1,7 @@
 # SwiftRide
 
 Đồ án theo `RideLite-KienTrucPhanMem.pdf`: Next.js/Tailwind, .NET 10, YARP,
-Trip Service/SQL Server, Matching & Pricing/MongoDB, Payment Service/PostgreSQL,
+Trip Service/PostgreSQL, Matching & Pricing/MongoDB, Payment Service/PostgreSQL,
 RabbitMQ, Saga và Outbox. Giữ riêng container, mã nguồn và database từng service.
 
 Giao diện mint–trắng tham khảo trải nghiệm đặt xe be: bản đồ làm trung tâm, bảng
@@ -12,8 +12,11 @@ log và kiểm tra tại một nơi; API, database và các tầng mã nguồn v
 
 ## Chạy hệ thống
 
+Nếu đang có dữ liệu Trip trong SQL Server, thực hiện mục “Chuyển dữ liệu Trip từ
+SQL Server” trước khi bật phiên bản mới.
+
 Cần Docker Engine/Compose có quyền truy cập, GNU Make, mạng tải package/image và Geoapify key.
-Build/check trên host cần .NET SDK 10 và Node.js 24 trở lên. SQL Server cần x86_64.
+Build/check trên host cần .NET SDK 10 và Node.js 24 trở lên. SQL Server chỉ cần khi chuyển dữ liệu cũ.
 
 1. Chạy `python3 scripts/setup.py`. Script tạo secret nội bộ, bổ sung biến thiếu,
    giữ nguyên giá trị đã có và đặt `.env` quyền 0600.
@@ -68,12 +71,12 @@ client kiểm thử password grant cũ. Đăng xuất web xóa phiên web; Keycl
 ## Quản lý chung
 
 `make` hiển thị hướng dẫn. Makefile gọi Docker Compose hiện có, quản lý các nhóm
-sau và giữ nguyên tên container, volume, mạng, tài khoản DB:
+sau, giữ volume và mạng; tài khoản DB được tách theo service:
 
 | Lệnh            | Phạm vi                                                 |
 | --------------- | ------------------------------------------------------- |
 | `make up`       | Toàn hệ thống, tắt observability, đồng bộ Keycloak      |
-| `make trip`     | Trip API + SQL Server/sql-init + Keycloak/RabbitMQ      |
+| `make trip`     | Trip API + PostgreSQL/postgres-init + Keycloak/RabbitMQ |
 | `make matching` | Matching API + MongoDB + Keycloak/RabbitMQ              |
 | `make payment`  | Payment API + PostgreSQL + Keycloak/RabbitMQ            |
 | `make stop`     | Dừng toàn bộ container dự án, giữ dữ liệu               |
@@ -92,8 +95,8 @@ vẫn dùng được. `make build` và `make check` cũng dừng hệ thống đ
 ## RAM và vòng đời service
 
 Tổng RAM dự án, gồm build và kiểm thử, tối đa **12 GB**. Build nặng chạy tuần tự,
-dừng container dự án trước build. Hạn mức container mặc định **7,38 GB**;
-bật thêm observability là **9,53 GB**, không dùng swap. Hạn mức không gồm OS/IDE.
+dừng container dự án trước build. Hạn mức container mặc định **5,23 GB**;
+bật thêm observability là **7,38 GB**, không dùng swap. Hạn mức không gồm OS/IDE.
 `python3 scripts/check-resources.py` kiểm tra cấu hình này.
 
 Observability mặc định tắt. Chỉ bật khi cần:
@@ -136,12 +139,49 @@ node scripts/browser-check.mjs --refresh
 kiểm thử: `make up`. Runner trình duyệt tạo tài khoản,
 hồ sơ và chuyến kiểm tra có tên `check-*`; ảnh/log nằm ngoài repo trong thư mục tạm.
 `verify.sh` dùng runner trình duyệt COD với `--faults`; không cần mở password grant.
-Các runner Wallet/Card cũ (`scripts/demo.py`, `scripts/faults.py`, `--integration`
-của backend checks) chỉ lưu để tham khảo phiên bản trước, không dùng nghiệm thu COD.
+Kiểm thử backend dùng xUnit + Moq; kiểm thử đơn vị chạy không cần Docker.
+Các runner Wallet/Card cũ (`scripts/demo.py`, `scripts/faults.py`) chỉ lưu tham khảo,
+không dùng nghiệm thu COD. Nhánh backend `--integration` cũ đã được thay bằng xUnit
+và runner trình duyệt COD.
 `replay.py` vẫn hỗ trợ đưa message từ error queue về hàng đợi qua Shovel với publisher confirms.
 
 Giới hạn: một loại xe, xe giả lập, chạy local một instance, chưa HA/load test.
 Card/Wallet/VNPAY và nạp ví đã tắt ở runtime; giao dịch cũ giữ nguyên, chỉ đọc và cần
 Ops đối soát bên ngoài nếu còn dang dở. Không cần key VNPAY/ngrok để chạy COD.
-Ba database nghiệp vụ và Payment Service vẫn giữ theo PDF. Backend/frontend
+Ba database nghiệp vụ và Payment Service vẫn giữ theo PDF. TripDB/PayDB dùng chung
+instance PostgreSQL, tài khoản `trip`/`payment_app` chỉ được truy cập database mình;
+Matching giữ MongoDB. PostgreSQL quản trị dùng tài khoản riêng `swiftride_admin`. Backend/frontend
 có lockfile; dùng `dotnet restore --locked-mode`, `npm ci` khi cài dependency.
+
+## Chuyển dữ liệu Trip từ SQL Server
+
+Chạy trong thời gian bảo trì, trước khi mở ghi trên phiên bản mới. Giữ volume
+`trip-data`/`pay-data`/`match-data`; không dùng `down -v`. `setup.py` bổ sung
+`POSTGRES_ADMIN_PASSWORD`, không đổi secret cũ. PostgreSQL provisioning hỗ trợ cả
+volume mới và volume Payment cũ; tài khoản bootstrap `payment` cũ bị tắt đăng nhập.
+
+```bash
+make stop
+python3 -B scripts/setup.py
+docker compose --profile migration up -d --wait sqlserver mongo postgres
+docker compose run --rm --no-deps postgres-init
+python3 -B scripts/migrate-trip.py export /tmp/swiftride-transfer
+python3 -B scripts/migrate-trip.py import /tmp/swiftride-transfer
+python3 -B scripts/migrate-trip.py verify /tmp/swiftride-transfer
+make build
+make up
+```
+
+Thư mục xuất phải chưa tồn tại và nằm ngoài repo; chứa backup native ba database,
+JSON chuyển Trip và manifest SHA-256, quyền thư mục 0700/file 0600. Công cụ chỉ chạy
+khi API/worker dừng, kiểm tra toàn bộ bản ghi trước commit và đối chiếu sau import;
+không ghi đè đích đã có dữ liệu khác. Inbox/Outbox giữ ID, sequence được khôi phục;
+RowVersion kỹ thuật của SQL Server chuyển sang cơ chế PostgreSQL. UUID được đối chiếu
+theo giá trị; thời gian UTC đối chiếu ở độ chính xác microsecond của PostgreSQL.
+Backup gốc giữ nguyên độ chính xác 100 ns của SQL Server.
+
+SQL Server thuộc profile `migration`, không bật khi chạy thường. `make stop` dừng cả
+profile này. Quay lại phiên bản/config cũ và volume gốc chỉ trước khi mở ghi mới;
+sau khi có phát sinh phải đối soát và sao lưu trước khi khôi phục. Nếu quay lại
+connection string Payment cũ, quản trị viên phải bật lại LOGIN cho role bootstrap
+`payment`; role này vẫn có trong volume nhưng đã bị tắt đăng nhập.

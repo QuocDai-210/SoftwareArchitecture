@@ -12,7 +12,7 @@
 | Quyền tài nguyên chuyến                          | `TripService/Application/Security/TripAccess.cs`                                                                   |
 | Danh sách/chi tiết chuyến                        | `TripService/Application/Queries/`; DTO tại `ReadModels/`                                                          |
 | Ghép xe, retry sau restart                       | `TripService/Application/Workflows/TripWorkflow.cs`                                                                |
-| SQL Server, index, optimistic concurrency        | `TripService/Infrastructure/Persistence/`                                                                          |
+| PostgreSQL, index, optimistic concurrency        | `TripService/Infrastructure/Persistence/`                                                                          |
 | Trip gọi Matching qua HTTP                       | `TripService/Infrastructure/Clients/MatchingHttpClient.cs`                                                         |
 | Tính giá và decorator                            | `MatchingService/Domain/`; use case tại `Application/Pricing/`                                                     |
 | Bán kính/vị trí/giữ chỗ còn hiệu lực             | `MatchingService/Domain/MatchingPolicy.cs`                                                                         |
@@ -51,7 +51,7 @@
 | Giới hạn RAM và kiểm thử ba vai trò              | `scripts/check-resources.py`, `scripts/browser-check.mjs`, `scripts/verify.sh`                                     |
 | Quản lý nhóm API/database                        | `Makefile`, `docker-compose.yml`                                                                                   |
 | Bảo vệ ranh giới tầng                            | `scripts/check-architecture.py`                                                                                    |
-| Kiểm thử nghiệp vụ/hợp đồng adapter              | `backend/tests/SwiftRide.Checks/`; `scripts/check-frontend.mjs`                                                    |
+| Kiểm thử xUnit + Moq/hợp đồng adapter            | `backend/tests/SwiftRide.Checks/`; `scripts/check-frontend.mjs`                                                    |
 
 Các điểm vào mới:
 
@@ -99,3 +99,13 @@ Thêm phương thức thanh toán bằng implementation `IPaymentMethod` và đ�
 ## Tương thích dữ liệu
 
 Event nằm trong Contracts nhưng giữ namespace `SwiftRide.Core`: đây là tên wire đã triển khai trong MassTransit, không phải project Core cũ. Đổi namespace sẽ đổi message URN/exchange. Migration giữ ID `202611020001_Initial`, tên bảng/collection và tên consumer queue. Refactor không yêu cầu xóa volume hoặc tạo lại database.
+
+## Chuyển database Trip
+
+- `deploy/postgres/init.sh`: tạo/tách quyền TripDB và PayDB, nâng cấp volume Payment cũ.
+- `scripts/migrate-trip.py`: backup native, chuyển và đối chiếu dữ liệu SQL Server sang PostgreSQL; không ghi đè đích khác dữ liệu.
+- `backend/tests/SwiftRide.Checks/CoreTests.cs`: hợp đồng Domain, Payment và Maps.
+- `backend/tests/SwiftRide.Checks/WorkflowTests.cs`: Saga qua Moq, retry và bồi thường.
+- `backend/tests/SwiftRide.Checks/StorageTests.cs`: snapshot và quyền/ràng buộc database thật.
+
+SQL Server chỉ dùng profile `migration`; Matching vẫn dùng MongoDB.

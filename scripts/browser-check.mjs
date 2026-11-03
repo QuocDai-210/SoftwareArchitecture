@@ -195,7 +195,7 @@ async function duplicateCompletion(trip) {
       "postgres",
       "psql",
       "-U",
-      "payment",
+      "payment_app",
       "-d",
       "PayDB",
       "-tAc",
@@ -567,18 +567,25 @@ try {
     const queued = compose(
       "exec",
       "-T",
-      "sqlserver",
-      "bash",
-      "-c",
-      'SQLCMDPASSWORD="$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -d TripDB -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM OutboxMessage;"',
+      "postgres",
+      "psql",
+      "-U",
+      "trip",
+      "-d",
+      "TripDB",
+      "-tAc",
+      'SELECT COUNT(*) FROM "OutboxMessage";',
     );
-    assert(Number(queued.trim()) > 0, "SQL Outbox retains RideCompleted while RabbitMQ is stopped");
+    assert(
+      Number(queued.trim()) > 0,
+      "Trip PostgreSQL Outbox retains RideCompleted while RabbitMQ is stopped",
+    );
     compose("restart", "trip");
     compose("start", "rabbitmq");
     await wait(
       driver,
       `(async () => (await fetch('/api/backend/trips/${trip.id}')).status === 200)()`,
-      "Trip restored from SQL",
+      "Trip restored from PostgreSQL",
     );
   }
   await wait(
@@ -702,7 +709,7 @@ try {
       "postgres",
       "psql",
       "-U",
-      "payment",
+      "payment_app",
       "-d",
       "PayDB",
       "-tAc",
@@ -849,7 +856,7 @@ try {
         "postgres",
         "psql",
         "-U",
-        "payment",
+        "payment_app",
         "-d",
         "PayDB",
         "-v",

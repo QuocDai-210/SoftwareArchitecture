@@ -26,11 +26,7 @@ public sealed class OutboxMetrics<TDb>(
             {
                 await using var scope = scopes.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<TDb>();
-                var sql =
-                    db.Database.ProviderName?.Contains("SqlServer", StringComparison.Ordinal)
-                    == true
-                        ? "SELECT COUNT_BIG(*) AS [Value] FROM [OutboxMessage]"
-                        : "SELECT COUNT(*) AS \"Value\" FROM \"OutboxMessage\"";
+                const string sql = "SELECT COUNT(*) AS \"Value\" FROM \"OutboxMessage\"";
                 Interlocked.Exchange(
                     ref _count,
                     await db.Database.SqlQueryRaw<long>(sql).SingleAsync(ct)

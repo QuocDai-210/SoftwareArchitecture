@@ -8,7 +8,7 @@ public static class ServiceRegistration
     public static void AddTripInfrastructure(this WebApplicationBuilder builder)
     {
         builder.Services.AddDbContext<TripDb>(o =>
-            o.UseSqlServer(builder.Configuration.GetConnectionString("Trip"))
+            o.UseNpgsql(builder.Configuration.GetConnectionString("Trip"))
         );
         builder.Services.AddScoped<TripRepository>();
         builder.Services.AddScoped<IUserProfileStore, UserProfileStore>();
@@ -22,15 +22,12 @@ public static class ServiceRegistration
         builder.Services.AddScoped<TripWorkflow>();
         builder.Services.AddScoped<TripPaymentNotifications>();
         builder.Services.AddScoped<IReadinessProbe, EfReadiness<TripDb>>();
-        builder.AddReliableBus<TripDb>(
-            false,
-            x =>
-            {
-                x.AddConsumer<SettledConsumer>();
-                x.AddConsumer<FailedConsumer>();
-                x.AddConsumer<PaymentFaultConsumer>();
-            }
-        );
+        builder.AddReliableBus<TripDb>(x =>
+        {
+            x.AddConsumer<SettledConsumer>();
+            x.AddConsumer<FailedConsumer>();
+            x.AddConsumer<PaymentFaultConsumer>();
+        });
         builder.Services.AddHostedService<TripWorkflowWorker>();
     }
 

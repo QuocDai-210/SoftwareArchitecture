@@ -22,6 +22,6 @@ public static class ServiceRegistration
         builder.Services.AddScoped<PaymentCommands>();
         builder.Services.AddScoped<PaymentQueries>();
         builder.Services.AddScoped<IReadinessProbe, EfReadiness<PayDb>>();
-        builder.AddReliableBus<PayDb>(true, x => x.AddConsumer<RideCompletedConsumer>());
+        builder.AddReliableBus<PayDb>(x => x.AddConsumer<RideCompletedConsumer>());
     }
 }

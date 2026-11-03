@@ -12,7 +12,7 @@ flowchart LR
     G --> T[Trip Service]
     G --> M[Matching & Pricing]
     G --> P[Payment Service]
-    T --> SQL[(SQL Server · TripDB)]
+    T --> SQL[(PostgreSQL · TripDB)]
     M --> Mongo[(MongoDB · MatchDB)]
     P --> PG[(PostgreSQL · PayDB)]
     T -->|REST có timeout| M
@@ -24,7 +24,7 @@ flowchart LR
 
 Presentation kiểm tra đầu vào để phản hồi nhanh; server kiểm tra lại mọi quyết định nghiệp vụ. Next.js giữ token phía server, client gọi same-origin proxy; proxy chỉ chuyển tiếp vào Gateway. YARP định tuyến, kiểm tra JWT, rate limit và gom dữ liệu `/screens/trips/{id}`. Service tự kiểm tra JWT cùng quyền tài nguyên, không tin RiderId/DriverId từ browser.
 
-Có đúng ba service nghiệp vụ và ba database nghiệp vụ, dùng ba công nghệ trong PDF. Keycloak, broker và monitoring là hạ tầng. Không có Auth Service tự viết, BFF Rider/Driver riêng hoặc database dùng chung giữa các service.
+Có đúng ba service nghiệp vụ và ba database nghiệp vụ, dùng PostgreSQL cho Trip/Payment và MongoDB cho Matching theo PDF §3.3. Keycloak, broker và monitoring là hạ tầng. Không có Auth Service tự viết, BFF Rider/Driver riêng hoặc bảng dữ liệu dùng chung giữa các service. TripDB/PayDB cùng instance PostgreSQL nhưng tách quyền CONNECT; runtime không dùng superuser. Một instance là điểm lỗi chung chấp nhận cho đồ án local.
 
 Bản hiện tại dùng Geoapify cho tìm địa chỉ, geocoding ngược và đường đi; Leaflet
 hiển thị bản đồ. Matching sở hữu Maps, Driver approval/presence và Simulation.
@@ -104,7 +104,7 @@ flowchart TD
 
 Mỗi lần tìm lại tạo báo giá mới và yêu cầu Rider xác nhận lại. Báo giá 120 giây, lời mời 60 giây; driver bị từ chối được loại khỏi các lần tìm tiếp. Quote hết hạn tự quay lại bước báo giá. Khi không còn tài xế, kết thúc sớm `Failed`.
 
-`Requested`, `ReservingDriver`, `AcceptingDriver` cùng deadline được lưu trong SQL Server; BackgroundService tiếp tục sau restart. Mạng lỗi không làm mất ý định đã lưu: lỗi tạm thời được trì hoãn bằng backoff/jitter tối đa ba lần ở Saga; lỗi vĩnh viễn hoặc hết lượt chuyển Failed và giải phóng reservation. Từng lời gọi HTTP cũng có timeout/retry hữu hạn. Trạng thái trung gian chỉ được thay đổi theo State pattern. Sau nhận chuyến, bản demo không hỗ trợ hủy hành trình đang thực hiện.
+`Requested`, `ReservingDriver`, `AcceptingDriver` cùng deadline được lưu trong PostgreSQL; BackgroundService tiếp tục sau restart. Mạng lỗi không làm mất ý định đã lưu: lỗi tạm thời được trì hoãn bằng backoff/jitter tối đa ba lần ở Saga; lỗi vĩnh viễn hoặc hết lượt chuyển Failed và giải phóng reservation. Từng lời gọi HTTP cũng có timeout/retry hữu hạn. Trạng thái trung gian chỉ được thay đổi theo State pattern. Sau nhận chuyến, bản demo không hỗ trợ hủy hành trình đang thực hiện.
 
 ## Sequence thành công và ranh giới transaction
 
@@ -113,7 +113,7 @@ sequenceDiagram
     actor Rider
     actor Driver
     participant G as Gateway
-    participant T as Trip/SQL Server
+    participant T as Trip/PostgreSQL
     participant M as Matching/MongoDB
     participant B as RabbitMQ
     participant P as Payment/PostgreSQL
@@ -219,7 +219,7 @@ runtime để tham khảo/mở rộng; muốn bật lại cần bổ sung cấu 
 | ISP        | ITripReader/ITripWriter/ITripWorkflowQueue; IPaymentReader/IPaymentWriter/IWalletStore; IDriverReader/IDriverPresence/IDriverReservations |
 | DIP        | Use case sở hữu port IMatchingClient, ICardProvider, IEventPublisher, IUnitOfWork; Infrastructure triển khai; composition đăng ký         |
 
-`Trip.Status`, version, deadline và retry có setter riêng; chuyển trạng thái đi qua Domain. Wallet debit/credit qua phương thức kiểm tra số tiền và số dư. Payment giữ luật hoàn tiền/bồi thường; Application điều phối provider, journal và transaction. Compiler cùng kiểm tra kiến trúc bảo vệ chiều phụ thuộc; console/assert kiểm tra hành vi.
+`Trip.Status`, version, deadline và retry có setter riêng; chuyển trạng thái đi qua Domain. Wallet debit/credit qua phương thức kiểm tra số tiền và số dư. Payment giữ luật hoàn tiền/bồi thường; Application điều phối provider, journal và transaction. Compiler cùng kiểm tra kiến trúc bảo vệ chiều phụ thuộc; xUnit + Moq kiểm tra hành vi; kiểm tra tích hợp dùng database thật.
 
 State = TripState; Strategy = IPricingStrategy; Repository = TripRepository/MongoDriverRepository/PaymentRepository; Factory = PaymentMethodFactory đăng ký CashMethod ở runtime COD; Observer/Pub-Sub = consumer sự kiện; API Gateway = YARP; Saga = TripWorkflow + thông báo thanh toán + bồi thường; Outbox = EF Bus/Consumer Outbox.
 
@@ -232,3 +232,25 @@ State = TripState; Strategy = IPricingStrategy; Repository = TripRepository/Mong
 - Polyglot persistence bám PDF nhưng tăng chi phí RAM, backup, migration và vận hành. Docker Compose phục vụ demo, không phải HA.
 - Microservices phục vụ mục tiêu học kiến trúc; nhóm nhỏ triển khai sản phẩm ban đầu có thể chọn modular monolith để giảm độ phức tạp.
 - Polling giảm hạ tầng realtime; thêm WebSocket khi có yêu cầu độ trễ/công suất. Không tự tạo framework CQRS, generic repository hoặc tầng abstract không được dùng.
+
+## Công nghệ và bằng chứng pattern theo PDF
+
+.NET 10/ASP.NET Core, EF Core 10/Npgsql, MongoDB.Driver, YARP, RabbitMQ qua
+MassTransit, OIDC/JWT, Docker Compose, xUnit + Moq và OpenTelemetry bám PDF §8.
+Chỉ thay Trip SQL Server bằng PostgreSQL theo ngoại lệ database tại §3.3.
+
+| Pattern PDF §7   | Triển khai và kiểm chứng                                                                                 |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| State            | `TripState`/`Trip`; kiểm tra transition và trạng thái cuối trong xUnit                                   |
+| Strategy         | Standard/Surge/Promo; công thức và hợp đồng LSP, giá không âm                                            |
+| Repository       | TripRepository/MongoDriverRepository/PaymentRepository; adapter riêng từng DB                            |
+| Factory          | PaymentMethodFactory nhận registry DI; runtime chỉ CashMethod, adapter khác bị từ chối                   |
+| Observer/Pub-Sub | MassTransit consumers; Chrome kiểm tra message trùng qua RabbitMQ thật                                   |
+| API Gateway      | YARP/JWT/rate limit/aggregation; client đi qua gateway                                                   |
+| Saga             | TripWorkflow lưu trạng thái; Moq kiểm tra retry hữu hạn, xác nhận reservation và bồi thường đúng một lần |
+| Outbox           | Trip/Payment dùng PostgreSQL EF Outbox; thử dừng broker và restart vẫn giữ event                         |
+
+Matching chỉ tiêu thụ event; giữ xử lý idempotent bằng reservation/version và cập
+nhật document nguyên tử. Không thêm Mongo replica set hoặc Outbox không có nhu cầu.
+COD chỉ được hoàn khi Ops xác nhận tiền thực tế đã trả; bồi thường phần mềm không
+tự tạo giao dịch hoàn tiền mặt.

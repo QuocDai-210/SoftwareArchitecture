@@ -75,7 +75,7 @@ for project in sorted(projects):
         if inner:
             require(
                 not re.search(
-                    r"\b(Microsoft\.(AspNetCore|EntityFrameworkCore|Extensions)|MongoDB|MassTransit|HttpContext|ClaimsPrincipal|IServiceProvider|HttpClient)\b",
+                    r"\b(Microsoft\.(AspNetCore|EntityFrameworkCore|Extensions)|MongoDB|Npgsql|MassTransit|HttpContext|ClaimsPrincipal|IServiceProvider|HttpClient)\b",
                     text,
                 ),
                 f"{source.relative_to(ROOT)}: infrastructure leaks into inner layer",

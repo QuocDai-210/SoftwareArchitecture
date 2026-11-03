@@ -12,18 +12,19 @@ export \
   MSBUILDDISABLENODEREUSE=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1536}"
 python3 scripts/check-architecture.py
+python3 -B scripts/migrate-trip.py --check
 if [[ "${1:-}" == "--core" ]]; then
   if [[ -f .env ]] && command -v docker >/dev/null && docker info >/dev/null 2>&1; then
-    docker compose --profile observability stop
+    docker compose --profile "*" stop
   fi
-  exec dotnet run --project backend/tests/SwiftRide.Checks -c Release --disable-build-servers -p:BuildInParallel=false -p:UseSharedCompilation=false -- --core
+  exec dotnet test backend/tests/SwiftRide.Checks -c Release --filter "Category!=Integration" --disable-build-servers -p:BuildInParallel=false -p:UseSharedCompilation=false
 fi
 if [[ ! -f .env ]]; then
   echo 'Run python3 scripts/setup.py first.' >&2
   exit 1
 fi
 # Release project services before compiling; retain containers and persistent data.
-docker compose --profile observability stop
+docker compose --profile "*" stop
 set -a
 source .env
 set +a
@@ -41,7 +42,7 @@ dotnet build backend/SwiftRide.slnx -c Release -m:1 --disable-build-servers -p:U
 node scripts/check-frontend.mjs
 docker compose config --quiet
 # Stop test services on success, failure, or interruption; preserve volumes.
-trap 'docker compose --profile observability stop' EXIT
+trap 'docker compose --profile "*" stop' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 for service in rabbitmq trip matching payment gateway web; do
@@ -49,5 +50,5 @@ for service in rabbitmq trip matching payment gateway web; do
 done
 docker compose up --no-build -d --wait --wait-timeout 300
 python3 -B scripts/sync-identity.py
-dotnet run --project backend/tests/SwiftRide.Checks -c Release --no-build -- --core
+dotnet test backend/tests/SwiftRide.Checks -c Release --no-build
 node scripts/browser-check.mjs --faults

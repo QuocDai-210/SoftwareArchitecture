@@ -12,7 +12,6 @@ public static class MessageBusRegistration
 {
     public static void AddReliableBus<TDb>(
         this WebApplicationBuilder builder,
-        bool postgres,
         Action<IBusRegistrationConfigurator> consumers
     )
         where TDb : DbContext
@@ -26,10 +25,7 @@ public static class MessageBusRegistration
             x.AddEntityFrameworkOutbox<TDb>(o =>
             {
                 o.QueryDelay = TimeSpan.FromSeconds(1);
-                if (postgres)
-                    o.UsePostgres();
-                else
-                    o.UseSqlServer();
+                o.UsePostgres();
                 o.UseBusOutbox();
             });
             x.AddConfigureEndpointsCallback(

@@ -25,6 +25,7 @@ x-api: &api
     start_period: 40s
 services:
   sqlserver:
+    profiles: [migration]
     mem_limit: 2560m
     memswap_limit: 2560m
     image: mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04
@@ -46,18 +47,6 @@ services:
       timeout: 5s
       retries: 20
       start_period: 30s
-  sql-init:
-    mem_limit: 256m
-    memswap_limit: 256m
-    image: mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04
-    entrypoint: [/bin/bash, /init.sh]
-    environment:
-      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD}
-      TRIP_DB_PASSWORD: ${TRIP_DB_PASSWORD}
-    volumes: [./deploy/sqlserver/init.sql:/init.sql:ro, ./deploy/sqlserver/init.sh:/init.sh:ro]
-    networks: [backend]
-    depends_on:
-      sqlserver: { condition: service_healthy }
   mongo:
     mem_limit: 768m
     memswap_limit: 768m
@@ -76,21 +65,34 @@ services:
       timeout: 5s
       retries: 20
   postgres:
-    mem_limit: 384m
-    memswap_limit: 384m
+    mem_limit: 1g
+    memswap_limit: 1g
     image: postgres:17.4-alpine3.21
     environment:
       POSTGRES_DB: PayDB
-      POSTGRES_USER: payment
-      POSTGRES_PASSWORD: ${PAY_DB_PASSWORD:?Run scripts/setup.py}
+      POSTGRES_USER: swiftride_admin
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Run scripts/setup.py}
     volumes: [pay-data:/var/lib/postgresql/data]
     networks: [backend]
     restart: unless-stopped
     healthcheck:
-      test: [CMD-SHELL, "pg_isready -U payment -d PayDB"]
+      test: [CMD-SHELL, "pg_isready -U swiftride_admin -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 20
+  postgres-init:
+    mem_limit: 128m
+    memswap_limit: 128m
+    image: postgres:17.4-alpine3.21
+    entrypoint: [/bin/sh, /init.sh]
+    environment:
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Run scripts/setup.py}
+      TRIP_DB_PASSWORD: ${TRIP_DB_PASSWORD:?Run scripts/setup.py}
+      PAY_DB_PASSWORD: ${PAY_DB_PASSWORD:?Run scripts/setup.py}
+    volumes: [./deploy/postgres/init.sh:/init.sh:ro]
+    networks: [backend]
+    depends_on:
+      postgres: { condition: service_healthy }
   rabbitmq:
     mem_limit: 384m
     memswap_limit: 384m
@@ -148,7 +150,7 @@ services:
     build: { context: ./backend, args: { SERVICE: TripService } }
     environment:
       <<: *api-env
-      ConnectionStrings__Trip: Server=sqlserver;Database=TripDB;User Id=trip;Password=${TRIP_DB_PASSWORD};TrustServerCertificate=True
+      ConnectionStrings__Trip: Host=postgres;Database=TripDB;Username=trip;Password=${TRIP_DB_PASSWORD};GSS Encryption Mode=Disable
     healthcheck:
       test: [CMD, dotnet, TripService.dll, --health]
       interval: 15s
@@ -156,7 +158,7 @@ services:
       retries: 10
       start_period: 40s
     depends_on:
-      sql-init: { condition: service_completed_successfully }
+      postgres-init: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
   matching:
@@ -189,7 +191,7 @@ services:
     environment:
       <<: *api-env
       Payments__Provider: Cod
-      ConnectionStrings__Payment: Host=postgres;Database=PayDB;Username=payment;Password=${PAY_DB_PASSWORD};GSS Encryption Mode=Disable
+      ConnectionStrings__Payment: Host=postgres;Database=PayDB;Username=payment_app;Password=${PAY_DB_PASSWORD};GSS Encryption Mode=Disable
     healthcheck:
       test: [CMD, dotnet, PaymentService.dll, --health]
       interval: 15s
@@ -197,7 +199,7 @@ services:
       retries: 10
       start_period: 40s
     depends_on:
-      postgres: { condition: service_healthy }
+      postgres-init: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
   gateway:
