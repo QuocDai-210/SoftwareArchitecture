@@ -1,6 +1,7 @@
 using Moq;
 using SwiftRide.Application.Messaging;
 using SwiftRide.Application.Observability;
+using SwiftRide.Application.Security;
 using SwiftRide.Contracts;
 using SwiftRide.Core;
 using SwiftRide.SharedKernel;
@@ -11,6 +12,84 @@ using Xunit;
 
 public sealed class WorkflowTests
 {
+    [Fact]
+    public async Task CancellationBeforePickupRequiresOwnerReasonAndReleasesOnlyOwnReservation()
+    {
+        var trip = new Trip { Id = Guid.NewGuid(), RiderId = "user" };
+        trip.OfferQuote(
+            "driver",
+            new Quote(
+                Guid.NewGuid(),
+                10000,
+                "VND",
+                new FareInput(1, 1),
+                DateTimeOffset.UtcNow.AddMinutes(2)
+            )
+        );
+        trip.ConfirmQuote(trip.Quote!.Id, DateTimeOffset.UtcNow);
+        trip.OfferDriver(DateTimeOffset.UtcNow.AddMinutes(1));
+        trip.Move(TripStatus.AcceptingDriver);
+        trip.AcceptDriver();
+        trip.Move(TripStatus.EnRoute);
+        var reader = new Mock<ITripReader>();
+        var writer = new Mock<ITripWriter>();
+        var bus = new Mock<IEventPublisher>();
+        reader.Setup(x => x.Get(trip.Id, It.IsAny<CancellationToken>())).ReturnsAsync(trip);
+        var commands = new TripCommands(
+            reader.Object,
+            writer.Object,
+            bus.Object,
+            Mock.Of<ITripMetrics>(),
+            Mock.Of<IMatchingClient>(),
+            Mock.Of<IUserProfileStore>()
+        );
+        await Assert.ThrowsAsync<RuleException>(() =>
+            commands.Cancel(
+                trip.Id,
+                new(trip.Version, "Changed plans"),
+                new Actor("other", IsRider: true),
+                default
+            )
+        );
+        await Assert.ThrowsAsync<RuleException>(() =>
+            commands.Cancel(
+                trip.Id,
+                new(trip.Version),
+                new Actor("driver", IsDriver: true),
+                default
+            )
+        );
+        var version = trip.Version;
+        await commands.Cancel(
+            trip.Id,
+            new(version, "Vehicle issue"),
+            new Actor("driver", IsDriver: true),
+            default
+        );
+        Assert.Equal(TripStatus.Cancelled, trip.Status);
+        Assert.Contains("Tài xế", trip.Reason);
+        await Assert.ThrowsAsync<RuleException>(() =>
+            commands.Cancel(
+                trip.Id,
+                new(version, "Vehicle issue"),
+                new Actor("driver", IsDriver: true),
+                default
+            )
+        );
+        bus.Verify(
+            x =>
+                x.Publish(
+                    It.Is<ReservationReleased>(e =>
+                        e.TripId == trip.Id && e.ReservationId == trip.ReservationId
+                    ),
+                    "",
+                    It.IsAny<CancellationToken>()
+                ),
+            Times.Once
+        );
+        writer.Verify(x => x.Save(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task SagaResumesAndPublishesOnlyAfterDriverReservationIsConfirmed()
     {

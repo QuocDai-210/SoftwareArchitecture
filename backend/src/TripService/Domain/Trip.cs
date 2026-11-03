@@ -8,6 +8,12 @@ public sealed class Trip
     public string RiderId { get; set; } = "";
     public Point Pickup { get; set; } = new(0, 0, "");
     public Point Destination { get; set; } = new(0, 0, "");
+    public string RiderName { get; set; } = "";
+    public string RiderPhone { get; set; } = "";
+    public string PickupNote { get; set; } = "";
+    public int? Rating { get; private set; }
+    public string? Review { get; private set; }
+    public DateTimeOffset? RatedAt { get; private set; }
     public TripStatus Status { get; private set; } = TripStatus.Requested;
     public string? DriverId { get; private set; }
     public Guid? ReservationId { get; private set; }
@@ -43,6 +49,32 @@ public sealed class Trip
     {
         if (Version != expected)
             throw new RuleException("Chuyến vừa thay đổi. Hãy tải lại.");
+    }
+
+    public void Rate(int rating, string? comment, long expectedVersion)
+    {
+        var text = comment?.Trim() ?? "";
+        if (rating is < 1 or > 5 || text.Length > 500)
+            throw new RuleException(
+                "Đánh giá cần 1–5 sao, nhận xét tối đa 500 ký tự.",
+                ErrorKind.Validation
+            );
+        if (
+            Status is not (TripStatus.PaymentPending or TripStatus.PaymentReview or TripStatus.Paid)
+        )
+            throw new RuleException("Chỉ đánh giá sau khi đã trả khách.");
+        if (Rating is not null)
+        {
+            if (Rating == rating && Review == text)
+                return;
+            throw new RuleException("Chuyến đã được đánh giá.");
+        }
+        CheckVersion(expectedVersion);
+        Rating = rating;
+        Review = text;
+        RatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = RatedAt.Value;
+        Version++;
     }
 
     public void ConfirmQuote(Guid quoteId, DateTimeOffset now)

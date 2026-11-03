@@ -8,7 +8,7 @@
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | Endpoint, payload HTTP, policy User/Driver/Ops   | `<Service>/Api/Endpoints/`                                                                                         |
 | Luật chuyển trạng thái chuyến                    | `TripService/Domain/Trip.cs`, `TripState.cs`                                                                       |
-| Đặt, hủy, xác nhận chuyến                        | `TripService/Application/Commands/TripCommands.cs`                                                                 |
+| Đặt, hủy, xác nhận và đánh giá chuyến            | `TripService/Application/Commands/TripCommands.cs`; luật đánh giá tại `Domain/Trip.cs`                              |
 | Quyền tài nguyên chuyến                          | `TripService/Application/Security/TripAccess.cs`                                                                   |
 | Danh sách/chi tiết chuyến                        | `TripService/Application/Queries/`; DTO tại `ReadModels/`                                                          |
 | Ghép xe, retry sau restart                       | `TripService/Application/Workflows/TripWorkflow.cs`                                                                |
@@ -42,6 +42,7 @@
 | HTTP web gọi backend proxy                       | `frontend/src/features/rides/infrastructure/HttpRideGateway.ts`                                                    |
 | React state, polling/heartbeat                   | `frontend/src/features/rides/presentation/useRides.ts`                                                             |
 | Form, chi tiết chuyến, lịch sử, bản đồ           | `frontend/src/features/rides/presentation/components/`                                                             |
+| Liên hệ, ghi chú đón, hủy có xác nhận, đánh giá | `frontend/src/features/rides/presentation/components/{BookingForm,TripDetails,TripReview}.tsx`                      |
 | Ghép service và adapter client                   | `frontend/src/composition/RideClient.tsx`                                                                          |
 | OIDC, session HttpOnly, refresh token            | `frontend/src/infrastructure/auth/`                                                                                |
 | Origin/path/body và chuyển tiếp Gateway          | `frontend/src/infrastructure/http/backend-proxy.ts`                                                                |

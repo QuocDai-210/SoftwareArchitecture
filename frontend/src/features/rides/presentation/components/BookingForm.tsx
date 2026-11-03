@@ -1,8 +1,42 @@
+import { useEffect, useState } from "react";
 import type { RidesViewModel } from "../useRides";
 import type { RideService } from "../../application/RideService";
 import { AddressField } from "./AddressField";
+import { money } from "../format";
 
-export function BookingForm({ model, service }: { model: RidesViewModel; service: RideService }) {
+export function BookingForm({
+  model,
+  service,
+  initialName,
+}: {
+  model: RidesViewModel;
+  service: RideService;
+  initialName: string;
+}) {
+  const [name, setName] = useState(initialName);
+  const [phone, setPhone] = useState("");
+  const [note, setNote] = useState("");
+  const [contact, setContact] = useState<{ name: string; phone: string } | null>(null);
+  const [contactError, setContactError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let mounted = true;
+    setContactError("");
+    service
+      .profile()
+      .then((profile) => {
+        if (!mounted) return;
+        setContact(profile);
+        setName(profile.name || initialName);
+        setPhone(profile.phone);
+      })
+      .catch((error) => {
+        if (mounted) setContactError(error.message);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [service, initialName, attempt]);
   const disabled = !!model.active || model.busy || model.loading;
   return (
     <section className="card p-5 booking-form">
@@ -10,7 +44,11 @@ export function BookingForm({ model, service }: { model: RidesViewModel; service
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void model.run(model.book);
+          void model.run(async () => {
+            if (name !== contact?.name || phone !== contact?.phone)
+              await service.saveProfile(name, phone);
+            await model.book(note);
+          });
         }}
         className="space-y-4"
       >
@@ -32,6 +70,18 @@ export function BookingForm({ model, service }: { model: RidesViewModel; service
             onFocus={() => model.setSelecting("destination")}
           />
         </div>
+        <button
+          className="text-sm underline min-h-11"
+          type="button"
+          disabled={disabled || (!model.from && !model.to)}
+          onClick={() => {
+            const from = model.from;
+            model.setFrom(model.to);
+            model.setTo(from);
+          }}
+        >
+          Đổi điểm đón và điểm đến
+        </button>
         <fieldset className="map-target">
           <legend className="sr-only">Chọn điểm khi chạm bản đồ</legend>
           <span>Chạm bản đồ:</span>
@@ -63,14 +113,81 @@ export function BookingForm({ model, service }: { model: RidesViewModel; service
             {Math.ceil(model.preview.durationMinutes)} phút
           </p>
         )}
+        <details
+          open={contact !== null && !contact.phone}
+          onInvalid={(event) => {
+            event.currentTarget.open = true;
+          }}
+        >
+          <summary className="cursor-pointer text-sm min-h-11">
+            Liên hệ và ghi chú đón khách
+          </summary>
+          <fieldset className="space-y-3 mt-2" disabled={disabled || !contact}>
+            <label className="block text-sm font-bold">
+              Người đi xe
+              <input
+                className="field mt-2 font-normal"
+                required
+                maxLength={100}
+                autoComplete="name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+            <label className="block text-sm font-bold">
+              Số điện thoại liên hệ
+              <input
+                className="field mt-2 font-normal"
+                type="tel"
+                required
+                maxLength={15}
+                pattern="\+?[0-9]{9,15}"
+                autoComplete="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+              />
+            </label>
+            <label className="block text-sm font-bold">
+              Ghi chú điểm đón
+              <textarea
+                className="field mt-2 font-normal"
+                rows={2}
+                maxLength={240}
+                placeholder="Ví dụ: đón ở cổng chính, áo màu xanh"
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+              />
+            </label>
+          </fieldset>
+        </details>
+        {contactError && (
+          <p role="alert" className="text-sm text-red-800">
+            {contactError}{" "}
+            <button
+              type="button"
+              className="underline min-h-11"
+              onClick={() => setAttempt(attempt + 1)}
+            >
+              Tải lại thông tin liên hệ
+            </button>
+          </p>
+        )}
         <div className="booking-summary">
-          <strong>SwiftRide</strong>
+          <div>
+            <strong>SwiftBike · Xe máy</strong>
+            <p className="text-xs muted mt-1">Giá tham khảo</p>
+            {model.estimate && (
+              <p className="text-xl font-bold mt-1">{money(model.estimate.amount)}</p>
+            )}
+          </div>
           <span className="badge">Tiền mặt · COD</span>
         </div>
         <button
           className="btn w-full"
           type="submit"
-          disabled={disabled || model.routeLoading || !model.preview || !model.from || !model.to}
+          disabled={
+            disabled || !contact || model.routeLoading || !model.preview || !model.from || !model.to
+          }
         >
           {model.busy
             ? "Đang gửi yêu cầu…"

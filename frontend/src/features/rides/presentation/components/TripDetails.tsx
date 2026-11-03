@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import type { Trip, Simulation, AssignedDriver } from "../../domain/models";
 import { availableActions, type TripAction } from "../../domain/trip-rules";
 import { labels, money } from "../format";
@@ -23,11 +24,13 @@ export function TripDetails({
   isDriver: boolean;
   isRider: boolean;
   busy: boolean;
-  act: (t: Trip, action: TripAction) => void;
+  act: (t: Trip, action: TripAction, reason?: string) => Promise<void>;
   simulation: Simulation | null;
   assignedDriver: AssignedDriver | null;
 }) {
   const b = t.quote?.breakdown;
+  const cancelDialog = useRef<HTMLDialogElement>(null);
+  const [cancelReason, setCancelReason] = useState("Thay đổi kế hoạch di chuyển");
   const hasCashReceipt =
     t.method === "Cod" && ["PaymentPending", "PaymentReview", "Paid"].includes(t.status);
   return (
@@ -54,6 +57,29 @@ export function TripDetails({
           </p>
         </div>
       </details>
+      {t.pickupNote && (
+        <p className="text-sm mt-3">
+          <strong>Ghi chú điểm đón:</strong> {t.pickupNote}
+        </p>
+      )}
+      {isDriver && t.riderName && (
+        <div className="driver-card">
+          <span className="avatar" aria-hidden="true">
+            {t.riderName.slice(0, 1)}
+          </span>
+          <div>
+            <p className="font-bold">{t.riderName}</p>
+            {t.riderPhone && (
+              <a
+                className="text-sm underline min-h-11 inline-flex items-center"
+                href={`tel:${t.riderPhone}`}
+              >
+                Gọi khách hàng
+              </a>
+            )}
+          </div>
+        </div>
+      )}
       {assignedDriver &&
         !isDriver &&
         [
@@ -85,6 +111,15 @@ export function TripDetails({
           <p className="text-xs muted mt-4">
             Còn {Math.max(0, Math.ceil((new Date(t.deadline).getTime() - Date.now()) / 1000))} giây
             để xác nhận.
+          </p>
+        )}
+      {simulation &&
+        ["EnRoute", "PickedUp"].includes(t.status) &&
+        simulation.stage === t.status && (
+          <p className="text-sm font-bold mt-4" role="status">
+            {simulation.arrived
+              ? `Xe đã đến điểm ${t.status === "EnRoute" ? "đón" : "trả"} khách`
+              : `Ước tính ${t.status === "EnRoute" ? "đến đón" : "đến nơi"}: ${Math.max(1, Math.ceil(simulation.remainingMinutes))} phút`}
           </p>
         )}
       {t.quote && (
@@ -143,7 +178,11 @@ export function TripDetails({
                   simulation.stage !== (action === "pickup" ? "EnRoute" : "PickedUp")))
             }
             className={`btn ${["cancel", "driver-reject"].includes(action) ? "btn-secondary" : "flex-1"}`}
-            onClick={() => act(t, action)}
+            onClick={() => {
+              if (action === "cancel" && t.status !== "AwaitingRiderConfirmation")
+                cancelDialog.current?.showModal();
+              else void act(t, action);
+            }}
           >
             {action === "cancel" && t.status === "AwaitingRiderConfirmation"
               ? "Từ chối giá"
@@ -151,6 +190,58 @@ export function TripDetails({
           </button>
         ))}
       </div>
+      <dialog
+        className="ride-dialog"
+        ref={cancelDialog}
+        aria-labelledby="cancel-trip-title"
+        onCancel={(event) => {
+          if (busy) event.preventDefault();
+        }}
+      >
+        <h2 id="cancel-trip-title" className="text-xl font-bold">
+          Xác nhận hủy chuyến?
+        </h2>
+        <p className="text-sm muted mt-3">
+          Tài xế và khách sẽ được cập nhật. Không thể khôi phục chuyến đã hủy.
+        </p>
+        <form
+          className="space-y-4 mt-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void act(t, "cancel", cancelReason).then(() => cancelDialog.current?.close());
+          }}
+        >
+          <label className="block text-sm font-bold">
+            Lý do hủy
+            <select
+              className="field mt-2 font-normal"
+              required
+              value={cancelReason}
+              disabled={busy}
+              onChange={(event) => setCancelReason(event.target.value)}
+            >
+              <option>Thay đổi kế hoạch di chuyển</option>
+              <option>Điểm đón không phù hợp</option>
+              <option>Không liên hệ được bên còn lại</option>
+              <option>Chờ quá lâu</option>
+              <option>Sự cố phương tiện</option>
+            </select>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="btn btn-secondary"
+              type="button"
+              disabled={busy}
+              onClick={() => cancelDialog.current?.close()}
+            >
+              Tiếp tục chuyến
+            </button>
+            <button className="btn" disabled={busy}>
+              Xác nhận hủy chuyến
+            </button>
+          </div>
+        </form>
+      </dialog>
       <details className="mt-5 border-t border-[#dcebe5] pt-4 text-xs">
         <summary className="cursor-pointer text-[#526c5b] min-h-8">Lịch sử trạng thái</summary>
         <p className="break-all mt-2 muted">Mã chuyến: {t.id}</p>

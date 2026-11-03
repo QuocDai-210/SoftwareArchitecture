@@ -44,6 +44,22 @@ triển mà không gộp API/process/database.
 - Tổng RAM dự án tối đa 12 GB; build tuần tự; tắt dịch vụ kiểm thử, giữ volume.
 - Format 100 cột, mỗi câu lệnh một dòng; nhóm ngoặc ngắn gom một dòng.
 
+## Kế hoạch chức năng SwiftBike
+
+Phạm vi đã chốt: trải nghiệm đặt xe máy trên web như BeBike, mô phỏng xe trên bản đồ
+thật; giữ ba service, Clean Architecture, SOLID và pattern trong PDF. Không phát triển
+thêm payment; giữ luồng COD hiện có để không phá vòng đời chuyến.
+
+- [x] Tuyến Geoapify `motorcycle`, giá tham khảo và thời gian trước khi tìm tài xế.
+- [x] Điểm đón/đến rõ ràng, đổi chiều tuyến, ghi chú đón khách và liên hệ người đặt xe.
+- [x] Tìm/nhận/từ chối chuyến, tìm lại khi tài xế từ chối; không ghép xe bận hoặc mất kết nối.
+- [x] Theo dõi xe mô phỏng, ETA từng chặng, nhận biết đã đến và chặn đón/trả sai vị trí.
+- [x] Hai phía hủy trước khi đón, xác nhận/lý do hủy, giải phóng đúng reservation.
+- [x] Lịch sử có lọc trạng thái, đặt lại chuyến và đánh giá 1–5 sao sau khi trả khách.
+- [x] Kiểm tra quyền, dữ liệu đầu vào, concurrency và migration giữ dữ liệu cũ.
+- [x] Build 0 error/warning, kiểm thử nghiệp vụ và Chrome desktop/mobile ba vai trò;
+      dừng container kiểm thử, tổng RAM dự án dưới 12 GB.
+
 ## Lệnh nghiệm thu
 
 ```bash
@@ -135,6 +151,39 @@ Thay đổi thuộc tầng presentation, giữ Leaflet/Geoapify và ba service �
 
 Kiểm tra bằng `node scripts/browser-check.mjs`; ca sự cố broker không chạy lại trong
 phiên chỉnh giao diện này. Ảnh/log ở `/tmp`; container kiểm thử được dừng, giữ dữ liệu.
+
+## Nghiệm thu chức năng SwiftBike
+
+Ngày 04/11/2026, build backend Release đạt **0 error, 0 warning**; frontend production
+và image Trip/Matching/web build thành công. TypeScript, assert frontend, kiểm tra
+kiến trúc, CSharpier và Prettier đạt; không thêm dependency.
+
+- Geoapify thật trả tuyến `motorcycle`; User xem giá tham khảo, đổi điểm, lưu liên hệ
+  và ghi chú đón. Driver được giao chỉ nhận số điện thoại khách từ lúc nhận chuyến
+  đến trước trả khách. ETA giảm theo hành trình, kiểm tra đến nơi vẫn thực hiện ở server.
+- Chrome kiểm tra Rider hủy ở EnRoute, Driver hủy ở DriverAccepted, xác nhận/lý do,
+  chặn tài xế khác và giải phóng reservation. Sau tài xế từ chối, User xác nhận lại
+  giá rồi tài xế khác nhận; khi không có xe, chuyến kết thúc Failed.
+- User đánh giá sau trả khách ngay khi COD còn Pending; cùng nội dung gửi lại không
+  tăng Version, nội dung khác/sai sao/sai quyền bị chặn. PostgreSQL chặn Rating=0.
+  Lịch sử lọc từ server; đặt lại chỉ điền địa chỉ, chưa tạo chuyến cho đến khi gửi form.
+- **8 kiểm thử xUnit + Moq** đạt, gồm quyền database thật và bồi thường reservation.
+  Chrome luồng thường và `--faults` đều đạt; hai Outbox phục hồi sau broker ngừng và
+  Trip/Payment restart, thu/hoàn COD và message trùng không tạo giao dịch thứ hai.
+- Bố cục ba vai trò đạt 360 px; kiểm tra thêm giá/nút đặt xe và hộp xác nhận hủy,
+  focus nằm trong dialog, các nút đủ 44 px; bản đồ thu gọn đạt ở 360 × 600 px.
+  Không có exception trình duyệt hoặc HTTP 5xx ngoài thời gian gây sự cố chủ động.
+- Migration `20261103183600_BikeExperience` thêm liên hệ, ghi chú và đánh giá;
+  giữ đủ **113 chuyến có sẵn trước nâng cấp**. Backup native ở
+  `/home/quocdai210/Backups/SwiftRide/bike-20261104-014014/`, không xóa volume.
+
+Giữ ba service và database riêng theo quyền sở hữu; Trip/Payment PostgreSQL,
+Matching MongoDB. Hạn mức tất cả profile **10,07/12 GB**; observability/migration
+không bật khi kiểm thử chức năng. Container kiểm thử đã dừng, dữ liệu được giữ;
+ảnh/log ở `/tmp`. Dùng `make up` rồi mở http://localhost:3000 để chạy lại.
+
+Giới hạn đã chốt: một loại xe máy, mô phỏng trên bản đồ thật; chưa làm GPS thật,
+chat, thông báo đẩy hoặc triển khai HA. Giữ COD hiện có, không phát triển online payment.
 
 ## Trình tự bảo vệ
 

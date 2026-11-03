@@ -17,6 +17,20 @@ public sealed class TripDb(DbContextOptions<TripDb> options) : DbContext(options
         t.HasKey(x => x.Id);
         t.Property(x => x.RiderId).HasMaxLength(100);
         t.Property(x => x.DriverId).HasMaxLength(100);
+        t.Property(x => x.RiderName).HasMaxLength(100).HasDefaultValue("");
+        t.Property(x => x.RiderPhone).HasMaxLength(15).HasDefaultValue("");
+        t.Property(x => x.PickupNote).HasMaxLength(240).HasDefaultValue("");
+        t.Property(x => x.Review).HasMaxLength(500);
+        t.ToTable(
+            "Trips",
+            table =>
+                table.HasCheckConstraint(
+                    "CK_Trips_Review",
+                    "(\"Rating\" IS NULL AND \"Review\" IS NULL AND \"RatedAt\" IS NULL) OR "
+                        + "(\"Rating\" IS NOT NULL AND \"Rating\" BETWEEN 1 AND 5 AND \"RatedAt\" IS NOT NULL AND "
+                        + "\"Status\" IN ('PaymentPending','PaymentReview','Paid'))"
+                )
+        );
         t.Property(x => x.IdempotencyKey).HasMaxLength(100);
         t.Property(x => x.Status).HasConversion<string>().HasMaxLength(50);
         t.Property(x => x.Method).HasConversion<string>();

@@ -10,7 +10,8 @@ public sealed class TripCommands(
     ITripWriter writer,
     IEventPublisher bus,
     ITripMetrics metrics,
-    IMatchingClient matching
+    IMatchingClient matching,
+    IUserProfileStore profiles
 )
 {
     public async Task<CreatedTrip> Create(
@@ -37,6 +38,8 @@ public sealed class TripCommands(
                 "Chuyến mới chỉ hỗ trợ thanh toán tiền mặt.",
                 ErrorKind.Validation
             );
+        if ((request.PickupNote?.Length ?? 0) > 240)
+            throw new RuleException("Ghi chú đón khách tối đa 240 ký tự.", ErrorKind.Validation);
         RequestKeys.Validate(key);
         if (!actor.IsRider)
             throw new RuleException("Cần quyền Rider.", ErrorKind.Forbidden);
@@ -48,6 +51,16 @@ public sealed class TripCommands(
             RequestKeys.Same(previous.RequestHash, hash);
             return new(TripView.From(previous), previous.Id, false);
         }
+        var profile = await profiles.Get(rider, ct);
+        if (
+            profile is null
+            || string.IsNullOrWhiteSpace(profile.Name)
+            || string.IsNullOrWhiteSpace(profile.Phone)
+        )
+            throw new RuleException(
+                "Bổ sung họ tên và số điện thoại liên hệ trước khi đặt xe.",
+                ErrorKind.Validation
+            );
         if (
             (await reader.List(rider, false, ct)).Any(x =>
                 x.Method == PaymentMethod.Cod
@@ -63,6 +76,9 @@ public sealed class TripCommands(
             RiderId = rider,
             Pickup = request.Pickup,
             Destination = request.Destination,
+            RiderName = profile.Name,
+            RiderPhone = profile.Phone,
+            PickupNote = request.PickupNote?.Trim() ?? "",
             Method = request.Method,
             PaymentToken = request.PaymentToken,
             IdempotencyKey = key!,
@@ -94,18 +110,53 @@ public sealed class TripCommands(
 
     public async Task<TripView> Cancel(
         Guid id,
-        VersionRequest request,
+        CancelTripRequest request,
+        Actor actor,
+        CancellationToken ct
+    )
+    {
+        var trip = await reader.Get(id, ct);
+        if (actor.IsRider)
+            TripAccess.Rider(trip, actor);
+        else
+        {
+            TripAccess.Driver(trip, actor);
+            if (trip.Status is not (TripStatus.DriverAccepted or TripStatus.EnRoute))
+                throw new RuleException(
+                    "Chỉ hủy trước khi đón khách; lời mời chưa nhận dùng Từ chối."
+                );
+        }
+        var reason = request.Reason?.Trim();
+        if (
+            (reason?.Length ?? 0) > 240
+            || (
+                trip.Status is TripStatus.DriverAccepted or TripStatus.EnRoute
+                && string.IsNullOrWhiteSpace(reason)
+            )
+        )
+            throw new RuleException("Cần lý do hủy, tối đa 240 ký tự.", ErrorKind.Validation);
+        trip.CheckVersion(request.ExpectedVersion);
+        trip.Move(
+            TripStatus.Cancelled,
+            $"{(actor.IsRider ? "Người đặt xe" : "Tài xế")} hủy chuyến. {reason}".Trim()
+        );
+        await WorkflowEvents.Release(trip, bus, ct);
+        await writer.Save(ct);
+        metrics.Outcome("cancelled");
+        return TripView.From(trip);
+    }
+
+    public async Task<TripView> Review(
+        Guid id,
+        ReviewTripRequest request,
         Actor actor,
         CancellationToken ct
     )
     {
         var trip = await reader.Get(id, ct);
         TripAccess.Rider(trip, actor);
-        trip.CheckVersion(request.ExpectedVersion);
-        trip.Move(TripStatus.Cancelled, "Rider hủy chuyến.");
-        await WorkflowEvents.Release(trip, bus, ct);
+        trip.Rate(request.Rating, request.Comment, request.ExpectedVersion);
         await writer.Save(ct);
-        metrics.Outcome("cancelled");
         return TripView.From(trip);
     }
 

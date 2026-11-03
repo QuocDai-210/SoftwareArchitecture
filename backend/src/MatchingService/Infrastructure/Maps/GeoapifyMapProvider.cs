@@ -77,11 +77,11 @@ public sealed class GeoapifyMapProvider(
         from.Validate();
         to.Validate();
         var cacheKey =
-            $"route:{Number(from.Latitude)}:{Number(from.Longitude)}:{Number(to.Latitude)}:{Number(to.Longitude)}";
+            $"motorcycle:{Number(from.Latitude)}:{Number(from.Longitude)}:{Number(to.Latitude)}:{Number(to.Longitude)}";
         if (cache.TryGetValue<RoadRoute>(cacheKey, out var cached))
             return cached!;
         var result = await Get(
-            $"routing?waypoints={Number(from.Latitude)},{Number(from.Longitude)}|{Number(to.Latitude)},{Number(to.Longitude)}&mode=drive&details=route_details",
+            $"routing?waypoints={Number(from.Latitude)},{Number(from.Longitude)}|{Number(to.Latitude)},{Number(to.Longitude)}&mode=motorcycle&details=route_details",
             ct
         );
         var features = result.GetProperty("features");

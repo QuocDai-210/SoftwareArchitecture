@@ -94,11 +94,22 @@ public static class TripEndpoints
                 "/trips/{id:guid}/cancel",
                 (
                     Guid id,
-                    VersionRequest request,
+                    CancelTripRequest request,
                     ClaimsPrincipal user,
                     TripCommands commands,
                     CancellationToken ct
                 ) => commands.Cancel(id, request, user.Actor(), ct)
+            )
+            .RequireAuthorization();
+        app.MapPost(
+                "/trips/{id:guid}/review",
+                (
+                    Guid id,
+                    ReviewTripRequest request,
+                    ClaimsPrincipal user,
+                    TripCommands commands,
+                    CancellationToken ct
+                ) => commands.Review(id, request, user.Actor(), ct)
             )
             .RequireAuthorization("rider");
         app.MapPost(

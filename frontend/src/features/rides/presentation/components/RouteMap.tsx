@@ -111,7 +111,7 @@ export function RouteMap({
             className: "vehicle-marker",
             iconSize: [36, 36],
             iconAnchor: [18, 18],
-            html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 10 2-5h12l2 5v9h-3v-3H7v3H4zm0 0h16M7 13h2m6 0h2"/></svg>',
+            html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="5" cy="17" r="4"/><circle cx="19" cy="17" r="4"/><path d="m5 17 5-7 5 7H5m8-13h4l2 13M7 9h5"/></svg>',
           }),
         })
           .bindTooltip("Xe")

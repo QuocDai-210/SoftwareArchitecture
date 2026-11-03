@@ -8,6 +8,9 @@ export class RideService {
   route(pickup: Point, destination: Point) {
     return this.gateway.route(pickup, destination);
   }
+  quote(pickup: Point, destination: Point) {
+    return this.gateway.quote(pickup, destination);
+  }
   search(text: string) {
     return this.gateway.search(text);
   }
@@ -44,8 +47,8 @@ export class RideService {
   suspendDriver(subject: string, suspended: boolean) {
     return this.gateway.suspendDriver(subject, suspended);
   }
-  history(page: number) {
-    return this.gateway.history(page);
+  history(page: number, status?: string) {
+    return this.gateway.history(page, status);
   }
   ledger(id: string) {
     return this.gateway.ledger(id);
@@ -90,10 +93,13 @@ export class RideService {
     if (!driver.available) await this.gateway.location(latitude, longitude);
     await this.gateway.availability(!driver.available);
   }
-  act(trip: Trip, action: TripAction, role: "rider" | "driver" | "observer") {
+  act(trip: Trip, action: TripAction, role: "rider" | "driver" | "observer", reason?: string) {
     if (!availableActions(trip, role).includes(action))
       throw new Error("Thao tác không hợp lệ với trạng thái chuyến.");
-    return this.gateway.act(trip, action);
+    return this.gateway.act(trip, action, reason);
+  }
+  review(trip: Trip, rating: number, comment: string) {
+    return this.gateway.review(trip, rating, comment);
   }
   async book(booking: Booking) {
     if (

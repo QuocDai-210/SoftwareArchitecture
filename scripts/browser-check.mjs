@@ -120,13 +120,14 @@ async function input(session, selector, value) {
   );
 }
 async function field(session, label, value) {
-  const selector = `Array.from(document.querySelectorAll('label')).find(l => l.textContent.trim().startsWith(${JSON.stringify(label)}))?.querySelector('input')`;
+  const selector = `Array.from(document.querySelectorAll('label')).find(l => l.textContent.trim().startsWith(${JSON.stringify(label)}))?.querySelector('input,textarea')`;
   await wait(session, `!!(${selector}) && !(${selector}).disabled`, label);
   await evaluate(
     session,
     `(() => {
     const element = ${selector};
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(element, ${JSON.stringify(value)});
+    const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, ${JSON.stringify(value)});
     element.dispatchEvent(new Event('input', { bubbles: true }));
   })()`,
   );
@@ -443,8 +444,8 @@ try {
     "Họ tên": "Kiểm tra Driver",
     Email: driverName + "@example.com",
     "Số điện thoại": "0901234567",
-    "Biển số": "59A-12345",
-    "Loại xe": "SwiftCar",
+    "Biển số": "59S1-12345",
+    "Loại xe": "Honda Wave · Xe máy",
   }))
     await field(ops, label, value);
   await click(ops, "Lưu hồ sơ chờ duyệt");
@@ -533,6 +534,8 @@ try {
   await geolocation(user, 10.7769, 106.7009);
   await click(user, "Dùng vị trí hiện tại làm điểm đón");
   await search(user, "Điểm đến", "Dinh Độc Lập");
+  await field(user, "Số điện thoại liên hệ", "0907654321");
+  await field(user, "Ghi chú điểm đón", "Đón ở cổng chính, áo xanh");
   await wait(
     user,
     `Array.from(document.querySelectorAll('button')).some(b => b.textContent.trim() === 'Tìm xe và xem giá' && !b.disabled)`,
@@ -553,6 +556,28 @@ try {
     "updated route preview ready",
   );
   await screenshot(user, "user-route");
+  await call(
+    "Emulation.setDeviceMetricsOverride",
+    { width: 360, height: 800, deviceScaleFactor: 1, mobile: true },
+    user,
+  );
+  await mapLayout(user, "user-booking-mobile");
+  assert(
+    await evaluate(
+      user,
+      `(() => {
+        const button = document.querySelector('.booking-form button[type="submit"]');
+        button.scrollIntoView({ block: 'center' });
+        const r = button.getBoundingClientRect();
+        return document.documentElement.scrollWidth <= innerWidth &&
+          r.top >= 0 && r.bottom <= innerHeight &&
+          button.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) &&
+          document.querySelector('.booking-summary').innerText.includes('₫');
+      })()`,
+    ),
+    "Mobile booking fare and submit action remain readable and reachable",
+  );
+  await screenshot(user, "user-booking-mobile");
   await click(user, "Tìm xe và xem giá");
   await wait(
     user,
@@ -563,6 +588,17 @@ try {
     (t) => t.status === "AwaitingRiderConfirmation",
   );
   assert(quoted, "User receives a quote.");
+  assert.equal(quoted.pickupNote, "Đón ở cổng chính, áo xanh");
+  assert.equal(quoted.riderPhone, null, "Rider contact stays hidden until Driver accepts");
+  assert(
+    await evaluate(user, `document.querySelector('.booking-summary') === null`),
+    "Booking preview becomes a trip after submit",
+  );
+  await call(
+    "Emulation.setDeviceMetricsOverride",
+    { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false },
+    user,
+  );
   await mapLayout(user, "user-quote-desktop", true);
   for (const [session, name] of [
     [user, "User"],
@@ -575,6 +611,12 @@ try {
   await click(user, "Đồng ý giá");
   await click(driver, "Nhận chuyến");
   await click(driver, "Đang đến đón");
+  await wait(
+    driver,
+    `!!document.querySelector('a[href="tel:0907654321"]')`,
+    "Driver can call assigned rider",
+  );
+  await wait(driver, `document.body.innerText.includes('Ước tính đến đón')`, "pickup ETA visible");
   await wait(driver, `!!document.querySelector('.simulation-panel')`, "simulation controls");
   await evaluate(driver, `document.querySelector('.simulation-panel').open = true`);
   await click(driver, "Tạm dừng");
@@ -677,6 +719,41 @@ try {
     driver,
     `(async () => (await (await fetch('/api/backend/payments/${trip.id}')).json()).status === 'Pending')()`,
     "cash payment created",
+  );
+  await wait(
+    user,
+    `!!document.querySelector('[aria-label="Đánh giá chuyến đi"] textarea')`,
+    "review after dropoff without waiting for payment",
+  );
+  await field(user, "Nhận xét", "Tài xế thân thiện, chạy xe an toàn");
+  await click(user, "Gửi đánh giá");
+  await wait(
+    user,
+    `document.querySelector('[aria-label="Đánh giá chuyến đi"]')?.innerText.includes('5/5 sao')`,
+    "review saved",
+  );
+  const reviewed = (await request(user, "trips/" + trip.id)).body;
+  assert.equal(reviewed.rating, 5);
+  assert.equal(reviewed.review, "Tài xế thân thiện, chạy xe an toàn");
+  assert.equal(reviewed.riderPhone, null, "Contact is hidden after dropoff");
+  const reviewPayload = {
+    expectedVersion: reviewed.version - 1,
+    rating: 5,
+    comment: reviewed.review,
+  };
+  assert.equal((await request(user, `trips/${trip.id}/review`, reviewPayload)).status, 200);
+  assert.equal((await request(user, "trips/" + trip.id)).body.version, reviewed.version);
+  assert.equal((await request(driver, `trips/${trip.id}/review`, reviewPayload)).status, 403);
+  assert.equal(
+    (await request(user, `trips/${trip.id}/review`, { ...reviewPayload, rating: 0 })).status,
+    400,
+  );
+  assert.equal(
+    (await request(user, `trips/${trip.id}/review`, { ...reviewPayload, rating: 4 })).status,
+    409,
+  );
+  console.log(
+    "PASS motorcycle booking, pickup note, rider contact, ETA and idempotent review after dropoff",
   );
   const otherRegistration = await request(ops, "ops/drivers", {
     username: "check-otherdriver-" + suffix,
@@ -952,7 +1029,7 @@ try {
   );
   const refundLedger = (await request(user, "payments/" + trip.id + "/ledger")).body;
   assert.equal(refundLedger.length, 2, "Cash refund writes exactly one reversal");
-  const rejectSql = (sql, expected) => {
+  const rejectSql = (sql, expected, user = "payment_app", database = "PayDB") => {
     try {
       compose(
         "exec",
@@ -960,9 +1037,9 @@ try {
         "postgres",
         "psql",
         "-U",
-        "payment_app",
+        user,
         "-d",
-        "PayDB",
+        database,
         "-v",
         "ON_ERROR_STOP=1",
         "-c",
@@ -976,6 +1053,12 @@ try {
   rejectSql(
     `BEGIN; UPDATE "Journals" SET "Kind" = 'Edited' WHERE "PaymentId" = '${trip.id}'; ROLLBACK;`,
     "Ledger is append-only",
+  );
+  rejectSql(
+    `BEGIN; UPDATE "Trips" SET "Rating" = 0 WHERE "Id" = '${trip.id}'; ROLLBACK;`,
+    "CK_Trips_Review",
+    "trip",
+    "TripDB",
   );
   const invalidLines = JSON.stringify([
     { account: "A", side: "Debit", amount: 100 },
@@ -1058,6 +1141,205 @@ try {
     await evaluate(ops, `window.location.hash = 'payments'`);
     console.log("PASS legacy online history never becomes COD or accepts payment retry");
   }
+
+  for (const [canceller, stage] of [
+    [user, "EnRoute"],
+    [driver, "DriverAccepted"],
+  ]) {
+    const created = await request(
+      user,
+      "trips",
+      { pickup: trip.pickup, destination: trip.destination, method: "Cod", paymentToken: null },
+      "POST",
+      randomUUID(),
+    );
+    assert.equal(created.status, 201);
+    const id = created.body.id;
+    await evaluate(user, `window.location.hash = 'ride/${id}'`);
+    await click(user, "Đồng ý giá");
+    await click(driver, "Nhận chuyến");
+    if (stage === "EnRoute") await click(driver, "Đang đến đón");
+    await wait(
+      canceller,
+      `document.querySelector('[aria-label="Chi tiết chuyến"]')?.innerText.includes(${JSON.stringify(stage === "EnRoute" ? "Tài xế đang đến" : "Tài xế đã nhận")})`,
+      "accepted trip ready to cancel",
+    );
+    const activeTrip = (await request(user, "trips/" + id)).body;
+    assert.equal(
+      (await request(canceller, `trips/${id}/cancel`, { expectedVersion: activeTrip.version }))
+        .status,
+      400,
+    );
+    await click(canceller, "Hủy chuyến");
+    await wait(canceller, `document.querySelector('dialog')?.open`, "native cancellation dialog");
+    await call(
+      "Emulation.setDeviceMetricsOverride",
+      { width: 360, height: 800, deviceScaleFactor: 1, mobile: true },
+      canceller,
+    );
+    assert(
+      await evaluate(
+        canceller,
+        `(() => {
+          const dialog = document.querySelector('dialog[open]');
+          const r = dialog.getBoundingClientRect();
+          return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight &&
+            dialog.contains(document.activeElement) &&
+            Array.from(dialog.querySelectorAll('button')).every(button => {
+              const b = button.getBoundingClientRect();
+              return b.height >= 44 && b.bottom <= innerHeight &&
+                button.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2));
+            });
+        })()`,
+      ),
+      "Mobile cancellation dialog retains focus and visible confirmation actions",
+    );
+    await screenshot(canceller, `cancel-${stage}-mobile`);
+    assert.equal(
+      (await request(user, "trips/" + id)).body.status,
+      stage,
+      "Opening confirmation does not cancel",
+    );
+    await click(canceller, "Tiếp tục chuyến");
+    assert.equal((await request(user, "trips/" + id)).body.status, stage);
+    await click(canceller, "Hủy chuyến");
+    await click(canceller, "Xác nhận hủy chuyến");
+    await wait(
+      driver,
+      `(async () => !(await (await fetch('/api/backend/drivers/me')).json()).busy)()`,
+      "cancelled reservation releases Driver",
+    );
+    const cancelled = (await request(user, "trips/" + id)).body;
+    assert.equal(cancelled.status, "Cancelled");
+    assert(cancelled.reason.includes("Thay đổi kế hoạch"));
+    assert.equal(
+      (
+        await request(otherDriver, `trips/${id}/cancel`, {
+          expectedVersion: cancelled.version,
+          reason: "Other driver",
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (await request(user, `trips/${id}/review`, { expectedVersion: cancelled.version, rating: 5 }))
+        .status,
+      409,
+    );
+    await call(
+      "Emulation.setDeviceMetricsOverride",
+      { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false },
+      canceller,
+    );
+  }
+  assert.equal(
+    (
+      await request(
+        otherDriver,
+        "drivers/me/location",
+        { latitude: 10.79, longitude: 106.7 },
+        "PUT",
+      )
+    ).status,
+    204,
+  );
+  assert.equal(
+    (await request(otherDriver, "drivers/me/availability", { available: true }, "PUT")).status,
+    204,
+  );
+  const rematch = await request(
+    user,
+    "trips",
+    { pickup: trip.pickup, destination: trip.destination, method: "Cod", paymentToken: null },
+    "POST",
+    randomUUID(),
+  );
+  assert.equal(rematch.status, 201);
+  await evaluate(user, `window.location.hash = 'ride/${rematch.body.id}'`);
+  await click(user, "Đồng ý giá");
+  await click(driver, "Từ chối");
+  await click(user, "Đồng ý giá");
+  await click(otherDriver, "Nhận chuyến");
+  await wait(
+    otherDriver,
+    `document.body.innerText.includes('Tài xế đã nhận')`,
+    "replacement Driver accepts",
+  );
+  const replacement = (await request(user, "trips/" + rematch.body.id)).body;
+  assert.notEqual(replacement.driverId, driverId);
+  assert.equal(replacement.rejections, 1);
+  await click(otherDriver, "Hủy chuyến");
+  await click(otherDriver, "Xác nhận hủy chuyến");
+  await wait(
+    otherDriver,
+    `(async () => !(await (await fetch('/api/backend/drivers/me')).json()).busy)()`,
+    "replacement reservation released",
+  );
+  assert.equal(
+    (await request(otherDriver, "drivers/me/availability", { available: false }, "PUT")).status,
+    204,
+  );
+  assert.equal(
+    (await request(driver, "drivers/me/availability", { available: false }, "PUT")).status,
+    204,
+  );
+  const noDriver = await request(
+    user,
+    "trips",
+    { pickup: trip.pickup, destination: trip.destination, method: "Cod", paymentToken: null },
+    "POST",
+    randomUUID(),
+  );
+  assert.equal(noDriver.status, 201);
+  await wait(
+    user,
+    `(async () => (await (await fetch('/api/backend/trips/${noDriver.body.id}')).json()).status === 'Failed')()`,
+    "no available Driver returns explicit failure",
+  );
+  assert.equal(
+    (await request(driver, "drivers/me/availability", { available: true }, "PUT")).status,
+    204,
+  );
+  await evaluate(user, `window.location.hash = 'history'`);
+  await wait(user, `!!document.querySelector('#history select')`, "history status filter");
+  await evaluate(
+    user,
+    `(() => {
+    const select = document.querySelector('#history select');
+    select.value = 'Cancelled';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`,
+  );
+  await wait(
+    user,
+    `document.querySelectorAll('#history li').length > 0 && Array.from(document.querySelectorAll('#history li')).every(item => item.innerText.includes('Đã hủy'))`,
+    "server filtered cancellation history",
+  );
+  const totalBeforeRebook = (await request(user, "trips/history?page=1")).body.total;
+  await click(user, "Đặt lại chuyến");
+  await wait(
+    user,
+    `!!document.querySelector('.booking-summary') && document.querySelector('.booking-summary').innerText.includes('₫')`,
+    "rebook refreshes motorcycle quote",
+  );
+  assert.equal(
+    (await request(user, "trips/history?page=1")).body.total,
+    totalBeforeRebook,
+    "Rebook requires fresh rider confirmation before creating trip",
+  );
+  const endpoints = await evaluate(
+    user,
+    `Array.from(document.querySelectorAll('.booking-stops input')).map(input => input.value)`,
+  );
+  await click(user, "Đổi điểm đón và điểm đến");
+  await wait(
+    user,
+    `document.querySelector('.booking-stops input')?.value === ${JSON.stringify(endpoints[1])}`,
+    "swap pickup and destination",
+  );
+  console.log(
+    "PASS Rider/Driver cancellation confirmation, reason, reservation release, filtered history, rebook and endpoint swap",
+  );
 
   for (const [session, name] of [
     [user, "user-mobile"],

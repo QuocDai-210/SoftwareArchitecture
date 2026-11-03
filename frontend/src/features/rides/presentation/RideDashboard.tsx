@@ -7,6 +7,7 @@ import { BookingForm } from "./components/BookingForm";
 import { DriverAvailability } from "./components/DriverAvailability";
 import { TripHistory } from "./components/TripHistory";
 import { TripDetails } from "./components/TripDetails";
+import { TripReview } from "./components/TripReview";
 import { RouteMap } from "./components/RouteMap";
 import { AccountPanel } from "./components/AccountPanel";
 import { OpsPanel } from "./components/OpsPanel";
@@ -72,6 +73,7 @@ export function RideDashboard({
   const vehicle = driver
     ? { latitude: driver.latitude, longitude: driver.longitude, label: "Vị trí xe" }
     : null;
+  const simulation = model.simulation?.tripId === current?.id ? model.simulation : null;
   const selecting = !current && ((isRider && !active) || (isDriver && !driver?.busy && !active));
   const roleName = isOps
     ? "Ops · Quản trị hệ thống"
@@ -130,8 +132,8 @@ export function RideDashboard({
               mapKey={mapKey}
               pickup={current?.pickup ?? (isDriver ? (model.driverPoint ?? vehicle) : model.from)}
               destination={current?.destination ?? (isDriver ? null : model.to)}
-              route={current?.quote?.route ?? model.preview}
-              simulation={model.simulation}
+              route={current ? current.quote?.route : model.preview}
+              simulation={simulation}
               onSelect={selecting ? model.selectMap : undefined}
               onLocate={selecting ? () => model.locate(isDriver) : undefined}
               locateLabel={isDriver ? "Dùng vị trí hiện tại" : "Dùng vị trí hiện tại làm điểm đón"}
@@ -178,7 +180,9 @@ export function RideDashboard({
                     Đang tải chuyến đi…
                   </p>
                 )}
-                {isRider && !current && <BookingForm model={model} service={service} />}
+                {isRider && !current && (
+                  <BookingForm model={model} service={service} initialName={user.name} />
+                )}
                 {isDriver && !active && !current && (
                   <DriverAvailability model={model} service={service} />
                 )}
@@ -221,31 +225,52 @@ export function RideDashboard({
                       isRider={isRider && current.riderId === user.id}
                       busy={busy}
                       act={act}
-                      simulation={model.simulation}
+                      simulation={simulation}
                       assignedDriver={model.assignedDriver}
                     />
+                    <TripReview
+                      key={current.id}
+                      trip={current}
+                      isRider={isRider && current.riderId === user.id}
+                      busy={busy}
+                      submit={(rating, comment) => model.review(current, rating, comment)}
+                    />
                     {(isDriver || isOps) &&
-                      model.simulation &&
+                      simulation &&
                       ["EnRoute", "PickedUp"].includes(current.status) && (
                         <details className="simulation-panel">
                           <summary>Điều khiển xe giả lập</summary>
                           <SimulationControls
-                            simulation={model.simulation}
+                            simulation={simulation}
                             onChange={model.controlSimulation}
                             busy={busy}
                           />
                         </details>
                       )}
                     {!active && (
-                      <button
-                        className="btn btn-secondary m-5"
-                        onClick={() => {
-                          model.setSelected(null);
-                          window.location.hash = "ride";
-                        }}
-                      >
-                        {isRider ? "Đặt chuyến mới" : "Đóng chi tiết chuyến"}
-                      </button>
+                      <>
+                        {isRider && (
+                          <button
+                            className="btn m-5"
+                            disabled={busy}
+                            onClick={() => {
+                              model.rebook(current);
+                              setCollapsed(false);
+                            }}
+                          >
+                            Đặt lại chuyến
+                          </button>
+                        )}
+                        <button
+                          className="btn btn-secondary m-5"
+                          onClick={() => {
+                            model.setSelected(null);
+                            window.location.hash = "ride";
+                          }}
+                        >
+                          {isRider ? "Đặt chuyến mới" : "Đóng chi tiết chuyến"}
+                        </button>
+                      </>
                     )}
                   </>
                 )}
@@ -271,7 +296,10 @@ export function RideDashboard({
                   <div className="overview-banner">
                     <div>
                       <p className="eyebrow">HOẠT ĐỘNG HỆ THỐNG</p>
-                      <h2>{model.history.total} chuyến đi</h2>
+                      <h2>
+                        {model.history.total}{" "}
+                        {model.historyStatus ? "chuyến theo bộ lọc" : "chuyến đi"}
+                      </h2>
                       <p>
                         {active
                           ? labels[active.status]
@@ -292,6 +320,16 @@ export function RideDashboard({
                   run={run}
                   reload={reload}
                   setSelected={openRide}
+                  status={model.historyStatus}
+                  onFilter={model.filterHistory}
+                  onRebook={
+                    isRider && !active
+                      ? (trip) => {
+                          model.rebook(trip);
+                          setCollapsed(false);
+                        }
+                      : undefined
+                  }
                 />
                 <div className="pagination">
                   <button

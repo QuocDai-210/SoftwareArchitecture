@@ -48,8 +48,8 @@ public abstract class TripState
             TripStatus.Requested,
             TripStatus.Failed
         ),
-        [TripStatus.DriverAccepted] = new Allowed(TripStatus.EnRoute),
-        [TripStatus.EnRoute] = new Allowed(TripStatus.PickedUp),
+        [TripStatus.DriverAccepted] = new Allowed(TripStatus.EnRoute, TripStatus.Cancelled),
+        [TripStatus.EnRoute] = new Allowed(TripStatus.PickedUp, TripStatus.Cancelled),
         [TripStatus.PickedUp] = new Allowed(TripStatus.DroppedOff),
         [TripStatus.DroppedOff] = new Allowed(TripStatus.PaymentPending),
         [TripStatus.PaymentPending] = new Allowed(TripStatus.Paid, TripStatus.PaymentReview),

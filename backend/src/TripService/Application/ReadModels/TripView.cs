@@ -15,7 +15,13 @@ public sealed record TripView(
     DateTimeOffset UpdatedAt,
     string? Reason,
     long Version,
-    IReadOnlyList<TripChange> History
+    IReadOnlyList<TripChange> History,
+    string RiderName,
+    string? RiderPhone,
+    string PickupNote,
+    int? Rating,
+    string? Review,
+    DateTimeOffset? RatedAt
 )
 {
     public static TripView From(Trip t) =>
@@ -34,6 +40,14 @@ public sealed record TripView(
             t.UpdatedAt,
             t.Reason,
             t.Version,
-            t.History
+            t.History,
+            t.RiderName,
+            t.Status is TripStatus.DriverAccepted or TripStatus.EnRoute or TripStatus.PickedUp
+                ? t.RiderPhone
+                : null,
+            t.PickupNote,
+            t.Rating,
+            t.Review,
+            t.RatedAt
         );
 }

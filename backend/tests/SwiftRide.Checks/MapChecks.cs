@@ -140,5 +140,52 @@ static class MapChecks
         );
         profile.Update(" User ", "+84901234567");
         check(profile.Name == "User", "profile validates and trims name");
+        check(
+            simulation.RemainingMinutes < route.DurationMinutes,
+            "ETA decreases with simulated progress"
+        );
+        var rated = new Trip { RiderName = "User", RiderPhone = "0901234567" };
+        foreach (
+            var status in new[]
+            {
+                TripStatus.AwaitingRiderConfirmation,
+                TripStatus.ReservingDriver,
+                TripStatus.AwaitingDriverAcceptance,
+                TripStatus.AcceptingDriver,
+                TripStatus.DriverAccepted,
+                TripStatus.EnRoute,
+            }
+        )
+            rated.Move(status);
+        check(Invalid(() => rated.Rate(5, "Good", rated.Version)), "cannot rate before dropoff");
+        check(
+            SwiftRide.Trips.Application.TripView.From(rated).RiderPhone == "0901234567",
+            "assigned trip exposes rider contact while active"
+        );
+        rated.Move(TripStatus.PickedUp);
+        check(Invalid(() => rated.Move(TripStatus.Cancelled)), "cannot cancel after pickup");
+        rated.Move(TripStatus.DroppedOff);
+        rated.Move(TripStatus.PaymentPending);
+        check(
+            SwiftRide.Trips.Application.TripView.From(rated).RiderPhone is null,
+            "rider phone hidden after dropoff"
+        );
+        check(Invalid(() => rated.Rate(0, "", rated.Version)), "rating lower bound");
+        check(Invalid(() => rated.Rate(6, "", rated.Version)), "rating upper bound");
+        check(
+            Invalid(() => rated.Rate(5, new string('x', 501), rated.Version)),
+            "review length bound"
+        );
+        var beforeRating = rated.Version;
+        rated.Rate(5, " Good ", beforeRating);
+        rated.Rate(5, "Good", beforeRating);
+        check(
+            rated.Rating == 5 && rated.Review == "Good" && rated.Version == beforeRating + 1,
+            "review retry is idempotent and trims comment"
+        );
+        check(
+            Invalid(() => rated.Rate(4, "Changed", rated.Version)),
+            "review cannot be replaced by duplicate command"
+        );
     }
 }

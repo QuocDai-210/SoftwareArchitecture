@@ -18,16 +18,20 @@ export type TripAction =
 export function availableActions(trip: Trip, role: "rider" | "driver" | "observer"): TripAction[] {
   if (role === "rider") {
     if (trip.status === "AwaitingRiderConfirmation") return ["confirm-quote", "cancel"];
-    return ["Requested", "AwaitingDriverAcceptance"].includes(trip.status) ? ["cancel"] : [];
+    return ["Requested", "AwaitingDriverAcceptance", "DriverAccepted", "EnRoute"].includes(
+      trip.status,
+    )
+      ? ["cancel"]
+      : [];
   }
   if (role === "driver") {
     switch (trip.status) {
       case "AwaitingDriverAcceptance":
         return ["driver-accept", "driver-reject"];
       case "DriverAccepted":
-        return ["en-route"];
+        return ["en-route", "cancel"];
       case "EnRoute":
-        return ["pickup"];
+        return ["pickup", "cancel"];
       case "PickedUp":
         return ["dropoff"];
     }

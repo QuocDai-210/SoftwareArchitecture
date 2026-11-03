@@ -18,7 +18,7 @@ const empty: DriverRegistration = {
   email: "",
   phone: "",
   plate: "",
-  vehicle: "",
+  vehicle: "Xe máy",
 };
 export function OpsPanel({
   service,

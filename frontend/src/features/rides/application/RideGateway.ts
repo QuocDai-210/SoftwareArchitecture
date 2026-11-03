@@ -20,9 +20,11 @@ export type Booking = {
   destination: Point;
   method: "Cod";
   paymentToken: string | null;
+  pickupNote?: string;
 };
 export interface RideGateway {
   route(pickup: Point, destination: Point): Promise<RoadRoute>;
+  quote(pickup: Point, destination: Point): Promise<NonNullable<Trip["quote"]>>;
   search(text: string): Promise<Point[]>;
   reverse(latitude: number, longitude: number): Promise<Point>;
   heartbeat(): Promise<void>;
@@ -35,7 +37,7 @@ export interface RideGateway {
   approveDriver(id: string, temporaryPassword: string): Promise<DriverApplication>;
   rejectDriver(id: string, reason: string): Promise<DriverApplication>;
   suspendDriver(subject: string, suspended: boolean): Promise<void>;
-  history(page: number): Promise<Page<Trip>>;
+  history(page: number, status?: string): Promise<Page<Trip>>;
   ledger(id: string): Promise<Journal[]>;
   payments(page: number): Promise<Page<Payment>>;
   paymentStatistics(): Promise<PaymentStatistic[]>;
@@ -55,7 +57,8 @@ export interface RideGateway {
     simulation: Simulation | null;
   }>;
   book(booking: Booking, key: string): Promise<Trip>;
-  act(trip: Trip, action: TripAction): Promise<void>;
+  act(trip: Trip, action: TripAction, reason?: string): Promise<void>;
+  review(trip: Trip, rating: number, comment: string): Promise<void>;
   location(latitude: number, longitude: number): Promise<void>;
   availability(available: boolean): Promise<void>;
 }

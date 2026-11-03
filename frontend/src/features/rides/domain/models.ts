@@ -30,6 +30,12 @@ export type Trip = {
     };
   };
   history: { status: string; at: string; reason: string | null }[];
+  riderName: string;
+  riderPhone: string | null;
+  pickupNote: string;
+  rating: number | null;
+  review: string | null;
+  ratedAt: string | null;
 };
 export type Payment = {
   isTopUp: boolean;
@@ -73,6 +79,7 @@ export type Simulation = {
   speed: number;
   paused: boolean;
   arrived: boolean;
+  remainingMinutes: number;
 };
 export type Profile = { id: string; name: string; phone: string };
 export type DriverApplication = {

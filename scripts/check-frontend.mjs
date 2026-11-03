@@ -65,6 +65,13 @@ try {
   assert.deepEqual(availableActions(trip, "driver"), []);
   assert.throws(() => service.act(trip, "pickup", "rider"), /không hợp lệ/);
   assert.equal(await service.act(trip, "confirm-quote", "rider"), "confirm-quote");
+  for (const status of ["DriverAccepted", "EnRoute"]) {
+    assert(availableActions({ status }, "rider").includes("cancel"));
+    assert(availableActions({ status }, "driver").includes("cancel"));
+    assert.deepEqual(availableActions({ status }, "observer"), []);
+  }
+  assert(!availableActions({ status: "PickedUp" }, "rider").includes("cancel"));
+  assert(!availableActions({ status: "PickedUp" }, "driver").includes("cancel"));
   for (const status of ["Paid", "Cancelled", "Failed", "PaymentReview"]) {
     assert.deepEqual(availableActions({ status }, "rider"), []);
     assert.deepEqual(availableActions({ status }, "driver"), []);

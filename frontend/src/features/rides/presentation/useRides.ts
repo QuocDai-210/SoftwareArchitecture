@@ -33,9 +33,11 @@ export function useRides(user: RideUser, service: RideService) {
   const [paymentUnavailable, setPaymentUnavailable] = useState(false);
   const [simulation, setSimulation] = useState<Simulation | null>(null);
   const [preview, setPreview] = useState<RoadRoute | null>(null);
+  const [estimate, setEstimate] = useState<Trip["quote"]>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
   const [page, setPage] = useState(1);
+  const [historyStatus, setHistoryStatus] = useState("");
   const [history, setHistory] = useState<Page<Trip>>({
     items: [],
     page: 1,
@@ -59,14 +61,14 @@ export function useRides(user: RideUser, service: RideService) {
     const request = ++sequence.current;
     const [data, past, presence] = await Promise.all([
       service.trips(),
-      service.history(page),
+      service.history(page, historyStatus || undefined),
       isDriver ? service.driver() : Promise.resolve(null),
     ]);
     if (request !== sequence.current) return;
     setTrips(data);
     setHistory(past);
     setDriver(presence);
-  }, [service, isDriver, page]);
+  }, [service, isDriver, page, historyStatus]);
 
   useEffect(() => {
     let mounted = true;
@@ -111,6 +113,7 @@ export function useRides(user: RideUser, service: RideService) {
 
   useEffect(() => {
     setPreview(null);
+    setEstimate(null);
     setRouteError("");
     if (!from || !to || active || !isRider) {
       setRouteLoading(false);
@@ -120,9 +123,12 @@ export function useRides(user: RideUser, service: RideService) {
     setRouteLoading(true);
     const timer = setTimeout(() => {
       service
-        .route(from, to)
-        .then((route) => {
-          if (mounted) setPreview(route);
+        .quote(from, to)
+        .then((quote) => {
+          if (mounted) {
+            setEstimate(quote);
+            setPreview(quote.route ?? null);
+          }
         })
         .catch((e) => {
           if (mounted) setRouteError(e.message);
@@ -204,30 +210,51 @@ export function useRides(user: RideUser, service: RideService) {
     });
   }
 
-  function act(trip: Trip, action: TripAction) {
+  function act(trip: Trip, action: TripAction, reason?: string) {
     const role =
       isRider && trip.riderId === user.id
         ? "rider"
         : isDriver && trip.driverId === user.id
           ? "driver"
           : "observer";
-    void run(async () => {
-      await service.act(trip, action, role);
+    return run(async () => {
+      await service.act(trip, action, role, reason);
     });
   }
 
-  async function book() {
+  async function book(pickupNote = "") {
     if (!from || !to || !preview) throw new Error("Chọn điểm đón và điểm đến có đường đi hợp lệ.");
     const trip = await service.book({
       pickup: from,
       destination: to,
       method: "Cod",
       paymentToken: null,
+      pickupNote,
     });
     setTrips((previous) => [trip, ...previous.filter((t) => t.id !== trip.id)]);
     setSelected(trip.id);
     window.location.hash = `ride/${trip.id}`;
     setPage(1);
+  }
+
+  function rebook(trip: Trip) {
+    if (active) {
+      setError("Hoàn tất hoặc hủy chuyến hiện tại trước khi đặt lại.");
+      return;
+    }
+    setFrom(trip.pickup);
+    setTo(trip.destination);
+    setSelected(null);
+    setSelecting("pickup");
+    window.location.hash = "ride";
+  }
+
+  function review(trip: Trip, rating: number, comment: string) {
+    return run(async () => {
+      await service.review(trip, rating, comment);
+      const screen = await service.screen(trip.id);
+      setSelectedDetail(screen.trip);
+    });
   }
 
   function toggleAvailability() {
@@ -249,6 +276,7 @@ export function useRides(user: RideUser, service: RideService) {
           else {
             setSelected(null);
             setFrom(point);
+            setSelecting("destination");
           }
         });
       },
@@ -301,6 +329,7 @@ export function useRides(user: RideUser, service: RideService) {
     assignedDriver,
     paymentUnavailable,
     preview,
+    estimate,
     routeLoading,
     routeError,
     selecting,
@@ -309,6 +338,11 @@ export function useRides(user: RideUser, service: RideService) {
     selectMap,
     page,
     setPage,
+    historyStatus,
+    filterHistory: (status: string) => {
+      setHistoryStatus(status);
+      setPage(1);
+    },
     history,
     setSelected,
     active,
@@ -317,6 +351,8 @@ export function useRides(user: RideUser, service: RideService) {
     run,
     act,
     book,
+    rebook,
+    review,
     toggleAvailability,
     controlSimulation,
     complete,

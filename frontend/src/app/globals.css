@@ -20,12 +20,14 @@ body {
 }
 button,
 input,
+textarea,
 select {
   font: inherit;
 }
 button,
 a,
 input,
+textarea,
 select {
   -webkit-tap-highlight-color: transparent;
 }
@@ -36,6 +38,7 @@ select {
 button,
 a,
 input,
+textarea,
 select,
 summary {
   touch-action: manipulation;
@@ -401,6 +404,20 @@ button:disabled {
   display: inline-block;
   width: calc(100% - 20px);
   vertical-align: top;
+}
+.ride-dialog {
+  margin: auto;
+  width: min(420px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 24px;
+  color: var(--ink);
+  background: white;
+}
+.ride-dialog::backdrop {
+  background: #183b3580;
 }
 .driver-card {
   display: flex;

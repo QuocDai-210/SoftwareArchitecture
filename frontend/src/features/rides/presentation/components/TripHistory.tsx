@@ -1,5 +1,6 @@
 import type { RidesViewModel } from "../useRides";
 import { labels, money } from "../format";
+import { terminal } from "../../domain/trip-rules";
 export function TripHistory({
   busy,
   loading,
@@ -9,10 +10,18 @@ export function TripHistory({
   run,
   reload,
   setSelected,
+  onRebook,
+  status,
+  onFilter,
 }: Pick<
   RidesViewModel,
   "busy" | "loading" | "trips" | "current" | "isDriver" | "run" | "reload"
-> & { setSelected: (id: string) => void }) {
+> & {
+  setSelected: (id: string) => void;
+  onRebook?: (trip: RidesViewModel["trips"][number]) => void;
+  status: string;
+  onFilter: (status: string) => void;
+}) {
   return (
     <section id="history" className="card overflow-hidden">
       <div className="p-5 border-b border-[#dcebe5] flex justify-between items-center">
@@ -25,6 +34,22 @@ export function TripHistory({
           Làm mới
         </button>
       </div>
+      <label className="block p-5 text-sm">
+        Lọc trạng thái chuyến
+        <select
+          className="field mt-2"
+          value={status}
+          disabled={busy}
+          onChange={(event) => onFilter(event.target.value)}
+        >
+          <option value="">Tất cả trạng thái</option>
+          {["Paid", "Cancelled", "Failed", "EnRoute", "PickedUp", "PaymentPending"].map((value) => (
+            <option key={value} value={value}>
+              {labels[value]}
+            </option>
+          ))}
+        </select>
+      </label>
       {loading ? (
         <p className="p-6 text-sm" role="status">
           Đang tải chuyến đi…
@@ -50,7 +75,11 @@ export function TripHistory({
                 <div className="flex justify-between gap-3">
                   <span className="font-bold text-sm">{t.destination.label}</span>
                   <span className="font-bold text-sm whitespace-nowrap">
-                    {t.quote ? money(t.quote.amount) : "Đang báo giá"}
+                    {t.quote
+                      ? money(t.quote.amount)
+                      : terminal.has(t.status)
+                        ? "Chưa có báo giá"
+                        : "Đang báo giá"}
                   </span>
                 </div>
                 <div className="flex justify-between flex-wrap gap-2 mt-2 text-xs text-[#62766b]">
@@ -58,6 +87,16 @@ export function TripHistory({
                   <span>{labels[t.status]}</span>
                 </div>
               </button>
+              {t.rating && <p className="px-5 text-sm">{t.rating}/5 sao</p>}
+              {onRebook && ["Paid", "Cancelled", "Failed"].includes(t.status) && (
+                <button
+                  className="btn btn-secondary mx-5 mb-4"
+                  disabled={busy}
+                  onClick={() => onRebook(t)}
+                >
+                  Đặt lại chuyến
+                </button>
+              )}
             </li>
           ))}
         </ul>

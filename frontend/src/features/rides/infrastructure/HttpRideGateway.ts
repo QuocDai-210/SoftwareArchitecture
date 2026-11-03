@@ -37,6 +37,9 @@ export class HttpRideGateway implements RideGateway {
   route(pickup: Point, destination: Point) {
     return api<RoadRoute>("maps/route", { pickup, destination });
   }
+  quote(pickup: Point, destination: Point) {
+    return api<NonNullable<Trip["quote"]>>("quote", { pickup, destination });
+  }
   search(text: string) {
     return api<Point[]>(`maps/search?text=${encodeURIComponent(text)}`);
   }
@@ -73,8 +76,10 @@ export class HttpRideGateway implements RideGateway {
   async suspendDriver(subject: string, suspended: boolean) {
     await api(`ops/drivers/${subject}/suspension`, { suspended }, "PUT");
   }
-  history(page: number) {
-    return api<Page<Trip>>(`trips/history?page=${page}`);
+  history(page: number, status?: string) {
+    return api<Page<Trip>>(
+      `trips/history?page=${page}${status ? `&status=${encodeURIComponent(status)}` : ""}`,
+    );
   }
   ledger(id: string) {
     return api<Journal[]>(`payments/${id}/ledger`);
@@ -117,11 +122,15 @@ export class HttpRideGateway implements RideGateway {
   book(booking: Booking, key: string) {
     return api<Trip>("trips", booking, "POST", key);
   }
-  async act(trip: Trip, action: TripAction) {
+  async act(trip: Trip, action: TripAction, reason?: string) {
     await api(`trips/${trip.id}/${action}`, {
       expectedVersion: trip.version,
       ...(action === "confirm-quote" ? { quoteId: trip.quote?.id } : {}),
+      ...(action === "cancel" ? { reason } : {}),
     });
+  }
+  async review(trip: Trip, rating: number, comment: string) {
+    await api(`trips/${trip.id}/review`, { expectedVersion: trip.version, rating, comment });
   }
   async location(latitude: number, longitude: number) {
     await api("drivers/me/location", { latitude, longitude }, "PUT");

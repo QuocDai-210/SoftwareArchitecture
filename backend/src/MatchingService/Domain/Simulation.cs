@@ -15,6 +15,7 @@ public sealed class Simulation
     public bool Paused { get; private set; }
     public long Revision { get; private set; }
     public bool Arrived => Progress >= 1;
+    public decimal RemainingMinutes => Route.DurationMinutes * (1 - (decimal)Progress);
     public Point CurrentPosition => Position();
     public DateTimeOffset UpdatedAt { get; private set; } = DateTimeOffset.UtcNow;
 

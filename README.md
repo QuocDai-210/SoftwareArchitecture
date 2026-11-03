@@ -42,9 +42,16 @@ Mở http://localhost:3000. Dùng các hồ sơ/cửa sổ trình duyệt riêng
 
 User tìm địa chỉ, dùng định vị hoặc chạm bản đồ để chọn điểm đón/đến. Tuyến đi,
 khoảng cách và thời gian lấy từ Geoapify; xác nhận giá rồi Driver nhận chuyến.
+SwiftBike dùng tuyến `motorcycle`, hiển thị giá tham khảo trước khi tìm xe. User có
+thể đổi chiều tuyến, nhập liên hệ và ghi chú điểm đón. Thông tin liên hệ khách chỉ
+được trả cho chuyến đã nhận và đang phục vụ; số điện thoại khách ẩn sau trả khách.
 Driver bấm “Đang đến đón”, chờ xe đến nơi, xác nhận đón và trả khách.
 Xe di chuyển giả lập trên đường thật; Driver/Ops chỉnh tốc độ 1×/5×/10×/20×,
 tạm dừng và tiếp tục. User chỉ theo dõi xe của chuyến mình.
+ETA hiển thị theo từng chặng. User và Driver hủy trước khi đón phải xác nhận, ghi lý
+do; hệ thống giải phóng reservation. Lịch sử có lọc trạng thái và đặt lại địa chỉ
+với giá mới. User đánh giá 1–5 sao sau trả khách, không cần chờ thanh toán; gửi lặp
+cùng nội dung không tạo đánh giá thứ hai.
 Sau trả khách, khoản COD ở trạng thái chờ thu. Driver tích xác nhận đã nhận đủ tiền,
 bấm “Xác nhận đã thu tiền”; Payment ghi sổ rồi Trip hoàn tất và giải phóng Driver.
 Ops xem tiền mặt, xác nhận thay có lý do hoặc ghi nhận hoàn tiền đã trả thực tế.
