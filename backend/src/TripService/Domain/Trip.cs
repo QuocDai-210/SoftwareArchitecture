@@ -85,6 +85,45 @@ public sealed class Trip
         ReservationId = Guid.NewGuid();
     }
 
+    public void BeginWalletHold(Guid quoteId, DateTimeOffset now)
+    {
+        if (Method != PaymentMethod.Wallet || Status != TripStatus.AwaitingRiderConfirmation)
+            throw new RuleException("Chuyến không chờ giữ tiền ví.");
+        if (Quote is null || Quote.Id != quoteId || Quote.ExpiresAt <= now)
+            throw new RuleException("Báo giá đã hết hạn hoặc thay đổi.");
+        Move(TripStatus.WalletHoldPending);
+    }
+
+    public void WalletHoldSucceeded(Guid quoteId, DateTimeOffset now)
+    {
+        if (
+            Status != TripStatus.WalletHoldPending
+            || Quote?.Id != quoteId
+            || Quote.ExpiresAt <= now
+        )
+            throw new RuleException("Báo giá không còn hiệu lực để giữ tiền.");
+        Move(TripStatus.ReservingDriver);
+        ReservationId = Guid.NewGuid();
+    }
+
+    public void WalletHoldFailed(string reason)
+    {
+        if (Status == TripStatus.WalletHoldPending)
+            Move(TripStatus.PaymentReview, reason);
+    }
+
+    public void WalletHoldReleased()
+    {
+        if (Status == TripStatus.PaymentReview)
+            Move(
+                TripStatus.AwaitingRiderConfirmation,
+                Reason ?? "Không thể giữ tiền ví. Kiểm tra số dư rồi xác nhận lại giá."
+            );
+    }
+
+    public void WalletHoldCancelled() =>
+        Move(TripStatus.Cancelled, "Người đặt xe hủy chuyến khi đang giữ tiền ví.");
+
     public void RejectDriver(int k = 3)
     {
         if (Status != TripStatus.AwaitingDriverAcceptance)

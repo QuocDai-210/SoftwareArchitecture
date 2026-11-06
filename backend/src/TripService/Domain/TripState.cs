@@ -29,12 +29,19 @@ public abstract class TripState
         ),
         [TripStatus.AwaitingRiderConfirmation] = new Allowed(
             TripStatus.ReservingDriver,
+            TripStatus.WalletHoldPending,
             TripStatus.Cancelled,
             TripStatus.Requested
+        ),
+        [TripStatus.WalletHoldPending] = new Allowed(
+            TripStatus.ReservingDriver,
+            TripStatus.PaymentReview,
+            TripStatus.Cancelled
         ),
         [TripStatus.ReservingDriver] = new Allowed(
             TripStatus.AwaitingDriverAcceptance,
             TripStatus.Requested,
+            TripStatus.PaymentReview,
             TripStatus.Failed
         ),
         [TripStatus.AwaitingDriverAcceptance] = new Allowed(
@@ -53,7 +60,12 @@ public abstract class TripState
         [TripStatus.PickedUp] = new Allowed(TripStatus.DroppedOff),
         [TripStatus.DroppedOff] = new Allowed(TripStatus.PaymentPending),
         [TripStatus.PaymentPending] = new Allowed(TripStatus.Paid, TripStatus.PaymentReview),
-        [TripStatus.PaymentReview] = new Allowed(TripStatus.PaymentPending, TripStatus.Paid),
+        [TripStatus.PaymentReview] = new Allowed(
+            TripStatus.PaymentPending,
+            TripStatus.Paid,
+            TripStatus.Requested,
+            TripStatus.AwaitingRiderConfirmation
+        ),
         [TripStatus.Paid] = new Allowed(),
         [TripStatus.Cancelled] = new Allowed(),
         [TripStatus.Failed] = new Allowed(),

@@ -71,7 +71,7 @@ for project in sorted(projects):
     for source in project.parent.rglob("*.cs"):
         if {"bin", "obj"} & set(source.parts):
             continue
-        text = re.sub(r"(?m)^\s*//.*$", "", source.read_text())
+        text = re.sub(r"(?m)^\s*//.*$", "", source.read_text(encoding="utf-8"))
         if inner:
             require(
                 not re.search(
@@ -123,7 +123,7 @@ for source in sorted(FRONT.rglob("*")):
     if source.suffix not in (".ts", ".tsx"):
         continue
     frontend_count += 1
-    text = re.sub(r"(?m)^\s*//.*$", "", source.read_text())
+    text = re.sub(r"(?m)^\s*//.*$", "", source.read_text(encoding="utf-8"))
     current = layer(source)
     imports = re.findall(r"(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)[\'\"]([^\'\"]+)[\'\"]", text)
     for name in imports:

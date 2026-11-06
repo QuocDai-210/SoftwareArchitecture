@@ -21,11 +21,15 @@ export function RideDashboard({
   logout,
   service,
   mapKey,
+  wallet,
+  withdrawalOps,
 }: {
   user: RideUser;
   logout: ReactNode;
   service: RideService;
   mapKey: string;
+  wallet: ReactNode;
+  withdrawalOps: ReactNode;
 }) {
   const model = useRides(user, service);
   const { isDriver, isRider, isOps, driver, error, busy, active, current, reload, run, act } =
@@ -39,9 +43,11 @@ export function RideDashboard({
     { id: "ride", label: isOps ? "Bản đồ" : isDriver ? "Nhận chuyến" : "Đặt xe" },
     { id: "history", label: "Lịch sử chuyến" },
     { id: "payments", label: "Tiền mặt" },
+    ...(!isOps ? [{ id: "wallet" as const, label: "Ví SwiftRide" }] : []),
     ...(isOps
       ? [
           { id: "operations" as const, label: "Quản lý tài xế" },
+          { id: "withdrawals" as const, label: "Duyệt rút tiền" },
           { id: "overview" as const, label: "Tổng quan" },
         ]
       : []),
@@ -56,7 +62,8 @@ export function RideDashboard({
         "history",
         "payments",
         "profile",
-        ...(isOps ? ["operations" as const, "overview" as const] : []),
+        ...(!isOps ? ["wallet" as const] : []),
+        ...(isOps ? ["operations" as const, "withdrawals" as const, "overview" as const] : []),
       ];
       if (known.includes(value as View)) setView(value as View);
     }
@@ -285,9 +292,11 @@ export function RideDashboard({
               <p className="muted">
                 {view === "payments"
                   ? "Thu và hoàn tiền rõ ràng, từng hành trình."
-                  : view === "history"
-                    ? "Xem lại hành trình và tiếp tục chuyến đang diễn ra."
-                    : "Thông tin rõ ràng. Thao tác trong tầm tay."}
+                  : view === "wallet"
+                    ? "Theo dõi số dư, nạp tiền và lịch sử ví của bạn."
+                    : view === "history"
+                      ? "Xem lại hành trình và tiếp tục chuyến đang diễn ra."
+                      : "Thông tin rõ ràng. Thao tác trong tầm tay."}
               </p>
             </header>
             {(view === "history" || view === "overview") && (
@@ -356,6 +365,7 @@ export function RideDashboard({
               <OpsPanel service={service} run={run} busy={busy} summaryOnly />
             )}
             {view === "operations" && isOps && <OpsPanel service={service} run={run} busy={busy} />}
+            {view === "withdrawals" && isOps && withdrawalOps}
             {view === "payments" && (
               <PaymentPanel
                 service={service}
@@ -366,6 +376,7 @@ export function RideDashboard({
                 onTrip={openRide}
               />
             )}
+            {view === "wallet" && !isOps && wallet}
             {view === "profile" && (
               <>
                 <AccountPanel service={service} run={run} busy={busy} initialName={user.name} />

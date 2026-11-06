@@ -13,7 +13,7 @@ static class ApplicationChecks
         IPaymentMethod[] methods =
         [
             new CardMethod(provider),
-            new WalletMethod(new MemoryWallet(wallet)),
+            new WalletMethod(new MemoryWalletAccounts(wallet)),
         ];
         var factory = new PaymentMethodFactory(methods);
         foreach (var method in methods)
@@ -196,13 +196,28 @@ static class ApplicationChecks
         }
     }
 
-    private sealed class MemoryWallet(Wallet wallet) : IWalletStore
+    private sealed class MemoryWalletAccounts(Wallet wallet) : IWalletAccounts
     {
-        public Task<Wallet> GetOrCreateLocked(string riderId, CancellationToken ct) =>
-            Task.FromResult(wallet);
+        private readonly WalletAccount _account = new() { OwnerId = wallet.RiderId };
 
-        public Task<Wallet?> GetLocked(string riderId, CancellationToken ct) =>
-            Task.FromResult<Wallet?>(wallet.RiderId == riderId ? wallet : null);
+        public Task Lock(string owner, CancellationToken ct) => Task.CompletedTask;
+        public Task<WalletAccount?> Find(string owner, CancellationToken ct) =>
+            Task.FromResult<WalletAccount?>(_account.OwnerId == owner ? _account : null);
+        public Task<WalletActivity?> FindActivity(string reference, CancellationToken ct) =>
+            Task.FromResult<WalletActivity?>(null);
+        public Task<PageResult<WalletActivity>> History(string owner, int page, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task<PageResult<SandboxView>> TopUps(string owner, int page, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task HoldTrip(Guid tripId, string riderId, long amount, CancellationToken ct) =>
+            Task.CompletedTask;
+        public Task ReleaseTrip(Guid tripId, string riderId, long amount, CancellationToken ct) =>
+            Task.CompletedTask;
+        public Task SettleTrip(Guid tripId, string riderId, string driverId, long amount, CancellationToken ct) =>
+            Task.CompletedTask;
+        public void Add(WalletAccount account) { }
+        public void Add(WalletActivity activity) { }
+        public void Add(Journal journal) { }
     }
 
     private sealed class MemoryProvider : ICardProvider

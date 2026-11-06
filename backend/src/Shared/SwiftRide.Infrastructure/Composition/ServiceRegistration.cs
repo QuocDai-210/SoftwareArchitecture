@@ -126,10 +126,16 @@ public static class ServiceRegistration
             .ConfigureResource(r => r.AddService(service))
             .WithTracing(t =>
                 t.AddSource("SwiftRide", "MassTransit")
-                    .AddAspNetCoreInstrumentation()
+                    .AddAspNetCoreInstrumentation(o =>
+                        o.Filter = context =>
+                            !context.Request.Path.StartsWithSegments("/payments/vnpay")
+                    )
                     .AddHttpClientInstrumentation(o =>
                         o.FilterHttpRequestMessage = request =>
-                            request.RequestUri?.Host != "api.geoapify.com"
+                            request.RequestUri?.Host
+                                is not "api.geoapify.com"
+                                    and not "sandbox.vnpayment.vn"
+                            && request.RequestUri?.AbsolutePath != "/payments/vnpay/ipn"
                     )
                     .AddOtlpExporter()
             )

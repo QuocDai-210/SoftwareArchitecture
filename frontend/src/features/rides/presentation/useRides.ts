@@ -222,12 +222,12 @@ export function useRides(user: RideUser, service: RideService) {
     });
   }
 
-  async function book(pickupNote = "") {
+  async function book(pickupNote = "", method: "Cod" | "Wallet" = "Cod") {
     if (!from || !to || !preview) throw new Error("Chọn điểm đón và điểm đến có đường đi hợp lệ.");
     const trip = await service.book({
       pickup: from,
       destination: to,
-      method: "Cod",
+      method,
       paymentToken: null,
       pickupNote,
     });

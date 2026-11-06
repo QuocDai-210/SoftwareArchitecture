@@ -12,7 +12,28 @@ public static class WorkflowEvents
             trip.PaymentToken,
             trip.CorrelationId,
             trip.Version,
-            trip.DriverId
+            trip.DriverId,
+            trip.Method == PaymentMethod.Wallet
+        );
+
+    public static WalletTripHoldRequested ReserveWallet(Trip trip) =>
+        new(
+            Guid.NewGuid(),
+            trip.Id,
+            trip.RiderId,
+            checked((long)trip.Quote!.Amount),
+            trip.Quote.Id,
+            trip.Version,
+            trip.CorrelationId
+        );
+
+    public static WalletTripHoldReleaseRequested ReleaseWallet(Trip trip) =>
+        new(
+            Guid.NewGuid(),
+            trip.Id,
+            trip.RiderId,
+            checked((long)trip.Quote!.Amount),
+            trip.CorrelationId
         );
 
     public static Task Release(Trip trip, IEventPublisher bus, CancellationToken ct) =>

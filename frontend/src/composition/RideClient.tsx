@@ -4,6 +4,8 @@ import { RideService } from "@/features/rides/application/RideService";
 import { HttpRideGateway } from "@/features/rides/infrastructure/HttpRideGateway";
 import { RideDashboard } from "@/features/rides/presentation/RideDashboard";
 import type { RideUser } from "@/features/rides/presentation/useRides";
+import WalletClient from "./WalletClient";
+import WalletWithdrawalOpsClient from "./WalletWithdrawalOpsClient";
 export default function RideClient({
   user,
   logout,
@@ -14,5 +16,14 @@ export default function RideClient({
   mapKey: string;
 }) {
   const [service] = useState(() => new RideService(new HttpRideGateway()));
-  return <RideDashboard user={user} logout={logout} service={service} mapKey={mapKey} />;
+  return (
+    <RideDashboard
+      user={user}
+      logout={logout}
+      service={service}
+      mapKey={mapKey}
+      wallet={<WalletClient />}
+      withdrawalOps={<WalletWithdrawalOpsClient />}
+    />
+  );
 }

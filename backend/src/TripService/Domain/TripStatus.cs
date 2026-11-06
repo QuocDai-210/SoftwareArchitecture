@@ -4,6 +4,7 @@ public enum TripStatus
 {
     Requested,
     AwaitingRiderConfirmation,
+    WalletHoldPending,
     ReservingDriver,
     AwaitingDriverAcceptance,
     AcceptingDriver,

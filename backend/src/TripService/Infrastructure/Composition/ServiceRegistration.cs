@@ -27,7 +27,11 @@ public static class ServiceRegistration
             x.AddConsumer<SettledConsumer>();
             x.AddConsumer<FailedConsumer>();
             x.AddConsumer<PaymentFaultConsumer>();
+            x.AddConsumer<WalletHoldSucceededConsumer>();
+            x.AddConsumer<WalletHoldFailedConsumer>();
         });
+        builder.Services.AddScoped<WalletHoldSucceededConsumer>();
+        builder.Services.AddScoped<WalletHoldFailedConsumer>();
         builder.Services.AddHostedService<TripWorkflowWorker>();
     }
 
