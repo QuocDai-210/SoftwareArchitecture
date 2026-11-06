@@ -39,6 +39,16 @@ export function TripDetails({
       <p className="sr-only" role="status" aria-live="polite">
         {labels[t.status]}
       </p>
+      {t.status === "WalletHoldPending" && (
+        <p className="my-3 text-sm" role="status">
+          Đang giữ tiền trong ví để tìm tài xế…
+        </p>
+      )}
+      {t.method === "Wallet" && t.status === "AwaitingRiderConfirmation" && t.reason && (
+        <p className="my-3 text-sm text-red-800" role="alert">
+          {t.reason}
+        </p>
+      )}
       <details className="trip-route text-sm">
         <summary className="cursor-pointer min-h-11">
           <span>
@@ -127,7 +137,12 @@ export function TripDetails({
           {!hasCashReceipt && (
             <>
               <p className="text-xs text-[#62766b]">
-                Giá chuyến đi · {t.method === "Cod" ? "Tiền mặt · COD" : t.method}
+                Giá chuyến đi ·{" "}
+                {t.method === "Cod"
+                  ? "Tiền mặt · COD"
+                  : t.method === "Wallet"
+                    ? "Ví SwiftRide"
+                    : t.method}
               </p>
               <p className="text-2xl font-bold my-2">{money(t.quote.amount)}</p>
             </>

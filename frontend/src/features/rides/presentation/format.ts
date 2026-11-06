@@ -1,6 +1,7 @@
 export const labels: Record<string, string> = {
   Requested: "Đang tìm tài xế",
   AwaitingRiderConfirmation: "Chờ xác nhận giá",
+  WalletHoldPending: "Đang giữ tiền ví",
   ReservingDriver: "Đang giữ chỗ",
   AwaitingDriverAcceptance: "Chờ tài xế nhận",
   AcceptingDriver: "Đang xác nhận tài xế",

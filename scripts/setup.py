@@ -1,12 +1,35 @@
 #!/usr/bin/env python3
 """Create local secrets and append missing settings without replacing existing values."""
 
-import fcntl
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import secrets
 import sys
 import tempfile
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
+
+
+@contextmanager
+def locked(output):
+    output.seek(0)
+    if os.name == "nt":
+        msvcrt.locking(output.fileno(), msvcrt.LK_LOCK, 1)
+    else:
+        fcntl.flock(output, fcntl.LOCK_EX)
+    try:
+        yield
+    finally:
+        output.flush()
+        output.seek(0)
+        if os.name == "nt":
+            msvcrt.locking(output.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            fcntl.flock(output, fcntl.LOCK_UN)
 
 GENERATED = {
     "SQL_SA_PASSWORD",
@@ -30,14 +53,13 @@ GENERATED = {
 
 def setup(root):
     path = root / ".env"
-    with path.open("a+", encoding="utf-8") as output:
+    with path.open("a+", encoding="utf-8") as output, locked(output):
         os.chmod(path, 0o600)
-        fcntl.flock(output, fcntl.LOCK_EX)
         output.seek(0)
         original = output.read()
         keys = {line.split("=", 1)[0] for line in original.splitlines() if "=" in line}
         additions = []
-        for line in (root / ".env.example").read_text().splitlines():
+        for line in (root / ".env.example").read_text(encoding="utf-8").splitlines():
             if not line or line.startswith("#"):
                 continue
             key, value = line.split("=", 1)
@@ -58,18 +80,21 @@ def setup(root):
 def check():
     with tempfile.TemporaryDirectory(prefix="swiftride-setup-") as directory:
         root = Path(directory)
-        (root / ".env.example").write_text("OPS_CLIENT_SECRET=\nGEOAPIFY_API_KEY=\n")
-        (root / ".env").write_text("# retained\nEXISTING=keep")
+        (root / ".env.example").write_text(
+            "OPS_CLIENT_SECRET=\nGEOAPIFY_API_KEY=\n", encoding="utf-8"
+        )
+        (root / ".env").write_text("# retained\nEXISTING=keep", encoding="utf-8")
         assert setup(root) == 2
-        result = (root / ".env").read_text()
+        result = (root / ".env").read_text(encoding="utf-8")
         assert result.startswith("# retained\nEXISTING=keep\n")
         assert "OPS_CLIENT_SECRET=Aa1!" in result
         assert result.endswith("GEOAPIFY_API_KEY=\n")
         assert setup(root) == 0
-        assert (root / ".env").read_text() == result
-        assert (root / ".env").stat().st_mode & 0o777 == 0o600
+        assert (root / ".env").read_text(encoding="utf-8") == result
+        if os.name != "nt":
+            assert (root / ".env").stat().st_mode & 0o777 == 0o600
     print(
-        "Setup checks passed: existing values retained, external keys left empty, secrets mode 0600."
+        "Setup checks passed: existing values retained and external keys left empty."
     )
 
 

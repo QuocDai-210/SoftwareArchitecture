@@ -19,6 +19,7 @@ export function BookingForm({
   const [contact, setContact] = useState<{ name: string; phone: string } | null>(null);
   const [contactError, setContactError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState<"Cod" | "Wallet">("Cod");
   useEffect(() => {
     let mounted = true;
     setContactError("");
@@ -47,7 +48,7 @@ export function BookingForm({
           void model.run(async () => {
             if (name !== contact?.name || phone !== contact?.phone)
               await service.saveProfile(name, phone);
-            await model.book(note);
+            await model.book(note, paymentMethod);
           });
         }}
         className="space-y-4"
@@ -172,6 +173,18 @@ export function BookingForm({
             </button>
           </p>
         )}
+        <label className="block text-sm font-bold">
+          Phương thức thanh toán
+          <select
+            className="field mt-2"
+            value={paymentMethod}
+            onChange={event => setPaymentMethod(event.target.value as "Cod" | "Wallet")}
+            disabled={disabled}
+          >
+            <option value="Cod">Tiền mặt · COD</option>
+            <option value="Wallet">Ví SwiftRide</option>
+          </select>
+        </label>
         <div className="booking-summary">
           <div>
             <strong>SwiftBike · Xe máy</strong>
@@ -180,7 +193,9 @@ export function BookingForm({
               <p className="text-xl font-bold mt-1">{money(model.estimate.amount)}</p>
             )}
           </div>
-          <span className="badge">Tiền mặt · COD</span>
+          <span className="badge">
+            {paymentMethod === "Cod" ? "Tiền mặt · COD" : "Ví SwiftRide"}
+          </span>
         </div>
         <button
           className="btn w-full"

@@ -33,9 +33,9 @@ public sealed class TripCommands(
             throw new RuleException("Điểm đón và điểm đến phải khác nhau.", ErrorKind.Validation);
         if (!Enum.IsDefined(request.Method))
             throw new RuleException("Phương thức thanh toán không hợp lệ.", ErrorKind.Validation);
-        if (request.Method != PaymentMethod.Cod || request.PaymentToken is not null)
+        if (request.Method == PaymentMethod.Card || request.PaymentToken is not null)
             throw new RuleException(
-                "Chuyến mới chỉ hỗ trợ thanh toán tiền mặt.",
+                "Chuyến mới chỉ hỗ trợ thanh toán bằng ví hoặc tiền mặt.",
                 ErrorKind.Validation
             );
         if ((request.PickupNote?.Length ?? 0) > 240)
@@ -63,12 +63,21 @@ public sealed class TripCommands(
             );
         if (
             (await reader.List(rider, false, ct)).Any(x =>
-                x.Method == PaymentMethod.Cod
-                && x.Status is TripStatus.PaymentPending or TripStatus.PaymentReview
+                x.Status
+                    is TripStatus.AwaitingRiderConfirmation
+                        or TripStatus.WalletHoldPending
+                        or TripStatus.ReservingDriver
+                        or TripStatus.AwaitingDriverAcceptance
+                        or TripStatus.AcceptingDriver
+                        or TripStatus.DriverAccepted
+                        or TripStatus.EnRoute
+                        or TripStatus.PickedUp
+                        or TripStatus.PaymentPending
+                        or TripStatus.PaymentReview
             )
         )
             throw new RuleException(
-                "Bạn còn chuyến chờ xử lý tiền mặt. Hoàn tất trước khi đặt chuyến mới."
+                "Bạn còn chuyến đang chờ thanh toán. Hoàn tất trước khi đặt chuyến mới."
             );
         var trip = new Trip
         {
@@ -103,6 +112,13 @@ public sealed class TripCommands(
         var trip = await reader.Get(id, ct);
         TripAccess.Rider(trip, actor);
         trip.CheckVersion(request.ExpectedVersion);
+        if (trip.Method == PaymentMethod.Wallet)
+        {
+            trip.BeginWalletHold(request.QuoteId, DateTimeOffset.UtcNow);
+            await writer.Save(ct);
+            await bus.Publish(WorkflowEvents.ReserveWallet(trip), trip.CorrelationId, ct);
+            return TripView.From(trip);
+        }
         trip.ConfirmQuote(request.QuoteId, DateTimeOffset.UtcNow);
         await writer.Save(ct);
         return TripView.From(trip);
@@ -116,6 +132,12 @@ public sealed class TripCommands(
     )
     {
         var trip = await reader.Get(id, ct);
+        if (actor.IsRider && trip.Status == TripStatus.WalletHoldPending)
+        {
+            throw new RuleException(
+                "Đang xác nhận khoản giữ ví. Vui lòng đợi kết quả rồi thử lại."
+            );
+        }
         if (actor.IsRider)
             TripAccess.Rider(trip, actor);
         else
@@ -140,6 +162,8 @@ public sealed class TripCommands(
             TripStatus.Cancelled,
             $"{(actor.IsRider ? "Người đặt xe" : "Tài xế")} hủy chuyến. {reason}".Trim()
         );
+        if (trip.Method == PaymentMethod.Wallet)
+            await bus.Publish(WorkflowEvents.ReleaseWallet(trip), trip.CorrelationId, ct);
         await WorkflowEvents.Release(trip, bus, ct);
         await writer.Save(ct);
         metrics.Outcome("cancelled");
@@ -171,6 +195,8 @@ public sealed class TripCommands(
         TripAccess.Driver(trip, actor);
         trip.CheckVersion(request.ExpectedVersion);
         trip.RejectDriver();
+        if (trip.Method == PaymentMethod.Wallet)
+            await bus.Publish(WorkflowEvents.ReleaseWallet(trip), trip.CorrelationId, ct);
         await WorkflowEvents.Release(trip, bus, ct);
         await writer.Save(ct);
         return TripView.From(trip);

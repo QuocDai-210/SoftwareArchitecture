@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def settings():
     return dict(
         line.split("=", 1)
-        for line in (ROOT / ".env").read_text().splitlines()
+        for line in (ROOT / ".env").read_text(encoding="utf-8").splitlines()
         if line and not line.startswith("#") and "=" in line
     )
 
@@ -46,7 +46,7 @@ def synchronize():
             data = response.read()
             return json.loads(data) if data else None
 
-    source = json.loads((ROOT / "deploy/keycloak/swiftride-realm.json").read_text())
+    source = json.loads((ROOT / "deploy/keycloak/swiftride-realm.json").read_text(encoding="utf-8"))
     realm = api("GET", "")
     for key in (
         "displayName",

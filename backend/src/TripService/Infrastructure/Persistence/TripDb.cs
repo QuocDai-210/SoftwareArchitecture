@@ -45,7 +45,7 @@ public sealed class TripDb(DbContextOptions<TripDb> options) : DbContext(options
         t.HasIndex(x => x.RiderId)
             .IsUnique()
             .HasFilter(
-                "\"Status\" IN ('Requested','AwaitingRiderConfirmation','ReservingDriver','AwaitingDriverAcceptance','AcceptingDriver','DriverAccepted','EnRoute','PickedUp')"
+                "\"Status\" IN ('Requested','AwaitingRiderConfirmation','WalletHoldPending','ReservingDriver','AwaitingDriverAcceptance','AcceptingDriver','DriverAccepted','EnRoute','PickedUp')"
             );
     }
 }

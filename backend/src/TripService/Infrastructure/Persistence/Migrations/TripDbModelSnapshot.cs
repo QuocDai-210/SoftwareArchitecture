@@ -312,7 +312,7 @@ namespace SwiftRide.Trips.Infrastructure
 
                     b.HasIndex("RiderId")
                         .IsUnique()
-                        .HasFilter("\"Status\" IN ('Requested','AwaitingRiderConfirmation','ReservingDriver','AwaitingDriverAcceptance','AcceptingDriver','DriverAccepted','EnRoute','PickedUp')");
+                        .HasFilter("\"Status\" IN ('Requested','AwaitingRiderConfirmation','WalletHoldPending','ReservingDriver','AwaitingDriverAcceptance','AcceptingDriver','DriverAccepted','EnRoute','PickedUp')");
 
                     b.HasIndex("RiderId", "IdempotencyKey")
                         .IsUnique();

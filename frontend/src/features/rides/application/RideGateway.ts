@@ -18,7 +18,7 @@ import type { TripAction } from "../domain/trip-rules";
 export type Booking = {
   pickup: Point;
   destination: Point;
-  method: "Cod";
+  method: "Cod" | "Wallet";
   paymentToken: string | null;
   pickupNote?: string;
 };

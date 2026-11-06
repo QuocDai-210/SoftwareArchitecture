@@ -22,6 +22,104 @@ namespace SwiftRide.Payments.Infrastructure
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("SwiftRide.Payments.Domain.SandboxPayment", b =>
+            {
+                b.Property<string>("Reference").HasMaxLength(32).HasColumnType("character varying(32)");
+                b.Property<string>("OwnerId").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
+                b.Property<string>("RequestKey").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
+                b.Property<long>("Amount").HasColumnType("bigint");
+                b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
+                b.Property<string>("State").IsRequired().HasMaxLength(20).HasColumnType("character varying(20)");
+                b.Property<string>("ProviderTransaction").HasMaxLength(15).HasColumnType("character varying(15)");
+                b.Property<DateTimeOffset?>("ConfirmedAt").HasColumnType("timestamp with time zone");
+                b.Property<DateTimeOffset>("NextCheckAt").HasColumnType("timestamp with time zone");
+                b.Property<int>("CheckCount").HasColumnType("integer");
+                b.Property<DateTimeOffset?>("NextQueryAt").HasColumnType("timestamp with time zone");
+                b.Property<DateTimeOffset?>("LastIpnAt").HasColumnType("timestamp with time zone");
+                b.Property<string>("Purpose").IsRequired().ValueGeneratedOnAdd().HasMaxLength(20).HasColumnType("character varying(20)").HasDefaultValue("Sandbox");
+                b.Property<DateTimeOffset?>("WalletCreditedAt").HasColumnType("timestamp with time zone");
+                b.HasKey("Reference");
+                b.HasIndex("OwnerId", "RequestKey").IsUnique();
+                b.HasIndex("ProviderTransaction").IsUnique();
+                b.HasIndex("State", "NextCheckAt");
+                b.ToTable("SandboxPayments", t => t.HasCheckConstraint(
+                    "CK_SandboxPayment_Amount", "\"Amount\" BETWEEN 10000 AND 5000000"
+                ));
+            });
+
+            modelBuilder.Entity("SwiftRide.Payments.Domain.WalletAccount", b =>
+            {
+                b.Property<string>("OwnerId").HasMaxLength(100).HasColumnType("character varying(100)");
+                b.Property<long>("Available").IsConcurrencyToken().HasColumnType("bigint");
+                b.Property<long>("Held").IsConcurrencyToken().HasColumnType("bigint");
+                b.Property<long>("PendingEarnings").IsConcurrencyToken().HasColumnType("bigint");
+                b.HasKey("OwnerId");
+                b.ToTable("WalletAccounts", t => t.HasCheckConstraint("CK_WalletAccount_Nonnegative",
+                    "\"Available\" >= 0 AND \"Held\" >= 0 AND \"PendingEarnings\" >= 0"));
+            });
+
+            modelBuilder.Entity("SwiftRide.Payments.Domain.WalletActivity", b =>
+            {
+                b.Property<string>("Reference").HasMaxLength(100).HasColumnType("character varying(100)");
+                b.Property<string>("OwnerId").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
+                b.Property<Guid>("JournalId").HasColumnType("uuid");
+                b.Property<string>("Kind").IsRequired().HasMaxLength(30).HasColumnType("character varying(30)");
+                b.Property<long>("Amount").HasColumnType("bigint");
+                b.Property<long>("AvailableAfter").HasColumnType("bigint");
+                b.Property<long>("HeldAfter").HasColumnType("bigint");
+                b.Property<long>("PendingAfter").HasColumnType("bigint");
+                b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                b.HasKey("Reference");
+                b.HasIndex("OwnerId", "CreatedAt");
+                b.HasIndex("JournalId").IsUnique();
+                b.ToTable("WalletActivities", t => t.HasCheckConstraint("CK_WalletActivity_Amounts",
+                    "\"Amount\" > 0 AND \"AvailableAfter\" >= 0 AND \"HeldAfter\" >= 0 AND \"PendingAfter\" >= 0"));
+                b.HasOne("SwiftRide.Payments.Domain.WalletAccount", null).WithMany()
+                    .HasForeignKey("OwnerId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                b.HasOne("SwiftRide.Payments.Domain.Journal", null).WithMany()
+                    .HasForeignKey("JournalId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+            });
+
+            modelBuilder.Entity("SwiftRide.Payments.Domain.WalletWithdrawal", b =>
+            {
+                b.Property<Guid>("Id").HasColumnType("uuid");
+                b.Property<string>("OwnerId")
+                    .IsRequired()
+                    .HasMaxLength(100)
+                    .HasColumnType("character varying(100)");
+                b.Property<string>("RequestKey")
+                    .IsRequired()
+                    .HasMaxLength(100)
+                    .HasColumnType("character varying(100)");
+                b.Property<string>("RequestHash")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)");
+                b.Property<long>("Amount").HasColumnType("bigint");
+                b.Property<string>("State")
+                    .IsRequired()
+                    .IsConcurrencyToken()
+                    .HasMaxLength(20)
+                    .HasColumnType("character varying(20)");
+                b.Property<DateTimeOffset>("RequestedAt").HasColumnType("timestamp with time zone");
+                b.Property<DateTimeOffset?>("ReviewedAt").HasColumnType("timestamp with time zone");
+                b.Property<string>("ReviewedBy")
+                    .HasMaxLength(100)
+                    .HasColumnType("character varying(100)");
+                b.Property<string>("DecisionReason")
+                    .HasMaxLength(200)
+                    .HasColumnType("character varying(200)");
+                b.HasKey("Id");
+                b.HasIndex("OwnerId", "RequestKey").IsUnique();
+                b.HasIndex("State", "RequestedAt");
+                b.ToTable("WalletWithdrawals", t => t.HasCheckConstraint(
+                    "CK_WalletWithdrawal_Amount", "\"Amount\" BETWEEN 10000 AND 5000000"
+                ));
+                b.HasOne("SwiftRide.Payments.Domain.WalletAccount", null).WithMany()
+                    .HasForeignKey("OwnerId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+            });
+
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.InboxState", b =>
                 {
                     b.Property<long>("Id")

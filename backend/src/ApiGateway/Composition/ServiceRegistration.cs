@@ -95,6 +95,13 @@ public static class ServiceRegistration
                 ClusterId = "payment",
                 Match = new() { Path = "/wallets/{**rest}" },
             },
+            new()
+            {
+                RouteId = "ops-wallet-withdrawals",
+                ClusterId = "payment",
+                Order = -1,
+                Match = new() { Path = "/ops/wallet-withdrawals/{**rest}" },
+            },
         };
         foreach (
             var (prefix, cluster) in new[]
@@ -145,7 +152,10 @@ public static class ServiceRegistration
                 {
                     ["primary"] = new() { Address = url },
                 },
-                HttpRequest = new() { ActivityTimeout = TimeSpan.FromSeconds(20) },
+                HttpRequest = new()
+                {
+                    ActivityTimeout = TimeSpan.FromSeconds(20)
+                },
             };
         builder
             .Services.AddReverseProxy()

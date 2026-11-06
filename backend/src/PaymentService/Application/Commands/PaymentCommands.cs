@@ -1,6 +1,7 @@
 using System.Text.Json;
 using SwiftRide.Application.Serialization;
 using SwiftRide.Payments.Application.Ports;
+using SwiftRide.Payments.Application.Wallets;
 
 namespace SwiftRide.Payments.Application;
 
@@ -9,6 +10,7 @@ public sealed class PaymentCommands(
     IPaymentReader reader,
     IUnitOfWork unit,
     PaymentMethodFactory factory,
+    IWalletAccounts wallets,
     IEventPublisher bus,
     IPaymentMetrics metrics
 )
@@ -16,10 +18,10 @@ public sealed class PaymentCommands(
     public async Task<Payment> Charge(PaymentRequest request, string key, CancellationToken ct)
     {
         RequestKeys.Validate(key);
-        if (request.Method != PaymentMethod.Cod || request.PaymentToken is not null)
-            throw new RuleException("Thanh toán online đã tắt; cần Ops đối soát giao dịch cũ.");
+        if (request.Method == PaymentMethod.Card || request.PaymentToken is not null)
+            throw new RuleException("Thanh toán thẻ chưa bật; dùng Ví hoặc COD.");
         if (string.IsNullOrWhiteSpace(request.DriverId) || request.DriverId.Length > 100)
-            throw new RuleException("Thiếu tài xế thu COD.", ErrorKind.Validation);
+            throw new RuleException("Thiếu tài xế của chuyến.", ErrorKind.Validation);
         if (
             request.TripId == Guid.Empty
             || string.IsNullOrWhiteSpace(request.RiderId)
@@ -46,10 +48,29 @@ public sealed class PaymentCommands(
         );
         await using var tx = await unit.Begin(ct);
         await writer.Lock(request.TripId, ct);
+        if (request.Method == PaymentMethod.Wallet)
+        {
+            await wallets.Lock(request.RiderId, ct);
+            var held = await wallets.FindActivity($"trip:{request.TripId:N}:hold", ct);
+            if (held is null || held.OwnerId != request.RiderId || held.Amount != request.Amount)
+                throw new RuleException("Không tìm thấy khoản tiền đã giữ cho chuyến.");
+        }
         var payment = await writer.FindTracked(request.TripId, ct);
         if (payment is not null)
         {
             RequestKeys.Same(payment.RequestHash, hash);
+            if (payment.Method == PaymentMethod.Wallet && payment.Status == PaymentStatus.Settled)
+            {
+                await unit.Save(ct);
+                await tx.Commit(ct);
+                return payment;
+            }
+            if (payment.Method == PaymentMethod.Wallet && payment.Status == PaymentStatus.Settled)
+            {
+                await unit.Save(ct);
+                await tx.Commit(ct);
+                return payment;
+            }
             await PublishResult(payment, ct);
             await unit.Save(ct);
             await tx.Commit(ct);
@@ -73,7 +94,7 @@ public sealed class PaymentCommands(
         writer.Add(payment);
         if (capture.CheckoutReference is not null)
             payment.AwaitCheckout(capture.CheckoutReference, request.Attempt);
-        if (capture.Success)
+        if (capture.Success && request.Method == PaymentMethod.Cod)
         {
             var lines = Ledger.Charge(method.DebitAccount(payment.RiderId), payment.Amount);
             AddJournal(payment.Id, "Charge", lines);
@@ -113,9 +134,11 @@ public sealed class PaymentCommands(
             await writer.FindTracked(id, ct)
             ?? throw new RuleException("Không có giao dịch.", ErrorKind.NotFound);
         if (payment.Method != PaymentMethod.Cod)
-            throw new RuleException(
-                "Giao dịch online cũ chỉ hỗ trợ đọc và đối soát ngoài hệ thống."
-            );
+        {
+            if (payment.Method == PaymentMethod.Wallet)
+                throw new RuleException("Hoàn tiền chuyến ví cần triển khai bằng Ops ở giai đoạn sau.");
+            throw new RuleException("Giao dịch online cũ chỉ hỗ trợ đọc và đối soát ngoài hệ thống.");
+        }
         if (payment.Status is PaymentStatus.Refunded or PaymentStatus.RefundPending)
         {
             if (payment.RefundKey != key)
@@ -158,7 +181,8 @@ public sealed class PaymentCommands(
         p.Status switch
         {
             PaymentStatus.Settled => bus.Publish(
-                new PaymentSettled(Guid.NewGuid(), p.Id, p.Id, p.Amount, "VND", p.CorrelationId),
+                new PaymentSettled(Guid.NewGuid(), p.Id, p.Id, p.Amount, "VND", p.CorrelationId,
+                    p.Method == PaymentMethod.Wallet ? p.DriverId : null),
                 p.CorrelationId,
                 ct
             ),

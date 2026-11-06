@@ -41,6 +41,9 @@ public sealed class TripWorkflow(
         using var activity = metrics.TraceWorkflow(id, trip.CorrelationId);
         switch (trip.Status)
         {
+            case TripStatus.WalletHoldPending:
+                await bus.Publish(WorkflowEvents.ReserveWallet(trip), trip.CorrelationId, ct);
+                break;
             case TripStatus.Requested:
             {
                 var match = (

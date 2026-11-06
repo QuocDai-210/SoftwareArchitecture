@@ -7,5 +7,6 @@ public sealed record PaymentSettled(
     Guid PaymentId,
     decimal Amount,
     string Currency,
-    string CorrelationId
+    string CorrelationId,
+    string? DriverId = null
 );

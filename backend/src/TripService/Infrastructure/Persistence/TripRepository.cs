@@ -105,6 +105,7 @@ public sealed class TripRepository(TripDb db) : ITripReader, ITripWriter, ITripW
                 (t.NextAttemptAt == null || t.NextAttemptAt <= now)
                 && (
                     t.Status == TripStatus.Requested
+                    || t.Status == TripStatus.WalletHoldPending
                     || t.Status == TripStatus.ReservingDriver
                     || t.Status == TripStatus.AcceptingDriver
                     || (t.Status == TripStatus.AwaitingDriverAcceptance && t.Deadline <= now)

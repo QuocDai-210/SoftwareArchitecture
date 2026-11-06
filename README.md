@@ -7,6 +7,9 @@ RabbitMQ, Saga và Outbox. Giữ riêng container, mã nguồn và database từ
 Giao diện mint–trắng tham khảo trải nghiệm đặt xe be: bản đồ làm trung tâm, bảng
 thao tác nổi, điều hướng riêng cho User/Driver/Ops và theme Keycloak đồng bộ.
 Chuyến mới chỉ thanh toán COD; Payment Service vẫn sở hữu sổ cái PostgreSQL.
+[Ví SwiftRide và nạp VNPAY](docs/wallet-topup.md): User/Driver xem ví tại `/#wallet`,
+User nạp số dư mô phỏng qua VNPAY sandbox. Thanh toán chuyến bằng ví và rút tiền chưa bật.
+[Trang thử kết nối](docs/vnpay-sandbox.md) `/payments/sandbox` vẫn không cộng ví.
 [Quản lý chung bằng Makefile](docs/service-consolidation-proposal.md): bật/tắt, build,
 log và kiểm tra tại một nơi; API, database và các tầng mã nguồn vẫn độc lập.
 
@@ -15,11 +18,13 @@ log và kiểm tra tại một nơi; API, database và các tầng mã nguồn v
 Nếu đang có dữ liệu Trip trong SQL Server, thực hiện mục “Chuyển dữ liệu Trip từ
 SQL Server” trước khi bật phiên bản mới.
 
-Cần Docker Engine/Compose có quyền truy cập, GNU Make, mạng tải package/image và Geoapify key.
+Cần Docker Engine/Compose có quyền truy cập, Python 3, mạng tải package/image và Geoapify key.
+Linux/macOS dùng GNU Make; Windows dùng script PowerShell bên dưới.
 Build/check trên host cần .NET SDK 10 và Node.js 24 trở lên. SQL Server chỉ cần khi chuyển dữ liệu cũ.
 
 1. Chạy `python3 scripts/setup.py`. Script tạo secret nội bộ, bổ sung biến thiếu,
-   giữ nguyên giá trị đã có và đặt `.env` quyền 0600.
+   giữ nguyên giá trị đã có và đặt `.env` quyền 0600 trên Linux/macOS.
+   Trên Windows, quyền truy cập file do ACL của Windows quản lý.
 2. Tạo project tại [Geoapify My Projects](https://myprojects.geoapify.com/).
    Điền key phía server vào `GEOAPIFY_API_KEY`; key bản đồ trình duyệt vào
    `NEXT_PUBLIC_GEOAPIFY_MAP_KEY` trong `.env`. Key trình duyệt cần cho phép origin
@@ -31,6 +36,34 @@ Build/check trên host cần .NET SDK 10 và Node.js 24 trở lên. SQL Server c
 make build
 make up
 ```
+
+### Windows / PowerShell
+
+Không cần cài Ubuntu riêng. Cài Docker Desktop (Linux containers, WSL2 backend) và Python 3.
+Nếu chưa có Python, chạy `winget install --exact --id Python.Python.3.12 --scope user`
+trong PowerShell, sau đó mở lại terminal (khởi động lại VS Code nếu dùng terminal tích hợp).
+Kiểm tra bằng `py -3 --version`. Shortcut `python` của Microsoft Store chưa phải Python đã cài.
+Mở Docker Desktop, đợi engine sẵn sàng rồi chạy tại thư mục gốc repo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 setup
+```
+
+Điền `GEOAPIFY_API_KEY` và `NEXT_PUBLIC_GEOAPIFY_MAP_KEY` trong `.env` theo bước 2 ở trên,
+sau đó build và khởi động:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 build
+powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 up
+```
+
+Thay lệnh cuối bằng `status`, `logs`, `stop`, `trip`, `matching` hoặc `payment` khi cần.
+Các chế độ service riêng dừng container dự án trước khi bật nhóm đã chọn.
+Build chạy tuần tự sau khi dừng container; observability mặc định tắt.
+`ExecutionPolicy Bypass` chỉ áp dụng cho tiến trình chạy lệnh, không đổi policy toàn máy.
+Script này hỗ trợ chạy hệ thống; bộ kiểm thử `scripts/verify.sh` vẫn cần shell Linux.
+
+### Sử dụng giao diện
 
 Mở http://localhost:3000. Dùng các hồ sơ/cửa sổ trình duyệt riêng cho ba vai trò:
 

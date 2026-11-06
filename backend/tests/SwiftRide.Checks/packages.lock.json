@@ -604,6 +604,14 @@
           "SwiftRide.SharedKernel": "[1.0.0, )"
         }
       },
+      "paymentservice.infrastructure": {
+        "type": "Project",
+        "dependencies": {
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
+          "PaymentService.Application": "[1.0.0, )",
+          "SwiftRide.Infrastructure": "[1.0.0, )"
+        }
+      },
       "swiftride.application": {
         "type": "Project",
         "dependencies": {

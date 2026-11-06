@@ -4,7 +4,7 @@ export function isActiveTrip(trip: Pick<Trip, "status" | "method">): boolean {
   return (
     !terminal.has(trip.status) &&
     (trip.method === "Cod" ||
-      !["DroppedOff", "PaymentPending", "PaymentReview"].includes(trip.status))
+      !["DroppedOff", "PaymentPending", "PaymentReview", "Paid"].includes(trip.status))
   );
 }
 export type TripAction =

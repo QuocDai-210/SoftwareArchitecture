@@ -191,6 +191,11 @@ services:
     environment:
       <<: *api-env
       Payments__Provider: Cod
+      VnpaySandbox__Enabled: ${VNPAY_SANDBOX_ENABLED:-false}
+      VnpaySandbox__TmnCode: ${VNPAY_TMN_CODE:-}
+      VnpaySandbox__HashSecret: ${VNPAY_HASH_SECRET:-}
+      VnpaySandbox__ReturnUrl: ${VNPAY_RETURN_URL:-http://localhost:3000/payments/return}
+      VnpaySandbox__ClientIp: ${VNPAY_CLIENT_IP:-127.0.0.1}
       ConnectionStrings__Payment: Host=postgres;Database=PayDB;Username=payment_app;Password=${PAY_DB_PASSWORD};GSS Encryption Mode=Disable
     healthcheck:
       test: [CMD, dotnet, PaymentService.dll, --health]

@@ -84,6 +84,11 @@ export function PaymentPanel({
       .reduce((total, s) => total + s.amount, 0);
   return (
     <section id="payments" className="space-y-5">
+      {!isDriver && !isOps && (
+        <a href="/#wallet" className="btn btn-secondary">
+          Mở ví và nạp tiền
+        </a>
+      )}
       <div className="stats-grid">
         {[
           {
