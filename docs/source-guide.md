@@ -11,6 +11,7 @@
 | Đặt, hủy, xác nhận và đánh giá chuyến            | `TripService/Application/Commands/TripCommands.cs`; luật đánh giá tại `Domain/Trip.cs`                              |
 | Quyền tài nguyên chuyến                          | `TripService/Application/Security/TripAccess.cs`                                                                   |
 | Danh sách/chi tiết chuyến                        | `TripService/Application/Queries/`; DTO tại `ReadModels/`                                                          |
+| Ops xem trạng thái Saga/retry của chuyến          | `GET /ops/trips/{id}/workflow`; `TripQueries.Workflow`                                                             |
 | Ghép xe, retry sau restart                       | `TripService/Application/Workflows/TripWorkflow.cs`                                                                |
 | PostgreSQL, index, optimistic concurrency        | `TripService/Infrastructure/Persistence/`                                                                          |
 | Trip gọi Matching qua HTTP                       | `TripService/Infrastructure/Clients/MatchingHttpClient.cs`                                                         |
