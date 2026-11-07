@@ -40,6 +40,7 @@ triển mà không gộp API/process/database.
 - Gửi lặp thao tác hoặc message không tạo khoản thu/hoàn thứ hai; số tiền lấy từ server.
 - Trip/Payment PostgreSQL Outbox giữ sự kiện khi RabbitMQ ngừng; restart Trip/Payment vẫn phục hồi.
 - Ledger cân bằng và append-only ở database; hoàn COD tạo một bút toán đảo có dấu vết Ops.
+- Chi tiết chuyến hiển thị timeline trạng thái, thời điểm và kết thúc Hủy/Thất bại.
 - Hồ sơ, phân trang, link trực tiếp chuyến, 360 px, keyboard/focus và đăng xuất.
 - Tổng RAM dự án tối đa 12 GB; build tuần tự; tắt dịch vụ kiểm thử, giữ volume.
 - Format 100 cột, mỗi câu lệnh một dòng; nhóm ngoặc ngắn gom một dòng.
