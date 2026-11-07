@@ -7,6 +7,11 @@ export type TripTimelineItem = {
   state: TripTimelineState;
 };
 
+export function matchingProgress(status: string, rejections: number) {
+  if (status !== "Requested" || rejections <= 0) return null;
+  return `Có ${rejections}/3 lượt mời đã bị từ chối/hết hạn; đang tìm tài xế khác.`;
+}
+
 const steps = [
   {
     title: "Đặt chuyến",

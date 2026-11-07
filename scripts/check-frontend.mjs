@@ -31,7 +31,7 @@ try {
   const { availableActions, terminal, isActiveTrip } = require(
     join(output, "domain/trip-rules.js"),
   );
-  const { tripTimeline } = require(join(output, "presentation/trip-timeline.js"));
+  const { matchingProgress, tripTimeline } = require(join(output, "presentation/trip-timeline.js"));
   const attempts = [];
   const gateway = {
     async book(booking, key) {
@@ -114,6 +114,10 @@ try {
   ]);
   assert.equal(requestedTimeline[0].state, "current");
   assert.equal(requestedTimeline[1].state, "upcoming");
+  assert.match(matchingProgress("Requested", 1), /Có 1\/3 lượt mời/);
+  assert.match(matchingProgress("Requested", 3), /Có 3\/3 lượt mời/);
+  assert.equal(matchingProgress("Requested", 0), null);
+  assert.equal(matchingProgress("AwaitingDriverAcceptance", 1), null);
   const retriedMatchTimeline = tripTimeline("Requested", "2026-11-07T10:00:00Z", [
     { status: "Requested", at: "2026-11-07T10:00:00Z", reason: null },
     { status: "AwaitingDriverAcceptance", at: "2026-11-07T10:02:00Z", reason: null },

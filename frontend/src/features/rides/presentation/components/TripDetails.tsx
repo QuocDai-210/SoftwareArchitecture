@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { Trip, Simulation, AssignedDriver } from "../../domain/models";
 import { availableActions, type TripAction } from "../../domain/trip-rules";
 import { labels, money } from "../format";
-import { tripTimeline } from "../trip-timeline";
+import { matchingProgress, tripTimeline } from "../trip-timeline";
 const actionLabels: Record<TripAction, string> = {
   "confirm-quote": "Đồng ý giá",
   cancel: "Hủy chuyến",
@@ -34,6 +34,7 @@ export function TripDetails({
   const [cancelReason, setCancelReason] = useState("Thay đổi kế hoạch di chuyển");
   const hasCashReceipt =
     t.method === "Cod" && ["PaymentPending", "PaymentReview", "Paid"].includes(t.status);
+  const searchProgress = matchingProgress(t.status, t.rejections);
   const timeline = tripTimeline(t.status, t.createdAt, t.history);
   return (
     <section className="card p-5" aria-label="Chi tiết chuyến">
@@ -49,6 +50,11 @@ export function TripDetails({
       {t.method === "Wallet" && t.status === "AwaitingRiderConfirmation" && t.reason && (
         <p className="my-3 text-sm text-red-800" role="alert">
           {t.reason}
+        </p>
+      )}
+      {searchProgress && (
+        <p className="my-3 text-sm" role="status" aria-live="polite">
+          {searchProgress}
         </p>
       )}
       <details className="trip-route text-sm">
@@ -222,7 +228,7 @@ export function TripDetails({
           )}
         </div>
       )}
-      {t.reason && <p className="text-sm my-4 text-[#6b5a32]">{t.reason}</p>}
+      {t.reason && !searchProgress && <p className="text-sm my-4 text-[#6b5a32]">{t.reason}</p>}
       {isDriver && ["EnRoute", "PickedUp"].includes(t.status) && !simulation?.arrived && (
         <p className="text-sm mt-4" role="status">
           Chờ xe đến điểm {t.status === "EnRoute" ? "đón" : "trả"} khách trước khi xác nhận.
