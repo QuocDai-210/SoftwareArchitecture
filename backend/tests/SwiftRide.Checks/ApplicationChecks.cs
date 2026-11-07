@@ -1,6 +1,8 @@
 using SwiftRide.Contracts;
 using SwiftRide.Payments.Application;
 using SwiftRide.Payments.Application.Ports;
+using SwiftRide.Payments.Application.Sandbox;
+using SwiftRide.Payments.Application.Wallets;
 using SwiftRide.Payments.Domain;
 using SwiftRide.SharedKernel;
 
@@ -24,7 +26,8 @@ static class ApplicationChecks
                 40,
                 method.Method,
                 "demo-success",
-                Guid.NewGuid().ToString()
+                Guid.NewGuid().ToString(),
+                DriverId: "driver"
             );
             check(
                 ReferenceEquals(factory.Create(method.Method), method),
@@ -39,7 +42,7 @@ static class ApplicationChecks
                     == (
                         method.Method == PaymentMethod.Card
                             ? "ProviderReceivable"
-                            : "WalletLiability:rider"
+                            : "Wallet:rider:Held"
                     ),
                 "funding account belongs to method " + method.Method
             );
@@ -54,7 +57,22 @@ static class ApplicationChecks
                 true,
                 null
             );
-            await method.Refund(payment, default);
+            if (method.Method == PaymentMethod.Wallet)
+            {
+                try
+                {
+                    await method.Refund(payment, default);
+                    throw new Exception("Wallet refund bypassed the approved refund flow");
+                }
+                catch (RuleException)
+                {
+                    check(true, "wallet refund requires an approved trip refund entry");
+                }
+            }
+            else
+            {
+                await method.Refund(payment, default);
+            }
             payment.Refund("refund-key", "hash", "reason");
             check(
                 payment.Status == PaymentStatus.Refunded,
@@ -201,22 +219,40 @@ static class ApplicationChecks
         private readonly WalletAccount _account = new() { OwnerId = wallet.RiderId };
 
         public Task Lock(string owner, CancellationToken ct) => Task.CompletedTask;
+
         public Task<WalletAccount?> Find(string owner, CancellationToken ct) =>
             Task.FromResult<WalletAccount?>(_account.OwnerId == owner ? _account : null);
+
         public Task<WalletActivity?> FindActivity(string reference, CancellationToken ct) =>
             Task.FromResult<WalletActivity?>(null);
-        public Task<PageResult<WalletActivity>> History(string owner, int page, CancellationToken ct) =>
-            throw new NotSupportedException();
+
+        public Task<PageResult<WalletActivity>> History(
+            string owner,
+            int page,
+            CancellationToken ct
+        ) => throw new NotSupportedException();
+
         public Task<PageResult<SandboxView>> TopUps(string owner, int page, CancellationToken ct) =>
             throw new NotSupportedException();
+
         public Task HoldTrip(Guid tripId, string riderId, long amount, CancellationToken ct) =>
             Task.CompletedTask;
+
         public Task ReleaseTrip(Guid tripId, string riderId, long amount, CancellationToken ct) =>
             Task.CompletedTask;
-        public Task SettleTrip(Guid tripId, string riderId, string driverId, long amount, CancellationToken ct) =>
-            Task.CompletedTask;
+
+        public Task SettleTrip(
+            Guid tripId,
+            string riderId,
+            string driverId,
+            long amount,
+            CancellationToken ct
+        ) => Task.CompletedTask;
+
         public void Add(WalletAccount account) { }
+
         public void Add(WalletActivity activity) { }
+
         public void Add(Journal journal) { }
     }
 
