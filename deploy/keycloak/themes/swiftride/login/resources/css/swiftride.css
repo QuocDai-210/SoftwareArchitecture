@@ -41,7 +41,7 @@
   border: 1px solid #cbded4;
   border-radius: 12px;
   height: 48px;
-  background: #fbfefd;
+  background-color: #fbfefd;
   padding: 10px 14px;
 }
 .pf-c-form-control:focus,
