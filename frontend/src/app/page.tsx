@@ -72,7 +72,7 @@ export default async function Home() {
             <form
               action={async () => {
                 "use server";
-                await signIn("keycloak", { redirectTo: "/" });
+                await signIn("keycloak", { redirectTo: "/", }, {prompt: "login",});
               }}
             >
               <button className="btn w-full" type="submit">
