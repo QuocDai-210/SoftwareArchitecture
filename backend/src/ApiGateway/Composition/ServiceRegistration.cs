@@ -102,6 +102,13 @@ public static class ServiceRegistration
                 Order = -1,
                 Match = new() { Path = "/ops/wallet-withdrawals/{**rest}" },
             },
+            new()
+            {
+                RouteId = "ops-trip-workflow",
+                ClusterId = "trip",
+                Order = -1,
+                Match = new() { Path = "/ops/trips/{id:guid}/workflow" },
+            },
         };
         foreach (
             var (prefix, cluster) in new[]

@@ -23,6 +23,22 @@ public sealed class TripQueries(ITripReader reader)
         return reader.Statistics(ct);
     }
 
+    public async Task<TripWorkflowView> Workflow(Guid id, Actor actor, CancellationToken ct)
+    {
+        if (!actor.IsOps)
+            throw new RuleException("Cần quyền Ops.", ErrorKind.Forbidden);
+        var trip = await reader.Get(id, ct);
+        return new(
+            trip.Id,
+            trip.Status,
+            trip.WorkflowRetries,
+            trip.NextAttemptAt,
+            trip.Reason,
+            trip.CorrelationId,
+            trip.UpdatedAt
+        );
+    }
+
     public async Task<TripView> Get(Guid id, Actor actor, CancellationToken ct)
     {
         var trip = await reader.Get(id, ct);

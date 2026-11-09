@@ -9,8 +9,9 @@ const root = resolve(import.meta.dirname, "..");
 const output = mkdtempSync(join(tmpdir(), "swiftride-check-"));
 try {
   execFileSync(
-    join(root, "frontend/node_modules/.bin/tsc"),
+    process.execPath,
     [
+      join(root, "frontend/node_modules/typescript/bin/tsc"),
       "--module",
       "commonjs",
       "--target",
@@ -21,6 +22,7 @@ try {
       "--outDir",
       output,
       "frontend/src/features/rides/application/RideService.ts",
+      "frontend/src/features/rides/presentation/trip-timeline.ts",
     ],
     { cwd: root, stdio: "inherit" },
   );
@@ -29,6 +31,7 @@ try {
   const { availableActions, terminal, isActiveTrip } = require(
     join(output, "domain/trip-rules.js"),
   );
+  const { matchingProgress, tripTimeline } = require(join(output, "presentation/trip-timeline.js"));
   const attempts = [];
   const gateway = {
     async book(booking, key) {
@@ -106,7 +109,71 @@ try {
     ["location", 10, 106],
     ["availability", true],
   ]);
-  console.log("Frontend checks passed: booking idempotency, state/role actions, driver presence.");
+  const requestedTimeline = tripTimeline("Requested", "2026-11-07T10:00:00Z", [
+    { status: "Requested", at: "2026-11-07T10:00:00Z", reason: null },
+  ]);
+  assert.equal(requestedTimeline[0].state, "current");
+  assert.equal(requestedTimeline[1].state, "upcoming");
+  assert.match(matchingProgress("Requested", 1), /Có 1\/3 lượt mời/);
+  assert.match(matchingProgress("Requested", 3), /Có 3\/3 lượt mời/);
+  assert.equal(matchingProgress("Requested", 0), null);
+  assert.equal(matchingProgress("AwaitingDriverAcceptance", 1), null);
+  const retriedMatchTimeline = tripTimeline("Requested", "2026-11-07T10:00:00Z", [
+    { status: "Requested", at: "2026-11-07T10:00:00Z", reason: null },
+    { status: "AwaitingDriverAcceptance", at: "2026-11-07T10:02:00Z", reason: null },
+    { status: "Requested", at: "2026-11-07T10:03:00Z", reason: "Tài xế từ chối" },
+  ]);
+  assert.equal(retriedMatchTimeline[0].state, "current");
+  assert.equal(retriedMatchTimeline[1].state, "upcoming");
+  const enRouteTimeline = tripTimeline("EnRoute", "2026-11-07T10:00:00Z", [
+    { status: "Requested", at: "2026-11-07T10:00:00Z", reason: null },
+    { status: "DriverAccepted", at: "2026-11-07T10:05:00Z", reason: null },
+    { status: "EnRoute", at: "2026-11-07T10:06:00Z", reason: null },
+  ]);
+  assert.equal(enRouteTimeline[0].state, "complete");
+  assert.equal(enRouteTimeline[1].state, "complete");
+  assert.equal(enRouteTimeline[2].state, "current");
+  const paymentTimeline = tripTimeline("PaymentPending", "2026-11-07T10:00:00Z", [
+    { status: "Requested", at: "2026-11-07T10:00:00Z", reason: null },
+    { status: "DriverAccepted", at: "2026-11-07T10:05:00Z", reason: null },
+    { status: "EnRoute", at: "2026-11-07T10:06:00Z", reason: null },
+    { status: "PickedUp", at: "2026-11-07T10:10:00Z", reason: null },
+    { status: "DroppedOff", at: "2026-11-07T10:20:00Z", reason: null },
+    { status: "PaymentPending", at: "2026-11-07T10:20:00Z", reason: null },
+  ]);
+  assert.equal(paymentTimeline[4].state, "complete");
+  assert.equal(paymentTimeline[5].state, "current");
+  const cancelledTimeline = tripTimeline("Cancelled", "2026-11-07T10:00:00Z", [
+    { status: "Requested", at: "2026-11-07T10:00:00Z", reason: null },
+    { status: "DriverAccepted", at: "2026-11-07T10:05:00Z", reason: null },
+    { status: "EnRoute", at: "2026-11-07T10:06:00Z", reason: null },
+    { status: "Cancelled", at: "2026-11-07T10:08:00Z", reason: "Đổi kế hoạch" },
+  ]);
+  assert.equal(cancelledTimeline.length, 4);
+  assert.equal(cancelledTimeline[2].state, "complete");
+  assert.equal(cancelledTimeline[3].title, "Chuyến đã hủy");
+  assert.equal(cancelledTimeline[3].description, "Đổi kế hoạch");
+  const failedTimeline = tripTimeline("Failed", "2026-11-07T10:00:00Z", [
+    { status: "Requested", at: "2026-11-07T10:00:00Z", reason: null },
+    { status: "Failed", at: "2026-11-07T10:04:00Z", reason: "Không còn tài xế phù hợp" },
+  ]);
+  assert.equal(failedTimeline.length, 2);
+  assert.equal(failedTimeline[1].title, "Không tìm được xe");
+  assert.equal(failedTimeline[1].description, "Không còn tài xế phù hợp");
+  const paidTimeline = tripTimeline("Paid", "2026-11-07T10:00:00Z", [
+    { status: "Requested", at: "2026-11-07T10:00:00Z", reason: null },
+    { status: "DriverAccepted", at: "2026-11-07T10:05:00Z", reason: null },
+    { status: "EnRoute", at: "2026-11-07T10:06:00Z", reason: null },
+    { status: "PickedUp", at: "2026-11-07T10:10:00Z", reason: null },
+    { status: "DroppedOff", at: "2026-11-07T10:20:00Z", reason: null },
+    { status: "PaymentPending", at: "2026-11-07T10:20:00Z", reason: null },
+    { status: "Paid", at: "2026-11-07T10:25:00Z", reason: null },
+  ]);
+  assert.equal(paidTimeline.at(-1).state, "complete");
+  assert.equal(paidTimeline.at(-1).description, "Đã xác nhận thanh toán");
+  console.log(
+    "Frontend checks passed: booking idempotency, state/role actions, driver presence, trip timeline.",
+  );
 } finally {
   rmSync(output, { recursive: true, force: true });
 }

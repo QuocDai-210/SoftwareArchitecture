@@ -11,6 +11,7 @@
 | Đặt, hủy, xác nhận và đánh giá chuyến            | `TripService/Application/Commands/TripCommands.cs`; luật đánh giá tại `Domain/Trip.cs`                              |
 | Quyền tài nguyên chuyến                          | `TripService/Application/Security/TripAccess.cs`                                                                   |
 | Danh sách/chi tiết chuyến                        | `TripService/Application/Queries/`; DTO tại `ReadModels/`                                                          |
+| Ops xem trạng thái Saga/retry của chuyến          | `GET /ops/trips/{id}/workflow`; `TripQueries.Workflow`                                                             |
 | Ghép xe, retry sau restart                       | `TripService/Application/Workflows/TripWorkflow.cs`                                                                |
 | PostgreSQL, index, optimistic concurrency        | `TripService/Infrastructure/Persistence/`                                                                          |
 | Trip gọi Matching qua HTTP                       | `TripService/Infrastructure/Clients/MatchingHttpClient.cs`                                                         |
@@ -42,6 +43,7 @@
 | HTTP web gọi backend proxy                       | `frontend/src/features/rides/infrastructure/HttpRideGateway.ts`                                                    |
 | React state, polling/heartbeat                   | `frontend/src/features/rides/presentation/useRides.ts`                                                             |
 | Form, chi tiết chuyến, lịch sử, bản đồ           | `frontend/src/features/rides/presentation/components/`                                                             |
+| Timeline trạng thái và nhánh kết thúc chuyến     | `frontend/src/features/rides/presentation/trip-timeline.ts`                                                        |
 | Liên hệ, ghi chú đón, hủy có xác nhận, đánh giá | `frontend/src/features/rides/presentation/components/{BookingForm,TripDetails,TripReview}.tsx`                      |
 | Ghép service và adapter client                   | `frontend/src/composition/RideClient.tsx`                                                                          |
 | OIDC, session HttpOnly, refresh token            | `frontend/src/infrastructure/auth/`                                                                                |

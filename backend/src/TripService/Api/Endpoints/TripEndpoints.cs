@@ -39,6 +39,12 @@ public static class TripEndpoints
                     queries.Statistics(user.Actor(), ct)
             )
             .RequireAuthorization("ops");
+        app.MapGet(
+                "/ops/trips/{id:guid}/workflow",
+                (Guid id, ClaimsPrincipal user, TripQueries queries, CancellationToken ct) =>
+                    queries.Workflow(id, user.Actor(), ct)
+            )
+            .RequireAuthorization("ops");
         app.MapPost(
                 "/trips",
                 async (
