@@ -6,6 +6,8 @@ Driver, chuyến đi và tiền đều là dữ liệu mô phỏng. Chỉ phần
 
 ## Chạy trên Windows
 
+Kiểm tra tự động khi push/PR: xem [hướng dẫn CI](docs/ci.md).
+
 Cần Docker Desktop ở chế độ Linux containers và Python 3. Tại thư mục gốc repo, chạy:
 
 ```powershell
