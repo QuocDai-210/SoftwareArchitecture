@@ -5,15 +5,9 @@ import { labels, money } from "../format";
 const actionLabels: Record<TripAction, string> = {
   "confirm-quote": "Đồng ý giá",
   cancel: "Hủy chuyến",
-  "driver-accept": "Nhận chuyến",
-  "driver-reject": "Từ chối",
-  "en-route": "Đang đến đón",
-  pickup: "Đã đón khách",
-  dropoff: "Đã trả khách",
 };
 export function TripDetails({
   trip: t,
-  isDriver,
   isRider,
   busy,
   act,
@@ -21,7 +15,6 @@ export function TripDetails({
   assignedDriver,
 }: {
   trip: Trip;
-  isDriver: boolean;
   isRider: boolean;
   busy: boolean;
   act: (t: Trip, action: TripAction, reason?: string) => Promise<void>;
@@ -72,26 +65,7 @@ export function TripDetails({
           <strong>Ghi chú điểm đón:</strong> {t.pickupNote}
         </p>
       )}
-      {isDriver && t.riderName && (
-        <div className="driver-card">
-          <span className="avatar" aria-hidden="true">
-            {t.riderName.slice(0, 1)}
-          </span>
-          <div>
-            <p className="font-bold">{t.riderName}</p>
-            {t.riderPhone && (
-              <a
-                className="text-sm underline min-h-11 inline-flex items-center"
-                href={`tel:${t.riderPhone}`}
-              >
-                Gọi khách hàng
-              </a>
-            )}
-          </div>
-        </div>
-      )}
       {assignedDriver &&
-        !isDriver &&
         [
           "DriverAccepted",
           "EnRoute",
@@ -177,22 +151,12 @@ export function TripDetails({
         </div>
       )}
       {t.reason && <p className="text-sm my-4 text-[#6b5a32]">{t.reason}</p>}
-      {isDriver && ["EnRoute", "PickedUp"].includes(t.status) && !simulation?.arrived && (
-        <p className="text-sm mt-4" role="status">
-          Chờ xe đến điểm {t.status === "EnRoute" ? "đón" : "trả"} khách trước khi xác nhận.
-        </p>
-      )}
       <div className="flex flex-wrap gap-2 mt-5">
-        {availableActions(t, isRider ? "rider" : isDriver ? "driver" : "observer").map((action) => (
+        {availableActions(t, isRider ? "rider" : "observer").map((action) => (
           <button
             key={action}
-            disabled={
-              busy ||
-              ((action === "pickup" || action === "dropoff") &&
-                (!simulation?.arrived ||
-                  simulation.stage !== (action === "pickup" ? "EnRoute" : "PickedUp")))
-            }
-            className={`btn ${["cancel", "driver-reject"].includes(action) ? "btn-secondary" : "flex-1"}`}
+            disabled={busy}
+            className={`btn ${action === "cancel" ? "btn-secondary" : "flex-1"}`}
             onClick={() => {
               if (action === "cancel" && t.status !== "AwaitingRiderConfirmation")
                 cancelDialog.current?.showModal();

@@ -80,14 +80,12 @@ public static class ApiPipeline
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous();
-        app.MapGet(
-                "/health/ready",
-                async (IReadinessProbe probe, CancellationToken ct) =>
-                    await probe.Ready(ct)
-                        ? Results.Ok(new { status = "ready" })
-                        : Results.StatusCode(503)
+        app.MapGet("/health/ready", async (IReadinessProbe probe, CancellationToken ct) =>
+                await probe.Ready(ct)
+                    ? Results.Ok(new { status = "ready" })
+                    : Results.StatusCode(503)
             )
             .AllowAnonymous();
-        app.MapOpenApi().RequireAuthorization("ops");
+        app.MapOpenApi().RequireAuthorization();
     }
 }

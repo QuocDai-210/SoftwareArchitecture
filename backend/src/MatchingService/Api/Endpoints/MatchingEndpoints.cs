@@ -4,23 +4,19 @@ public static class MatchingEndpoints
 {
     public static void MapMatchingEndpoints(this WebApplication app)
     {
-        app.MapOperationsEndpoints();
+        app.MapDriverSimulationEndpoints();
         app.MapGet(
                 "/drivers/{id}/contact",
                 (string id, ClaimsPrincipal user, DriverQueries queries, CancellationToken ct) =>
                     queries.Contact(id, user.Actor(), ct)
             )
             .RequireAuthorization("service");
-        app.MapPost(
-                "/match",
-                (MatchRequest request, FindDriver useCase, CancellationToken ct) =>
-                    useCase.Execute(request, ct)
+        app.MapPost("/match", (MatchRequest request, FindDriver useCase, CancellationToken ct) =>
+                useCase.Execute(request, ct)
             )
             .RequireAuthorization("service");
-        app.MapPost(
-                "/quote",
-                (QuoteRequest request, QuoteTrip useCase, CancellationToken ct) =>
-                    useCase.Execute(request, ct)
+        app.MapPost("/quote", (QuoteRequest request, QuoteTrip useCase, CancellationToken ct) =>
+                useCase.Execute(request, ct)
             )
             .RequireAuthorization();
         app.MapPost(
@@ -29,9 +25,8 @@ public static class MatchingEndpoints
                     queries.Route(request, ct)
             )
             .RequireAuthorization();
-        app.MapGet(
-                "/maps/search",
-                (string text, MapQueries queries, CancellationToken ct) => queries.Search(text, ct)
+        app.MapGet("/maps/search", (string text, MapQueries queries, CancellationToken ct) =>
+                queries.Search(text, ct)
             )
             .RequireAuthorization();
         app.MapGet(

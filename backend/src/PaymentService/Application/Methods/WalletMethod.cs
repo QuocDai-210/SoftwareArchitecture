@@ -1,4 +1,3 @@
-using SwiftRide.Payments.Application.Ports;
 using SwiftRide.Payments.Application.Wallets;
 
 namespace SwiftRide.Payments.Application;
@@ -11,9 +10,11 @@ public sealed class WalletMethod(IWalletAccounts accounts) : IPaymentMethod
 
     public async Task<CaptureResult> Capture(PaymentRequest request, CancellationToken ct)
     {
-        if (request.Amount is <= 0 or > 100000000
+        if (
+            request.Amount is < 0 or > 100000000
             || request.Amount != decimal.Round(request.Amount, 0)
-            || string.IsNullOrWhiteSpace(request.DriverId))
+            || string.IsNullOrWhiteSpace(request.DriverId)
+        )
             return new(CaptureOutcome.Declined, "Yêu cầu thanh toán ví không hợp lệ.");
         try
         {
@@ -22,7 +23,8 @@ public sealed class WalletMethod(IWalletAccounts accounts) : IPaymentMethod
                 request.RiderId,
                 request.DriverId,
                 decimal.ToInt64(request.Amount),
-                ct
+                ct,
+                request.WalletHoldId
             );
         }
         catch (RuleException ex)
@@ -32,8 +34,6 @@ public sealed class WalletMethod(IWalletAccounts accounts) : IPaymentMethod
         return new(CaptureOutcome.Settled);
     }
 
-    public async Task Refund(Payment payment, CancellationToken ct)
-    {
-        throw new RuleException("Hoàn tiền ví cần qua bút toán hoàn chuyến đã duyệt.");
-    }
+    public Task Refund(Payment payment, CancellationToken ct) =>
+        throw new RuleException("Hoàn chuyến ví không thuộc phạm vi mô phỏng.");
 }

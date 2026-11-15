@@ -1,9 +1,8 @@
 name: swiftride
 x-api-env: &api-env
   ASPNETCORE_ENVIRONMENT: Development
-  Auth__Authority: http://keycloak:8080/realms/swiftride
-  Auth__Issuer: http://localhost:8081/realms/swiftride
-  Auth__ServiceSecret: ${SERVICE_CLIENT_SECRET:?Run scripts/setup.py}
+  Auth__Issuer: swiftride-local
+  Auth__SigningKey: ${AUTH_SIGNING_KEY:?Run scripts/setup.py}
   Rabbit__Host: rabbitmq
   Rabbit__Username: ${RABBIT_USER:-swiftride}
   Rabbit__Password: ${RABBIT_PASSWORD:?Run scripts/setup.py}
@@ -24,29 +23,6 @@ x-api: &api
     retries: 10
     start_period: 40s
 services:
-  sqlserver:
-    profiles: [migration]
-    mem_limit: 2560m
-    memswap_limit: 2560m
-    image: mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04
-    environment:
-      ACCEPT_EULA: Y
-      MSSQL_PID: Developer
-      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?Run scripts/setup.py}
-      MSSQL_MEMORY_LIMIT_MB: 2048
-    volumes: [trip-data:/var/opt/mssql]
-    networks: [backend]
-    restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          CMD-SHELL,
-          'SQLCMDPASSWORD="$$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -Q "SELECT 1" -b -o /dev/null',
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
   mongo:
     mem_limit: 768m
     memswap_limit: 768m
@@ -109,47 +85,15 @@ services:
       interval: 10s
       timeout: 8s
       retries: 20
-  keycloak:
-    mem_limit: 768m
-    memswap_limit: 768m
-    image: quay.io/keycloak/keycloak:26.2.5
-    command: [start-dev, --import-realm]
-    environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run scripts/setup.py}
-      KC_HOSTNAME: http://localhost:8081
-      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: true
-      KC_HEALTH_ENABLED: true
-      KC_HTTP_ENABLED: true
-      JAVA_OPTS_KC_HEAP: -Xms128m -Xmx384m
-      WEB_CLIENT_SECRET: ${WEB_CLIENT_SECRET}
-      SERVICE_CLIENT_SECRET: ${SERVICE_CLIENT_SECRET}
-      OPS_CLIENT_SECRET: ${OPS_CLIENT_SECRET:?Run scripts/setup.py}
-      RIDER_PASSWORD: ${RIDER_PASSWORD}
-      DRIVER_PASSWORD: ${DRIVER_PASSWORD}
-      OPS_PASSWORD: ${OPS_PASSWORD}
-    ports: [127.0.0.1:8081:8080]
-    volumes:
-      - ./deploy/keycloak/themes/swiftride:/opt/keycloak/themes/swiftride:ro
-      - identity-data:/opt/keycloak/data
-      - ./deploy/keycloak/swiftride-realm.json:/opt/keycloak/data/import/swiftride-realm.json:ro
-    networks: [backend]
-    restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          CMD-SHELL,
-          'bash -ec ''exec 3<>/dev/tcp/127.0.0.1/9000; printf "GET /health/ready HTTP/1.0\r\n\r\n" >&3; cat <&3 | grep -q "UP"''',
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 30s
   trip:
     <<: *api
     build: { context: ./backend, args: { SERVICE: TripService } }
     environment:
       <<: *api-env
+      Fixtures__Enabled: ${FIXTURES_ENABLED:-true}
+      Fixtures__RiderPassword: ${RIDER_PASSWORD:?Run scripts/setup.py}
+      Fixtures__DriverPassword: ${DRIVER_PASSWORD:?Run scripts/setup.py}
+      Simulation__AutoAcceptDrivers: ${SIMULATION_AUTO_ACCEPT_DRIVERS:-false}
       ConnectionStrings__Trip: Host=postgres;Database=TripDB;Username=trip;Password=${TRIP_DB_PASSWORD};GSS Encryption Mode=Disable
     healthcheck:
       test: [CMD, dotnet, TripService.dll, --health]
@@ -159,7 +103,6 @@ services:
       start_period: 40s
     depends_on:
       postgres-init: { condition: service_completed_successfully }
-      keycloak: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
   matching:
     <<: *api
@@ -169,8 +112,7 @@ services:
       ConnectionStrings__Matching: mongodb://matching:${MATCH_DB_PASSWORD}@mongo:27017/MatchDB?authSource=MatchDB
       Maps__Provider: ${MAPS_PROVIDER:-Geoapify}
       Maps__ApiKey: ${GEOAPIFY_API_KEY:-}
-      Fixtures__Enabled: ${FIXTURES_ENABLED:-false}
-      Auth__AdminClientSecret: ${OPS_CLIENT_SECRET:?Run scripts/setup.py}
+      Fixtures__Enabled: ${FIXTURES_ENABLED:-true}
       Pricing__Surge: ${PRICING_SURGE:-1}
       Pricing__Toll: ${PRICING_TOLL:-0}
       Pricing__Promotion: ${PRICING_PROMOTION:-1}
@@ -183,7 +125,6 @@ services:
       start_period: 40s
     depends_on:
       mongo: { condition: service_healthy }
-      keycloak: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
   payment:
     <<: *api
@@ -191,11 +132,9 @@ services:
     environment:
       <<: *api-env
       Payments__Provider: Cod
-      VnpaySandbox__Enabled: ${VNPAY_SANDBOX_ENABLED:-false}
-      VnpaySandbox__TmnCode: ${VNPAY_TMN_CODE:-}
-      VnpaySandbox__HashSecret: ${VNPAY_HASH_SECRET:-}
-      VnpaySandbox__ReturnUrl: ${VNPAY_RETURN_URL:-http://localhost:3000/payments/return}
-      VnpaySandbox__ClientIp: ${VNPAY_CLIENT_IP:-127.0.0.1}
+      Payments__SimulationOutcome: ${PAYMENT_SIMULATION_OUTCOME:-Pending}
+      Fixtures__Enabled: ${FIXTURES_ENABLED:-true}
+      Wallets__WithdrawalOutcome: ${WALLET_WITHDRAWAL_OUTCOME:-Completed}
       ConnectionStrings__Payment: Host=postgres;Database=PayDB;Username=payment_app;Password=${PAY_DB_PASSWORD};GSS Encryption Mode=Disable
     healthcheck:
       test: [CMD, dotnet, PaymentService.dll, --health]
@@ -205,7 +144,6 @@ services:
       start_period: 40s
     depends_on:
       postgres-init: { condition: service_completed_successfully }
-      keycloak: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
   gateway:
     <<: *api
@@ -229,9 +167,6 @@ services:
     build: ./frontend
     environment:
       AUTH_URL: http://localhost:3000
-      AUTH_PUBLIC_URL: http://localhost:8081
-      AUTH_INTERNAL_URL: http://keycloak:8080
-      AUTH_KEYCLOAK_SECRET: ${WEB_CLIENT_SECRET}
       AUTH_SECRET: ${AUTH_SECRET:?Run scripts/setup.py}
       AUTH_TRUST_HOST: true
       GATEWAY_URL: http://gateway:8080
@@ -278,8 +213,6 @@ services:
 networks:
   backend:
 volumes:
-  trip-data:
   match-data:
   pay-data:
   rabbit-data:
-  identity-data:

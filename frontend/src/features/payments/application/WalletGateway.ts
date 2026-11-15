@@ -1,5 +1,3 @@
-import type { SandboxPayment } from "./SandboxGateway";
-
 export type Wallet = {
   available: number;
   held: number;
@@ -37,13 +35,7 @@ export type WalletPage<T> = { items: T[]; page: number; pageSize: number; total:
 export interface WalletGateway {
   balance(): Promise<Wallet>;
   history(page: number): Promise<WalletPage<WalletActivity>>;
-  topUps(page: number): Promise<WalletPage<SandboxPayment>>;
-  topUp(amount: number): Promise<SandboxPayment>;
+  topUp(amount: number): Promise<WalletActivity>;
   withdrawals(page: number): Promise<WalletPage<WalletWithdrawal>>;
   withdraw(request: WalletWithdrawalRequest): Promise<WalletWithdrawal>;
-}
-
-export interface WalletWithdrawalOpsGateway {
-  pending(page: number): Promise<WalletPage<WalletWithdrawal>>;
-  decide(id: string, approve: boolean, reason: string): Promise<WalletWithdrawal>;
 }

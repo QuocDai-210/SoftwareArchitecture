@@ -4,14 +4,11 @@ import type { RideService } from "../application/RideService";
 import { useRides, type RideUser } from "./useRides";
 import { labels, money } from "./format";
 import { BookingForm } from "./components/BookingForm";
-import { DriverAvailability } from "./components/DriverAvailability";
 import { TripHistory } from "./components/TripHistory";
 import { TripDetails } from "./components/TripDetails";
 import { TripReview } from "./components/TripReview";
 import { RouteMap } from "./components/RouteMap";
 import { AccountPanel } from "./components/AccountPanel";
-import { OpsPanel } from "./components/OpsPanel";
-import { SimulationControls } from "./components/SimulationControls";
 import { PaymentPanel } from "./components/PaymentPanel";
 import { CashReceipt } from "./components/CashReceipt";
 import { NavIcon, type View } from "./components/NavIcon";
@@ -22,71 +19,49 @@ export function RideDashboard({
   service,
   mapKey,
   wallet,
-  withdrawalOps,
 }: {
   user: RideUser;
   logout: ReactNode;
   service: RideService;
   mapKey: string;
   wallet: ReactNode;
-  withdrawalOps: ReactNode;
 }) {
   const model = useRides(user, service);
-  const { isDriver, isRider, isOps, driver, error, busy, active, current, reload, run, act } =
-    model;
-  const [view, setView] = useState<View>(isOps ? "overview" : "ride");
+  const { isRider, error, busy, active, current, reload, run, act } = model;
+  const [view, setView] = useState<View>("ride");
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     setCollapsed(false);
   }, [current?.id, current?.status]);
   const nav: { id: View; label: string }[] = [
-    { id: "ride", label: isOps ? "Bản đồ" : isDriver ? "Nhận chuyến" : "Đặt xe" },
+    { id: "ride", label: "Đặt xe" },
     { id: "history", label: "Lịch sử chuyến" },
-    { id: "payments", label: "Tiền mặt" },
-    ...(!isOps ? [{ id: "wallet" as const, label: "Ví SwiftRide" }] : []),
-    ...(isOps
-      ? [
-          { id: "operations" as const, label: "Quản lý tài xế" },
-          { id: "withdrawals" as const, label: "Duyệt rút tiền" },
-          { id: "overview" as const, label: "Tổng quan" },
-        ]
-      : []),
-    { id: "profile", label: "Hồ sơ cá nhân" },
+    { id: "payments", label: "Thanh toán" },
+    { id: "wallet", label: "Ví SwiftRide" },
+    { id: "profile", label: "Hồ sơ" },
   ];
   useEffect(() => {
     function sync() {
       const [value, id] = window.location.hash.slice(1).split("/");
-      if (value === "ride" && id && /^[0-9a-f-]{36}$/i.test(id)) model.setSelected(id);
-      const known: View[] = [
-        "ride",
-        "history",
-        "payments",
-        "profile",
-        ...(!isOps ? ["wallet" as const] : []),
-        ...(isOps ? ["operations" as const, "withdrawals" as const, "overview" as const] : []),
-      ];
+      if (value === "ride") {
+        model.setSelected(id && /^[0-9a-f-]{36}$/i.test(id) ? id : null);
+      }
+      const known: View[] = ["ride", "history", "payments", "profile", "wallet"];
       if (known.includes(value as View)) setView(value as View);
     }
     sync();
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
-  }, [isOps, model.setSelected]);
+  }, [model.setSelected]);
   function openRide(id?: string) {
     if (id) model.setSelected(id);
     setCollapsed(false);
     window.location.hash = id ? `ride/${id}` : "ride";
     setView("ride");
   }
-  const vehicle = driver
-    ? { latitude: driver.latitude, longitude: driver.longitude, label: "Vị trí xe" }
-    : null;
   const simulation = model.simulation?.tripId === current?.id ? model.simulation : null;
-  const selecting = !current && ((isRider && !active) || (isDriver && !driver?.busy && !active));
-  const roleName = isOps
-    ? "Ops · Quản trị hệ thống"
-    : isDriver
-      ? "Driver · Tài xế"
-      : "User · Người đặt xe";
+  const selecting = !current && isRider && !active;
+  const roleName = "Rider";
   return (
     <div className={`app-shell ${view === "ride" ? "map-shell" : ""}`}>
       <header className="app-header">
@@ -137,13 +112,13 @@ export function RideDashboard({
           <div className="ride-stage">
             <RouteMap
               mapKey={mapKey}
-              pickup={current?.pickup ?? (isDriver ? (model.driverPoint ?? vehicle) : model.from)}
-              destination={current?.destination ?? (isDriver ? null : model.to)}
+              pickup={current?.pickup ?? model.from}
+              destination={current?.destination ?? model.to}
               route={current ? current.quote?.route : model.preview}
               simulation={simulation}
               onSelect={selecting ? model.selectMap : undefined}
-              onLocate={selecting ? () => model.locate(isDriver) : undefined}
-              locateLabel={isDriver ? "Dùng vị trí hiện tại" : "Dùng vị trí hiện tại làm điểm đón"}
+              onLocate={selecting ? () => model.locate() : undefined}
+              locateLabel="Về vị trí mô phỏng của bạn"
               busy={busy}
             />
             <section className="ride-sheet" aria-label="Thao tác chuyến đi">
@@ -156,24 +131,12 @@ export function RideDashboard({
               >
                 <span className="sheet-handle" />
                 <span className="sheet-title">
-                  <strong>
-                    {current
-                      ? labels[current.status]
-                      : isOps
-                        ? "Theo dõi chuyến"
-                        : isDriver
-                          ? "Vị trí và nhận chuyến"
-                          : "Đặt xe"}
-                  </strong>
+                  <strong>{current ? labels[current.status] : "Đặt xe"}</strong>
                   {collapsed && (
                     <small>
                       {current?.quote
                         ? `${money(current.quote.amount)} · ${current.method === "Cod" ? "Tiền mặt" : current.method}`
-                        : isDriver
-                          ? driver?.available
-                            ? "Đang trực tuyến"
-                            : "Đang ngoại tuyến"
-                          : "Mở bảng để tiếp tục"}
+                        : "Mở bảng để tiếp tục"}
                     </small>
                   )}
                 </span>
@@ -190,20 +153,6 @@ export function RideDashboard({
                 {isRider && !current && (
                   <BookingForm model={model} service={service} initialName={user.name} />
                 )}
-                {isDriver && !active && !current && (
-                  <DriverAvailability model={model} service={service} />
-                )}
-                {isOps && !current && (
-                  <div className="p-5">
-                    <h1 className="text-xl font-bold">Chọn chuyến cần theo dõi</h1>
-                    <p className="muted mt-3">
-                      Chọn chuyến để xem vị trí xe, trạng thái và thanh toán tiền mặt.
-                    </p>
-                    <a className="btn mt-5 w-full" href="#history">
-                      Xem danh sách chuyến
-                    </a>
-                  </div>
-                )}
                 {current && (
                   <>
                     {["PaymentPending", "PaymentReview", "Paid"].includes(current.status) && (
@@ -211,24 +160,10 @@ export function RideDashboard({
                         trip={current}
                         payment={model.payment}
                         unavailable={model.paymentUnavailable}
-                        isDriver={isDriver && current.driverId === user.id}
-                        busy={busy}
-                        service={service}
-                        run={run}
                       />
-                    )}
-                    {isOps && current.method === "Cod" && current.status === "PaymentReview" && (
-                      <button
-                        className="btn btn-secondary m-5"
-                        disabled={busy}
-                        onClick={() => void run(() => service.retryPayment(current))}
-                      >
-                        Thử lại tạo giao dịch
-                      </button>
                     )}
                     <TripDetails
                       trip={current}
-                      isDriver={isDriver && current.driverId === user.id}
                       isRider={isRider && current.riderId === user.id}
                       busy={busy}
                       act={act}
@@ -242,18 +177,6 @@ export function RideDashboard({
                       busy={busy}
                       submit={(rating, comment) => model.review(current, rating, comment)}
                     />
-                    {(isDriver || isOps) &&
-                      simulation &&
-                      ["EnRoute", "PickedUp"].includes(current.status) && (
-                        <details className="simulation-panel">
-                          <summary>Điều khiển xe giả lập</summary>
-                          <SimulationControls
-                            simulation={simulation}
-                            onChange={model.controlSimulation}
-                            busy={busy}
-                          />
-                        </details>
-                      )}
                     {!active && (
                       <>
                         {isRider && (
@@ -299,33 +222,13 @@ export function RideDashboard({
                       : "Thông tin rõ ràng. Thao tác trong tầm tay."}
               </p>
             </header>
-            {(view === "history" || view === "overview") && (
+            {view === "history" && (
               <>
-                {view === "overview" && (
-                  <div className="overview-banner">
-                    <div>
-                      <p className="eyebrow">HOẠT ĐỘNG HỆ THỐNG</p>
-                      <h2>
-                        {model.history.total}{" "}
-                        {model.historyStatus ? "chuyến theo bộ lọc" : "chuyến đi"}
-                      </h2>
-                      <p>
-                        {active
-                          ? labels[active.status]
-                          : "Theo dõi hành trình, tài xế và các khoản thu tại một nơi."}
-                      </p>
-                    </div>
-                    <a className="btn" href="#operations">
-                      Quản lý tài xế
-                    </a>
-                  </div>
-                )}
                 <TripHistory
                   busy={busy}
                   loading={model.loading}
                   trips={model.history.items}
                   current={current}
-                  isDriver={isDriver}
                   run={run}
                   reload={reload}
                   setSelected={openRide}
@@ -361,22 +264,10 @@ export function RideDashboard({
                 </div>
               </>
             )}
-            {view === "overview" && (
-              <OpsPanel service={service} run={run} busy={busy} summaryOnly />
-            )}
-            {view === "operations" && isOps && <OpsPanel service={service} run={run} busy={busy} />}
-            {view === "withdrawals" && isOps && withdrawalOps}
             {view === "payments" && (
-              <PaymentPanel
-                service={service}
-                run={run}
-                busy={busy}
-                isOps={isOps}
-                isDriver={isDriver}
-                onTrip={openRide}
-              />
+              <PaymentPanel service={service} run={run} busy={busy} onTrip={openRide} />
             )}
-            {view === "wallet" && !isOps && wallet}
+            {view === "wallet" && wallet}
             {view === "profile" && (
               <>
                 <AccountPanel service={service} run={run} busy={busy} initialName={user.name} />

@@ -68,69 +68,32 @@ public sealed class WalletWithdrawals(
         );
     }
 
-    public async Task<PageResult<WalletWithdrawalView>> Pending(
-        int page,
-        Actor actor,
-        CancellationToken ct
-    )
+    public async Task<bool> ProcessNext(string outcome, CancellationToken ct)
     {
-        RequireOps(actor);
-        ValidatePage(page);
-        var result = await withdrawals.Pending(page, ct);
-        return new(
-            result.Items.Select(WalletWithdrawalView.From).ToArray(),
-            page,
-            10,
-            result.Total
-        );
-    }
-
-    public async Task<WalletWithdrawalView> Review(
-        Guid id,
-        WalletWithdrawalDecision decision,
-        Actor actor,
-        CancellationToken ct
-    )
-    {
-        RequireOps(actor);
-        var reason = decision.Reason?.Trim() ?? "";
-        if (reason.Length > 200 || (!decision.Approve && reason.Length == 0))
-            throw new RuleException(
-                "Khi từ chối cần nhập lý do tối đa 200 ký tự.",
-                ErrorKind.Validation
-            );
+        if (
+            !string.Equals(outcome, "Completed", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(outcome, "Rejected", StringComparison.OrdinalIgnoreCase)
+        )
+            throw new InvalidOperationException("Unsupported local withdrawal fixture.");
+        var next = await withdrawals.NextPending(ct);
+        if (next is null)
+            return false;
         await using var tx = await unit.Begin(ct);
-        var withdrawal = await withdrawals.Find(id, ct)
-            ?? throw new RuleException("Không tìm thấy yêu cầu rút tiền.", ErrorKind.NotFound);
-        await accounts.Lock(withdrawal.OwnerId, ct);
-        withdrawal = await withdrawals.Find(id, ct)
-            ?? throw new RuleException("Không tìm thấy yêu cầu rút tiền.", ErrorKind.NotFound);
-        var target = decision.Approve ? "Completed" : "Rejected";
-        if (withdrawal.State == target)
+        await accounts.Lock(next.OwnerId, ct);
+        var withdrawal = await withdrawals.Find(next.Id, ct);
+        if (withdrawal is null || withdrawal.State != "Pending")
         {
             await tx.Commit(ct);
-            return WalletWithdrawalView.From(withdrawal);
+            return true;
         }
-        if (withdrawal.State != "Pending")
-            throw new RuleException("Yêu cầu rút tiền đã được xử lý theo quyết định khác.");
         var wallet = await accounts.Find(withdrawal.OwnerId, ct)
-            ?? throw new RuleException("Không tìm thấy ví.", ErrorKind.NotFound);
-        if (decision.Approve)
+            ?? throw new RuleException("Wallet does not exist.", ErrorKind.NotFound);
+        var now = clock.GetUtcNow();
+        if (string.Equals(outcome, "Rejected", StringComparison.OrdinalIgnoreCase))
         {
-            wallet.CompleteWithdrawal(withdrawal.Amount);
-            withdrawal.Complete(actor.Id, clock.GetUtcNow());
-            AddActivity(
-                withdrawal,
-                wallet,
-                "WalletWithdrawalPaid",
-                new($"Wallet:{withdrawal.OwnerId}:Held", EntrySide.Debit, withdrawal.Amount),
-                new("SimulatedWithdrawalClearing", EntrySide.Credit, withdrawal.Amount)
-            );
-        }
-        else
-        {
+            const string reason = "Simulated withdrawal rejected by local fixture.";
             wallet.Release(withdrawal.Amount);
-            withdrawal.Reject(actor.Id, reason, clock.GetUtcNow());
+            withdrawal.Reject("simulator", reason, now);
             AddActivity(
                 withdrawal,
                 wallet,
@@ -139,9 +102,21 @@ public sealed class WalletWithdrawals(
                 new($"Wallet:{withdrawal.OwnerId}:Available", EntrySide.Credit, withdrawal.Amount)
             );
         }
+        else
+        {
+            wallet.CompleteWithdrawal(withdrawal.Amount);
+            withdrawal.Complete("simulator", now);
+            AddActivity(
+                withdrawal,
+                wallet,
+                "WalletWithdrawalPaid",
+                new($"Wallet:{withdrawal.OwnerId}:Held", EntrySide.Debit, withdrawal.Amount),
+                new("SimulatedWithdrawalClearing", EntrySide.Credit, withdrawal.Amount)
+            );
+        }
         await unit.Save(ct);
         await tx.Commit(ct);
-        return WalletWithdrawalView.From(withdrawal);
+        return true;
     }
 
     private void AddActivity(
@@ -151,7 +126,12 @@ public sealed class WalletWithdrawals(
         params LedgerLine[] lines
     )
     {
-        var journal = new Journal { PaymentId = withdrawal.Id, Kind = kind, Lines = [.. lines] };
+        var journal = new Journal
+        {
+            PaymentId = withdrawal.Id,
+            Kind = kind,
+            Lines = [.. lines],
+        };
         Ledger.Validate(journal.Lines);
         accounts.Add(journal);
         accounts.Add(
@@ -179,14 +159,8 @@ public sealed class WalletWithdrawals(
 
     private static void RequireWalletOwner(Actor actor)
     {
-        if ((!actor.IsRider && !actor.IsDriver) || actor.IsOps || actor.IsService)
+        if ((!actor.IsRider && !actor.IsDriver) || actor.IsService)
             throw new RuleException("Ví dành cho tài khoản User hoặc Driver.", ErrorKind.Forbidden);
-    }
-
-    private static void RequireOps(Actor actor)
-    {
-        if (!actor.IsOps)
-            throw new RuleException("Cần quyền Ops.", ErrorKind.Forbidden);
     }
 
     private static void ValidatePage(int page)
@@ -196,14 +170,7 @@ public sealed class WalletWithdrawals(
     }
 }
 
-public sealed record WalletWithdrawalRequest(
-    long Amount,
-    string BankName,
-    string AccountNumber,
-    string AccountHolder
-);
-
-public sealed record WalletWithdrawalDecision(bool Approve, string? Reason = null);
+public sealed record WalletWithdrawalRequest(long Amount);
 
 public sealed record WalletWithdrawalView(
     Guid Id,
@@ -216,14 +183,15 @@ public sealed record WalletWithdrawalView(
     string? DecisionReason
 )
 {
-    public static WalletWithdrawalView From(WalletWithdrawal withdrawal) => new(
-        withdrawal.Id,
-        withdrawal.OwnerId,
-        withdrawal.Amount,
-        withdrawal.State,
-        withdrawal.RequestedAt,
-        withdrawal.ReviewedAt,
-        withdrawal.ReviewedBy,
-        withdrawal.DecisionReason
-    );
+    public static WalletWithdrawalView From(WalletWithdrawal withdrawal) =>
+        new(
+            withdrawal.Id,
+            withdrawal.OwnerId,
+            withdrawal.Amount,
+            withdrawal.State,
+            withdrawal.RequestedAt,
+            withdrawal.ReviewedAt,
+            withdrawal.ReviewedBy,
+            withdrawal.DecisionReason
+        );
 }

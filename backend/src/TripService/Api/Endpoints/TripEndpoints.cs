@@ -1,4 +1,5 @@
 using SwiftRide.Trips.Domain;
+using SwiftRide.Trips.Infrastructure;
 
 namespace SwiftRide.Trips.Api;
 
@@ -6,6 +7,12 @@ public static class TripEndpoints
 {
     public static void MapTripEndpoints(this WebApplication app)
     {
+        app.MapPost(
+                "/auth/login",
+                (LoginRequest request, LocalAuthentication auth, CancellationToken ct) =>
+                    auth.Login(request, ct)
+            )
+            .AllowAnonymous();
         app.MapGet(
                 "/profiles/me",
                 async (ClaimsPrincipal user, ProfileCommands commands, CancellationToken ct) =>
@@ -33,12 +40,6 @@ public static class TripEndpoints
                 ) => queries.History(user.Actor(), page ?? 1, status, ct)
             )
             .RequireAuthorization();
-        app.MapGet(
-                "/trips/statistics",
-                (ClaimsPrincipal user, TripQueries queries, CancellationToken ct) =>
-                    queries.Statistics(user.Actor(), ct)
-            )
-            .RequireAuthorization("ops");
         app.MapPost(
                 "/trips",
                 async (
@@ -61,10 +62,8 @@ public static class TripEndpoints
                 }
             )
             .RequireAuthorization("rider");
-        app.MapGet(
-                "/trips",
-                (ClaimsPrincipal user, TripQueries queries, CancellationToken ct) =>
-                    queries.List(user.Actor(), ct)
+        app.MapGet("/trips", (ClaimsPrincipal user, TripQueries queries, CancellationToken ct) =>
+                queries.List(user.Actor(), ct)
             )
             .RequireAuthorization();
         app.MapGet(
@@ -144,7 +143,7 @@ public static class TripEndpoints
                     CancellationToken ct
                 ) => commands.RetryPayment(id, request, user.Actor(), ct)
             )
-            .RequireAuthorization("ops");
+            .RequireAuthorization("driver");
         foreach (
             var (route, target) in new[]
             {

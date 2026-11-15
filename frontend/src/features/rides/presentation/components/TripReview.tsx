@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Trip } from "../../domain/models";
+import { canReviewTrip } from "../../domain/trip-rules";
 
 export function TripReview({
   trip,
@@ -21,7 +22,9 @@ export function TripReview({
         {trip.review && <p className="text-sm mt-2 break-words">{trip.review}</p>}
       </section>
     );
-  if (!isRider || !["PaymentPending", "PaymentReview", "Paid"].includes(trip.status)) return null;
+  if (!isRider || !canReviewTrip(trip)) {
+    return null;
+  }
   return (
     <section className="p-5 border-t border-[#dcebe5]" aria-label="Đánh giá chuyến đi">
       <h2 className="font-bold">Chuyến đi của bạn thế nào?</h2>

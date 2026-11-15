@@ -1,6 +1,5 @@
 import type { RideGateway, Booking } from "../application/RideGateway";
 import type {
-  Driver,
   Journal,
   AssignedDriver,
   Payment,
@@ -8,12 +7,8 @@ import type {
   Point,
   Simulation,
   Profile,
-  DriverApplication,
-  DriverRegistration,
   Page,
   PaymentStatistic,
-  TripStatistic,
-  RoadRoute,
 } from "../domain/models";
 import type { TripAction } from "../domain/trip-rules";
 async function api<T>(path: string, body?: unknown, method = "POST", key?: string): Promise<T> {
@@ -34,9 +29,6 @@ async function api<T>(path: string, body?: unknown, method = "POST", key?: strin
 }
 
 export class HttpRideGateway implements RideGateway {
-  route(pickup: Point, destination: Point) {
-    return api<RoadRoute>("maps/route", { pickup, destination });
-  }
   quote(pickup: Point, destination: Point) {
     return api<NonNullable<Trip["quote"]>>("quote", { pickup, destination });
   }
@@ -46,35 +38,11 @@ export class HttpRideGateway implements RideGateway {
   reverse(latitude: number, longitude: number) {
     return api<Point>(`maps/reverse?latitude=${latitude}&longitude=${longitude}`);
   }
-  async heartbeat() {
-    await api("drivers/me/heartbeat", {}, "PUT");
-  }
-  simulation(driverId: string) {
-    return api<Simulation | null>(`simulations/${driverId}`);
-  }
-  control(driverId: string, speed: number, paused: boolean) {
-    return api<Simulation>(`simulations/${driverId}`, { speed, paused }, "PUT");
-  }
   profile() {
     return api<Profile>("profiles/me");
   }
   saveProfile(name: string, phone: string) {
     return api<Profile>("profiles/me", { name, phone }, "PUT");
-  }
-  applications(page: number) {
-    return api<Page<DriverApplication>>(`ops/drivers?page=${page}`);
-  }
-  registerDriver(application: DriverRegistration) {
-    return api<DriverApplication>("ops/drivers", application);
-  }
-  approveDriver(id: string, temporaryPassword: string) {
-    return api<DriverApplication>(`ops/drivers/${id}/approve`, { temporaryPassword });
-  }
-  rejectDriver(id: string, reason: string) {
-    return api<DriverApplication>(`ops/drivers/${id}/reject`, { reason });
-  }
-  async suspendDriver(subject: string, suspended: boolean) {
-    await api(`ops/drivers/${subject}/suspension`, { suspended }, "PUT");
   }
   history(page: number, status?: string) {
     return api<Page<Trip>>(
@@ -90,25 +58,8 @@ export class HttpRideGateway implements RideGateway {
   paymentStatistics() {
     return api<PaymentStatistic[]>("payments/statistics");
   }
-  tripStatistics() {
-    return api<{ total: number; statuses: TripStatistic[] }>("trips/statistics").then(
-      (result) => result.statuses,
-    );
-  }
-  confirmCash(id: string, reason: string | undefined, key: string) {
-    return api<Payment>(`payments/${id}/confirm-cash`, { received: true, reason }, "POST", key);
-  }
-  refund(id: string, reason: string, key: string) {
-    return api<Payment>(`payments/${id}/refund`, { reason, cashReturned: true }, "POST", key);
-  }
-  async retryPayment(trip: Trip) {
-    await api(`trips/${trip.id}/retry-payment`, { expectedVersion: trip.version });
-  }
   trips() {
     return api<Trip[]>("trips");
-  }
-  driver() {
-    return api<Driver>("drivers/me");
   }
   screen(id: string) {
     return api<{
@@ -131,11 +82,5 @@ export class HttpRideGateway implements RideGateway {
   }
   async review(trip: Trip, rating: number, comment: string) {
     await api(`trips/${trip.id}/review`, { expectedVersion: trip.version, rating, comment });
-  }
-  async location(latitude: number, longitude: number) {
-    await api("drivers/me/location", { latitude, longitude }, "PUT");
-  }
-  async availability(available: boolean) {
-    await api("drivers/me/availability", { available }, "PUT");
   }
 }

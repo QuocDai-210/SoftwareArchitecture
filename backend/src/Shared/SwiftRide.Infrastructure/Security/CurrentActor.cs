@@ -17,9 +17,8 @@ public static class CurrentActor
     public static Actor Actor(this ClaimsPrincipal user) =>
         new(
             user.Subject(),
-            user.IsInRole("user"),
+            user.IsInRole("rider"),
             user.IsInRole("driver"),
-            user.IsInRole("ops"),
             user.IsInRole("service")
         );
 }

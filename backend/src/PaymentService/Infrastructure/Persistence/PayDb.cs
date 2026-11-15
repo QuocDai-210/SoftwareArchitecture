@@ -6,6 +6,7 @@ public sealed class PayDb(DbContextOptions<PayDb> options) : DbContext(options)
     public DbSet<WalletAccount> WalletAccounts => Set<WalletAccount>();
     public DbSet<WalletActivity> WalletActivities => Set<WalletActivity>();
     public DbSet<WalletWithdrawal> WalletWithdrawals => Set<WalletWithdrawal>();
+    public DbSet<WalletHoldClosure> WalletHoldClosures => Set<WalletHoldClosure>();
     public DbSet<CheckoutAttempt> CheckoutAttempts => Set<CheckoutAttempt>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Wallet> Wallets => Set<Wallet>();
@@ -15,6 +16,9 @@ public sealed class PayDb(DbContextOptions<PayDb> options) : DbContext(options)
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Outbox();
+        var closure = b.Entity<WalletHoldClosure>();
+        closure.HasKey(x => new { x.TripId, x.QuoteId });
+        closure.Property(x => x.RiderId).HasMaxLength(100);
         var sandbox = b.Entity<SandboxPayment>();
         sandbox.HasKey(x => x.Reference);
         sandbox.Property(x => x.Reference).HasMaxLength(32);
@@ -61,7 +65,7 @@ public sealed class PayDb(DbContextOptions<PayDb> options) : DbContext(options)
         activity.ToTable(t =>
             t.HasCheckConstraint(
                 "CK_WalletActivity_Amounts",
-                "\"Amount\" > 0 AND \"AvailableAfter\" >= 0 AND \"HeldAfter\" >= 0 AND \"PendingAfter\" >= 0"
+                "(\"Amount\" > 0 OR (\"Amount\" = 0 AND \"Kind\" IN ('TripHold', 'TripHoldReleased', 'TripSettled', 'DriverEarning'))) AND \"AvailableAfter\" >= 0 AND \"HeldAfter\" >= 0 AND \"PendingAfter\" >= 0"
             )
         );
         var withdrawal = b.Entity<WalletWithdrawal>();
@@ -118,7 +122,9 @@ public sealed class PayDb(DbContextOptions<PayDb> options) : DbContext(options)
         j.HasKey(x => x.Id);
         j.Property(x => x.Lines).JsonColumn();
         j.Property(x => x.Kind).HasMaxLength(150);
-        j.HasIndex(x => new { x.PaymentId, x.Kind }).IsUnique();
+        j.HasIndex(x => new { x.PaymentId, x.Kind })
+            .IsUnique()
+            .HasFilter("\"Kind\" NOT IN ('TripHold', 'TripHoldReleased')");
         var op = b.Entity<ProviderOperation>();
         op.HasKey(x => x.Key);
         op.Property(x => x.Key).HasMaxLength(150);

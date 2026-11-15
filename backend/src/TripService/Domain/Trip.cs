@@ -21,6 +21,18 @@ public sealed class Trip
     public PaymentMethod Method { get; set; }
     public string? PaymentToken { get; set; }
     public int Rejections { get; private set; }
+    public bool CanCancelWalletHold =>
+        Method == PaymentMethod.Wallet
+        && Status == TripStatus.PaymentReview
+        && !History.Any(change =>
+            change.Status
+                is TripStatus.DriverAccepted
+                    or TripStatus.EnRoute
+                    or TripStatus.PickedUp
+                    or TripStatus.DroppedOff
+                    or TripStatus.PaymentPending
+                    or TripStatus.Paid
+        );
     public IReadOnlyList<string> ExcludedDrivers { get; private set; } = [];
     public DateTimeOffset? Deadline { get; private set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -61,6 +73,7 @@ public sealed class Trip
             );
         if (
             Status is not (TripStatus.PaymentPending or TripStatus.PaymentReview or TripStatus.Paid)
+            || !History.Any(change => change.Status == TripStatus.DroppedOff)
         )
             throw new RuleException("Chỉ đánh giá sau khi đã trả khách.");
         if (Rating is not null)
@@ -114,27 +127,72 @@ public sealed class Trip
 
     public void WalletHoldReleased()
     {
-        if (Status == TripStatus.PaymentReview)
-            Move(
-                TripStatus.AwaitingRiderConfirmation,
-                Reason ?? "Không thể giữ tiền ví. Kiểm tra số dư rồi xác nhận lại giá."
-            );
+        if (Status != TripStatus.PaymentReview)
+            return;
+        // The closed quote must never be reused by a delayed hold request or a new confirmation.
+        if (Quote is not null)
+            Quote = Quote with { ExpiresAt = DateTimeOffset.UtcNow };
+        Deadline = DateTimeOffset.UtcNow;
+        Move(
+            TripStatus.AwaitingRiderConfirmation,
+            "Wallet hold released. Add funds if needed, then confirm the quote again."
+        );
+    }
+
+    public void WalletHoldReleasedForRematch()
+    {
+        if (Status != TripStatus.PaymentReview)
+            return;
+        var exhausted = Rejections > 3;
+        DriverId = null;
+        ReservationId = null;
+        Quote = null;
+        Deadline = null;
+        Move(
+            exhausted ? TripStatus.Failed : TripStatus.Requested,
+            exhausted
+                ? Reason ?? "Driver search attempts exhausted."
+                : "Wallet hold released. Searching for a new driver and quote."
+        );
     }
 
     public void WalletHoldCancelled() =>
-        Move(TripStatus.Cancelled, "Người đặt xe hủy chuyến khi đang giữ tiền ví.");
+        Move(TripStatus.Cancelled, "Rider cancelled the trip after the wallet hold was released.");
 
     public void RejectDriver(int k = 3)
     {
         if (Status != TripStatus.AwaitingDriverAcceptance)
-            throw new RuleException("Lời mời không còn hiệu lực.");
+            throw new RuleException("Offer is no longer active.");
         if (DriverId is not null)
             ExcludeDriver();
         Rejections++;
-        Move(
-            Rejections > k ? TripStatus.Failed : TripStatus.Requested,
-            Rejections > k ? "Tài xế từ chối quá giới hạn." : "Đang tìm tài xế khác."
-        );
+        var exhausted = Rejections > k;
+        var next =
+            Method == PaymentMethod.Wallet ? TripStatus.PaymentReview
+            : exhausted ? TripStatus.Failed
+            : TripStatus.Requested;
+        Move(next, exhausted ? "Driver rejection limit reached." : "Searching for another driver.");
+        Deadline = null;
+    }
+
+    public void DriverUnavailable(string reason)
+    {
+        if (DriverId is not null)
+            ExcludeDriver();
+        Rejections++;
+        var exhausted = Rejections > 3;
+        var next =
+            Method == PaymentMethod.Wallet ? TripStatus.PaymentReview
+            : exhausted ? TripStatus.Failed
+            : TripStatus.Requested;
+        Move(next, reason);
+        Deadline = null;
+    }
+
+    public void FailAfterWalletRelease(string reason)
+    {
+        Rejections = 4;
+        Move(TripStatus.PaymentReview, reason);
         Deadline = null;
     }
 

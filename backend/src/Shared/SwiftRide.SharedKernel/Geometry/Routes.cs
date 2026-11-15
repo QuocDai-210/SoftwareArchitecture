@@ -14,7 +14,6 @@ public static class Routes
             * 1.3m;
         if (distance < 0.05m || distance > 100m)
             throw new RuleException("Demo hỗ trợ tuyến từ 50 m đến 100 km.", ErrorKind.Validation);
-        // ponytail: tuyến demo, thay bằng route provider khi cần đường đi thực tế.
         return new(decimal.Round(distance, 3), decimal.Round(distance / 25 * 60, 2));
     }
 }

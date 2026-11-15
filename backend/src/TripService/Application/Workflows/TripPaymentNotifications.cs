@@ -49,8 +49,6 @@ public sealed class TripPaymentNotifications(
             TripStatus.PaymentReview,
             "Thanh toán hết lượt retry; cần đối soát hoặc phát lại."
         );
-        if (trip.Method == SwiftRide.SharedKernel.PaymentMethod.Wallet)
-            await bus.Publish(WorkflowEvents.ReleaseWallet(trip), trip.CorrelationId, ct);
         paymentMetrics.Outcome("error");
         await writer.Save(ct);
     }
@@ -58,6 +56,8 @@ public sealed class TripPaymentNotifications(
     public async Task WalletHoldSucceeded(WalletTripHoldSucceeded message, CancellationToken ct)
     {
         var trip = await reader.Get(message.TripId, ct);
+        if (trip.Quote?.Id != message.QuoteId)
+            return;
         if (
             trip.Method != SwiftRide.SharedKernel.PaymentMethod.Wallet
             || trip.RiderId != message.RiderId
@@ -76,7 +76,11 @@ public sealed class TripPaymentNotifications(
             trip.WalletHoldFailed(
                 "Báo giá đã hết hạn trong lúc giữ tiền. Xác nhận lại giá để tiếp tục."
             );
-            await bus.Publish(WorkflowEvents.ReleaseWallet(trip), trip.CorrelationId, ct);
+            await bus.Publish(
+                WorkflowEvents.ReleaseWallet(trip, rematch: true),
+                trip.CorrelationId,
+                ct
+            );
             await writer.Save(ct);
             return;
         }
@@ -91,21 +95,33 @@ public sealed class TripPaymentNotifications(
             trip.Method != SwiftRide.SharedKernel.PaymentMethod.Wallet
             || trip.RiderId != message.RiderId
             || trip.Quote?.Amount != message.Amount
-            || trip.Status is TripStatus.Cancelled or TripStatus.Paid
+            || (message.QuoteId is not null && trip.Quote?.Id != message.QuoteId)
+            || trip.Status != TripStatus.WalletHoldPending
         )
             return;
         trip.WalletHoldFailed(message.Reason);
+        await bus.Publish(WorkflowEvents.ReleaseWallet(trip), trip.CorrelationId, ct);
         await writer.Save(ct);
     }
 
     public async Task WalletHoldReleased(WalletTripHoldReleased message, CancellationToken ct)
     {
         var trip = await reader.Get(message.TripId, ct);
+        if (message.QuoteId is not null && trip.Quote?.Id != message.QuoteId)
+            return;
         if (trip.RiderId != message.RiderId || trip.Quote?.Amount != message.Amount)
             throw new RuleException("Khoản giữ hoàn lại không khớp chuyến.");
         if (trip.Status != TripStatus.PaymentReview)
             return;
-        trip.WalletHoldReleased();
+        if (message.CancelRequested)
+        {
+            trip.WalletHoldCancelled();
+            await WorkflowEvents.Release(trip, bus, ct);
+        }
+        else if (message.Rematch)
+            trip.WalletHoldReleasedForRematch();
+        else
+            trip.WalletHoldReleased();
         await writer.Save(ct);
     }
 }

@@ -11,6 +11,13 @@ public static class ServiceRegistration
             o.UseNpgsql(builder.Configuration.GetConnectionString("Trip"))
         );
         builder.Services.AddScoped<TripRepository>();
+        builder.Services.AddSingleton(
+            new TripSimulationSettings(
+                builder.Configuration.GetValue<bool>("Simulation:AutoAcceptDrivers")
+            )
+        );
+        builder.Services.AddScoped<LocalAuthentication>();
+        builder.Services.AddScoped<TripAccountSeeder>();
         builder.Services.AddScoped<IUserProfileStore, UserProfileStore>();
         builder.Services.AddScoped<ProfileCommands>();
         builder.Services.AddScoped<ITripReader>(s => s.GetRequiredService<TripRepository>());
@@ -39,5 +46,8 @@ public static class ServiceRegistration
     {
         await using var scope = services.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<TripDb>().Database.MigrateAsync();
+        await scope
+            .ServiceProvider.GetRequiredService<TripAccountSeeder>()
+            .Seed(CancellationToken.None);
     }
 }

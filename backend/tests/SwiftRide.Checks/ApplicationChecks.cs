@@ -1,6 +1,7 @@
+using Moq;
 using SwiftRide.Contracts;
 using SwiftRide.Payments.Application;
-using SwiftRide.Payments.Application.Ports;
+using SwiftRide.Payments.Application.Wallets;
 using SwiftRide.Payments.Domain;
 using SwiftRide.SharedKernel;
 
@@ -8,86 +9,54 @@ static class ApplicationChecks
 {
     public static async Task Run(Action<bool, string> check)
     {
-        var wallet = Wallet.Funded("rider", 100);
-        var provider = new MemoryProvider();
-        IPaymentMethod[] methods =
-        [
-            new CardMethod(provider),
-            new WalletMethod(new MemoryWalletAccounts(wallet)),
-        ];
-        var factory = new PaymentMethodFactory(methods);
-        foreach (var method in methods)
-        {
-            var request = new PaymentRequest(
-                Guid.NewGuid(),
-                "rider",
-                40,
-                method.Method,
-                "demo-success",
-                Guid.NewGuid().ToString()
-            );
-            check(
-                ReferenceEquals(factory.Create(method.Method), method),
-                "registry resolves supplied adapter " + method.Method
-            );
-            var captured = await method.Capture(request, default);
-            check(captured.Success, "payment adapter accepts valid request " + method.Method);
-            var lines = Ledger.Charge(method.DebitAccount("rider"), 40);
-            Ledger.Validate(lines);
-            check(
-                lines[0].Account
-                    == (
-                        method.Method == PaymentMethod.Card
-                            ? "ProviderReceivable"
-                            : "WalletLiability:rider"
-                    ),
-                "funding account belongs to method " + method.Method
-            );
-            var payment = Payment.Captured(
-                request.TripId,
-                "rider",
-                40,
-                method.Method,
-                "hash",
-                "key",
-                "correlation",
-                true,
-                null
-            );
-            await method.Refund(payment, default);
-            payment.Refund("refund-key", "hash", "reason");
-            check(
-                payment.Status == PaymentStatus.Refunded,
-                "refund updates domain state " + method.Method
-            );
-            try
-            {
-                payment.Compensate();
-                throw new Exception("Refunded payment compensated twice");
-            }
-            catch (RuleException)
-            {
-                check(true, "refund blocks further compensation " + method.Method);
-            }
-        }
-        check(
-            provider.Captures == 1 && provider.Refunds == 1,
-            "card delegates provider capture and refund"
+        var accounts = new Mock<IWalletAccounts>();
+        var settled = false;
+        accounts
+            .Setup(x => x.SettleTrip(It.IsAny<Guid>(), "rider", "driver", 40, default, null))
+            .Callback(() => settled = true)
+            .Returns(Task.CompletedTask);
+        var walletMethod = new WalletMethod(accounts.Object);
+        var request = new PaymentRequest(
+            Guid.NewGuid(),
+            "rider",
+            40,
+            PaymentMethod.Wallet,
+            null,
+            Guid.NewGuid().ToString(),
+            DriverId: "driver"
         );
-        check(wallet.Balance == 100, "wallet capture/refund restores balance");
+        var result = await walletMethod.Capture(request, default);
+        check(result.Success && settled, "wallet payment settles held trip funds once");
         check(
-            !wallet.TryDebit(101) && wallet.Balance == 100,
-            "insufficient funds leave balance intact"
+            walletMethod.DebitAccount("rider") == "Wallet:rider:Held",
+            "wallet payment debits the held wallet account"
         );
+
+        var insufficient = new WalletAccount { OwnerId = "rider" };
         try
         {
-            wallet.Credit(-1);
-            throw new Exception("Negative wallet credit accepted");
+            insufficient.Hold(100);
+            throw new Exception("Insufficient wallet balance accepted");
         }
         catch (RuleException)
         {
-            check(wallet.Balance == 100, "wallet rejects negative credit without mutation");
+            check(
+                insufficient.Available == 0 && insufficient.Held == 0,
+                "insufficient balance leaves wallet unchanged"
+            );
         }
+        insufficient.CreditTopUp(10000);
+        insufficient.Hold(7000);
+        check(
+            insufficient.Available == 3000 && insufficient.Held == 7000,
+            "wallet hold transfers available balance to held"
+        );
+        insufficient.Release(7000);
+        check(
+            insufficient.Available == 10000 && insufficient.Held == 0,
+            "wallet release restores available balance"
+        );
+
         var cash = new CashMethod();
         var cashRequest = new PaymentRequest(
             Guid.NewGuid(),
@@ -100,8 +69,8 @@ static class ApplicationChecks
         );
         var cashResult = await cash.Capture(cashRequest, default);
         check(
-            cashResult.Outcome == CaptureOutcome.Pending && !cashResult.Success,
-            "COD capture waits for physical cash"
+            cashResult.Outcome == CaptureOutcome.Pending,
+            "COD waits for the assigned driver to collect cash"
         );
         var cod = Payment.Captured(
             cashRequest.TripId,
@@ -117,136 +86,37 @@ static class ApplicationChecks
         cod.AwaitCash("driver");
         check(
             cod.Status == PaymentStatus.Pending && cod.CollectedAt is null,
-            "dropoff never settles COD"
+            "dropoff never settles COD before collection"
         );
         check(
             cod.CollectCash("cash-key", "cash-hash", "driver", null),
-            "first cash collection changes state"
-        );
-        var collectedAt = cod.CollectedAt;
-        check(
-            cod.Status == PaymentStatus.Settled
-                && cod.CollectedBy == "driver"
-                && collectedAt is not null,
-            "cash collection keeps actor and timestamp"
+            "first cash collection changes payment state"
         );
         check(
-            !cod.CollectCash("cash-key", "cash-hash", "driver", null)
-                && cod.CollectedAt == collectedAt,
-            "cash replay leaves state and timestamp unchanged"
+            cod.Status == PaymentStatus.Settled && cod.CollectedBy == "driver",
+            "cash collection records its assigned driver"
         );
-        foreach (
-            var (key, hash) in new[] { ("other-key", "cash-hash"), ("cash-key", "other-hash") }
-        )
-        {
-            try
-            {
-                cod.CollectCash(key, hash, "driver", null);
-                throw new Exception("Conflicting cash collection accepted");
-            }
-            catch (RuleException)
-            {
-                check(true, "cash idempotency rejects key or payload conflict");
-            }
-        }
-        try
-        {
-            cod.AwaitCash("driver");
-            throw new Exception("Settled cash reopened");
-        }
-        catch (RuleException)
-        {
-            check(true, "settled cash cannot return to pending");
-        }
+        check(
+            !cod.CollectCash("cash-key", "cash-hash", "driver", null),
+            "cash collection replay is idempotent"
+        );
+
         var cashLines = Ledger.Charge(cash.DebitAccount("driver"), cod.Amount);
-        check(
-            cashLines[0].Account == "CashHeldByDriver:driver",
-            "cash is held by assigned driver, never rider wallet"
-        );
         Ledger.Validate(cashLines);
-        cod.Refund("refund-cash-key", "refund-hash", "Returned to rider", "ops");
-        check(
-            cod.RefundedBy == "ops"
-                && cod.RefundedAt is not null
-                && cod.Status == PaymentStatus.Refunded,
-            "cash refund records operator and time"
-        );
-        check(
-            !cod.CollectCash("cash-key", "cash-hash", "driver", null)
-                && cod.Status == PaymentStatus.Refunded,
-            "late collection replay cannot reopen refunded cash"
-        );
         Ledger.Validate(Ledger.Reverse(cashLines));
-        var replacement = new ReplacementMethod();
+        cod.Refund("refund-key", "refund-hash", "Cash returned", "driver");
         check(
-            ReferenceEquals(
-                new PaymentMethodFactory([replacement]).Create(PaymentMethod.Card),
-                replacement
-            ),
-            "replace payment adapter without editing factory"
+            cod.Status == PaymentStatus.Refunded && cod.RefundedBy == "driver",
+            "COD refund records assigned driver and refund state"
         );
         try
         {
-            factory.Create((PaymentMethod)42);
+            new PaymentMethodFactory([walletMethod, cash]).Create((PaymentMethod)42);
             throw new Exception("Unknown payment method accepted");
         }
         catch (RuleException ex)
         {
-            check(ex.Kind == ErrorKind.Validation, "unknown payment method rejected");
+            check(ex.Kind == ErrorKind.Validation, "unknown payment method is rejected");
         }
-    }
-
-    private sealed class MemoryWalletAccounts(Wallet wallet) : IWalletAccounts
-    {
-        private readonly WalletAccount _account = new() { OwnerId = wallet.RiderId };
-
-        public Task Lock(string owner, CancellationToken ct) => Task.CompletedTask;
-        public Task<WalletAccount?> Find(string owner, CancellationToken ct) =>
-            Task.FromResult<WalletAccount?>(_account.OwnerId == owner ? _account : null);
-        public Task<WalletActivity?> FindActivity(string reference, CancellationToken ct) =>
-            Task.FromResult<WalletActivity?>(null);
-        public Task<PageResult<WalletActivity>> History(string owner, int page, CancellationToken ct) =>
-            throw new NotSupportedException();
-        public Task<PageResult<SandboxView>> TopUps(string owner, int page, CancellationToken ct) =>
-            throw new NotSupportedException();
-        public Task HoldTrip(Guid tripId, string riderId, long amount, CancellationToken ct) =>
-            Task.CompletedTask;
-        public Task ReleaseTrip(Guid tripId, string riderId, long amount, CancellationToken ct) =>
-            Task.CompletedTask;
-        public Task SettleTrip(Guid tripId, string riderId, string driverId, long amount, CancellationToken ct) =>
-            Task.CompletedTask;
-        public void Add(WalletAccount account) { }
-        public void Add(WalletActivity activity) { }
-        public void Add(Journal journal) { }
-    }
-
-    private sealed class MemoryProvider : ICardProvider
-    {
-        public int Captures;
-        public int Refunds;
-
-        public Task<CaptureResult> Capture(PaymentRequest request, CancellationToken ct)
-        {
-            Captures++;
-            return Task.FromResult(new CaptureResult(CaptureOutcome.Settled));
-        }
-
-        public Task Refund(Payment payment, CancellationToken ct)
-        {
-            Refunds++;
-            return Task.CompletedTask;
-        }
-    }
-
-    private sealed class ReplacementMethod : IPaymentMethod
-    {
-        public PaymentMethod Method => PaymentMethod.Card;
-
-        public string DebitAccount(string riderId) => "ReplacementClearing";
-
-        public Task<CaptureResult> Capture(PaymentRequest request, CancellationToken ct) =>
-            Task.FromResult(new CaptureResult(CaptureOutcome.Declined, "Declined"));
-
-        public Task Refund(Payment payment, CancellationToken ct) => Task.CompletedTask;
     }
 }

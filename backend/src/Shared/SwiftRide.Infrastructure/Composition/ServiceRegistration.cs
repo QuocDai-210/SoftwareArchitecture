@@ -1,6 +1,5 @@
 using System.Diagnostics;
-using System.Security.Claims;
-using System.Text.Json;
+using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
@@ -9,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -45,78 +45,57 @@ public static class ServiceRegistration
         builder.Services.AddSingleton<IMatchingMetrics>(s =>
             s.GetRequiredService<ApplicationMetrics>()
         );
-        builder.Services.AddSingleton<
-            SwiftRide.Application.Payments.IPaymentTokenPolicy,
-            DemoPaymentTokenPolicy
-        >();
         builder.Services.AddProblemDetails();
         builder.Services.AddOpenApi();
+        var signingKey = builder.Configuration["Auth:SigningKey"];
+        if (string.IsNullOrWhiteSpace(signingKey) || Encoding.UTF8.GetByteCount(signingKey) < 32)
+            throw new InvalidOperationException("Auth:SigningKey must contain at least 32 bytes.");
+        var issuer = builder.Configuration["Auth:Issuer"] ?? "swiftride-local";
         builder
             .Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(o =>
             {
-                o.Authority =
-                    builder.Configuration["Auth:Authority"]
-                    ?? throw new InvalidOperationException("Auth:Authority required");
-                o.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
                 o.MapInboundClaims = false;
-                o.TokenValidationParameters.ValidIssuer = builder.Configuration["Auth:Issuer"];
-                o.TokenValidationParameters.ValidAudience = "swiftride-api";
-                o.TokenValidationParameters.NameClaimType = "preferred_username";
-                o.Events = new JwtBearerEvents
+                o.TokenValidationParameters = new TokenValidationParameters
                 {
-                    OnTokenValidated = context =>
-                    {
-                        var identity = (ClaimsIdentity)context.Principal!.Identity!;
-                        var realm = context.Principal.FindFirst("realm_access")?.Value;
-                        if (realm is not null)
-                        {
-                            using var doc = JsonDocument.Parse(realm);
-                            if (doc.RootElement.TryGetProperty("roles", out var roles))
-                                foreach (var role in roles.EnumerateArray())
-                                    identity.AddClaim(
-                                        new Claim(ClaimTypes.Role, role.GetString()!)
-                                    );
-                        }
-                        return Task.CompletedTask;
-                    },
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
+                    ValidateIssuer = true,
+                    ValidIssuer = issuer,
+                    ValidateAudience = true,
+                    ValidAudience = "swiftride-api",
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromSeconds(30),
+                    NameClaimType = "preferred_username",
+                    RoleClaimType = "role",
                 };
             });
         builder
             .Services.AddAuthorizationBuilder()
-            .AddPolicy("rider", p => p.RequireRole("user"))
-            .AddPolicy("user", p => p.RequireRole("user"))
+            .AddPolicy("rider", p => p.RequireRole("rider"))
             .AddPolicy("driver", p => p.RequireRole("driver"))
-            .AddPolicy("service", p => p.RequireRole("service"))
-            .AddPolicy("ops", p => p.RequireRole("ops"));
+            .AddPolicy("service", p => p.RequireRole("service"));
         builder.Services.AddSingleton<ServiceTokens>();
         builder.Services.AddTransient<ServiceAuthHandler>();
         builder.Services.AddTransient<InternalRetryHandler>();
-        builder.Services.AddHttpClient("identity", c => c.Timeout = TimeSpan.FromSeconds(5));
         builder
-            .Services.AddHttpClient(
-                "matching",
-                c =>
-                {
-                    c.BaseAddress = new Uri(
-                        builder.Configuration["Services:Matching"] ?? "http://matching:8080"
-                    );
-                    c.Timeout = TimeSpan.FromSeconds(20);
-                }
-            )
+            .Services.AddHttpClient("matching", c =>
+            {
+                c.BaseAddress = new Uri(
+                    builder.Configuration["Services:Matching"] ?? "http://matching:8080"
+                );
+                c.Timeout = TimeSpan.FromSeconds(20);
+            })
             .AddHttpMessageHandler<ServiceAuthHandler>()
             .AddHttpMessageHandler<InternalRetryHandler>();
         builder
-            .Services.AddHttpClient(
-                "payment",
-                c =>
-                {
-                    c.BaseAddress = new Uri(
-                        builder.Configuration["Services:Payment"] ?? "http://payment:8080"
-                    );
-                    c.Timeout = TimeSpan.FromSeconds(20);
-                }
-            )
+            .Services.AddHttpClient("payment", c =>
+            {
+                c.BaseAddress = new Uri(
+                    builder.Configuration["Services:Payment"] ?? "http://payment:8080"
+                );
+                c.Timeout = TimeSpan.FromSeconds(20);
+            })
             .AddHttpMessageHandler<ServiceAuthHandler>()
             .AddHttpMessageHandler<InternalRetryHandler>();
         if (builder.Configuration.GetValue<bool>("OTEL_SDK_DISABLED"))
@@ -126,16 +105,10 @@ public static class ServiceRegistration
             .ConfigureResource(r => r.AddService(service))
             .WithTracing(t =>
                 t.AddSource("SwiftRide", "MassTransit")
-                    .AddAspNetCoreInstrumentation(o =>
-                        o.Filter = context =>
-                            !context.Request.Path.StartsWithSegments("/payments/vnpay")
-                    )
+                    .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation(o =>
                         o.FilterHttpRequestMessage = request =>
-                            request.RequestUri?.Host
-                                is not "api.geoapify.com"
-                                    and not "sandbox.vnpayment.vn"
-                            && request.RequestUri?.AbsolutePath != "/payments/vnpay/ipn"
+                            request.RequestUri?.Host is not "api.geoapify.com"
                     )
                     .AddOtlpExporter()
             )

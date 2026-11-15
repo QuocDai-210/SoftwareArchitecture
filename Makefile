@@ -4,25 +4,25 @@
 
 help:
 	@printf '%s\n' \
-		'make up                    Bật toàn hệ thống, đồng bộ Keycloak' \
-		'make matching              Nhóm Matching (tương tự: trip, payment)' \
-		'make stop                  Dừng hệ thống, giữ nguyên dữ liệu' \
-		'make status                Xem trạng thái container' \
-		'make logs                  Theo dõi 100 dòng log gần nhất' \
-		'make build                 Dừng hệ thống, build image tuần tự' \
-		'make check                 Chạy bộ kiểm tra đầy đủ'
+		'make up       Start the local SwiftRide stack' \
+		'make trip     Start Trip and its dependencies' \
+		'make matching Start Matching and its dependencies' \
+		'make payment  Start Payment and its dependencies' \
+		'make stop     Stop project containers and preserve volumes' \
+		'make status   Show project container status' \
+		'make logs     Follow recent project logs' \
+		'make build    Stop services and build images sequentially' \
+		'make check    Run source, backend, and frontend checks'
 
 up:
 	python3 -B scripts/check-resources.py
-	docker compose stop sqlserver observability
+	docker compose stop observability
 	OTEL_SDK_DISABLED=true docker compose up --no-build -d --wait --wait-timeout 300
-	python3 -B scripts/sync-identity.py
 
 trip matching payment:
 	python3 -B scripts/check-resources.py
 	docker compose --profile "*" stop
 	OTEL_SDK_DISABLED=true docker compose up --no-build -d --wait --wait-timeout 300 $@
-	python3 -B scripts/sync-identity.py
 
 stop:
 	docker compose --profile "*" stop

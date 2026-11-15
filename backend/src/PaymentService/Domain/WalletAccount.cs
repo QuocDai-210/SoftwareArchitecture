@@ -5,18 +5,9 @@ namespace SwiftRide.Payments.Domain;
 public sealed class WalletAccount
 {
     public string OwnerId { get; init; } = "";
-    public long Available
-    {
-        get; private set;
-    }
-    public long Held
-    {
-        get; private set;
-    }
-    public long PendingEarnings
-    {
-        get; private set;
-    }
+    public long Available { get; private set; }
+    public long Held { get; private set; }
+    public long PendingEarnings { get; private set; }
 
     public void CreditTopUp(long amount)
     {
@@ -29,7 +20,7 @@ public sealed class WalletAccount
 
     public void Hold(long amount)
     {
-        if (amount <= 0 || Available < amount)
+        if (amount < 0 || Available < amount)
         {
             throw new RuleException("Số dư ví không đủ để đặt chuyến.", ErrorKind.Validation);
         }
@@ -50,7 +41,7 @@ public sealed class WalletAccount
 
     public void Release(long amount)
     {
-        if (amount <= 0 || Held < amount)
+        if (amount < 0 || Held < amount)
         {
             throw new RuleException("Khoản giữ ví không hợp lệ.");
         }
@@ -60,7 +51,7 @@ public sealed class WalletAccount
 
     public void Settle(long amount)
     {
-        if (amount <= 0 || Held < amount)
+        if (amount < 0 || Held < amount)
         {
             throw new RuleException("Khoản giữ ví không hợp lệ.");
         }
@@ -76,7 +67,7 @@ public sealed class WalletAccount
 
     public void CreditEarnings(long amount)
     {
-        if (amount <= 0)
+        if (amount < 0)
         {
             throw new RuleException("Doanh thu chuyến không hợp lệ.");
         }

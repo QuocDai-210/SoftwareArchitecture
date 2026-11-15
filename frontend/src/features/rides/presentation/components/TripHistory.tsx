@@ -6,17 +6,13 @@ export function TripHistory({
   loading,
   trips,
   current,
-  isDriver,
   run,
   reload,
   setSelected,
   onRebook,
   status,
   onFilter,
-}: Pick<
-  RidesViewModel,
-  "busy" | "loading" | "trips" | "current" | "isDriver" | "run" | "reload"
-> & {
+}: Pick<RidesViewModel, "busy" | "loading" | "trips" | "current" | "run" | "reload"> & {
   setSelected: (id: string) => void;
   onRebook?: (trip: RidesViewModel["trips"][number]) => void;
   status: string;
@@ -57,11 +53,7 @@ export function TripHistory({
       ) : !trips.length ? (
         <div className="p-8">
           <p className="font-bold">Hành trình đầu tiên đang chờ</p>
-          <p className="text-sm text-[#62766b] mt-2">
-            {isDriver
-              ? "Bật trực tuyến và chờ lời mời từ User."
-              : "Chọn điểm đón và điểm đến để bắt đầu."}
-          </p>
+          <p className="text-sm text-[#62766b] mt-2">Chọn điểm đón và điểm đến để bắt đầu.</p>
         </div>
       ) : (
         <ul className="divide-y divide-[#dcebe5]">

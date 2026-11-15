@@ -32,21 +32,16 @@ def locked(output):
             fcntl.flock(output, fcntl.LOCK_UN)
 
 GENERATED = {
-    "SQL_SA_PASSWORD",
     "POSTGRES_ADMIN_PASSWORD",
     "TRIP_DB_PASSWORD",
     "MONGO_ROOT_PASSWORD",
     "MATCH_DB_PASSWORD",
     "PAY_DB_PASSWORD",
     "RABBIT_PASSWORD",
-    "KEYCLOAK_ADMIN_PASSWORD",
-    "WEB_CLIENT_SECRET",
-    "SERVICE_CLIENT_SECRET",
-    "OPS_CLIENT_SECRET",
     "AUTH_SECRET",
+    "AUTH_SIGNING_KEY",
     "RIDER_PASSWORD",
     "DRIVER_PASSWORD",
-    "OPS_PASSWORD",
     "GRAFANA_PASSWORD",
 }
 
@@ -81,13 +76,13 @@ def check():
     with tempfile.TemporaryDirectory(prefix="swiftride-setup-") as directory:
         root = Path(directory)
         (root / ".env.example").write_text(
-            "OPS_CLIENT_SECRET=\nGEOAPIFY_API_KEY=\n", encoding="utf-8"
+            "AUTH_SIGNING_KEY=\nGEOAPIFY_API_KEY=\n", encoding="utf-8"
         )
         (root / ".env").write_text("# retained\nEXISTING=keep", encoding="utf-8")
         assert setup(root) == 2
         result = (root / ".env").read_text(encoding="utf-8")
         assert result.startswith("# retained\nEXISTING=keep\n")
-        assert "OPS_CLIENT_SECRET=Aa1!" in result
+        assert "AUTH_SIGNING_KEY=Aa1!" in result
         assert result.endswith("GEOAPIFY_API_KEY=\n")
         assert setup(root) == 0
         assert (root / ".env").read_text(encoding="utf-8") == result

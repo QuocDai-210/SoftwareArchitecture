@@ -22,6 +22,38 @@ namespace SwiftRide.Trips.Infrastructure
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("SwiftRide.Trips.Domain.LocalAccount", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Username")
+                        .IsUnique();
+
+                    b.ToTable("LocalAccounts", t =>
+                        {
+                            t.HasCheckConstraint("CK_LocalAccount_Role", "\"Role\" IN ('rider','driver')");
+                        });
+                });
+
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.InboxState", b =>
                 {
                     b.Property<long>("Id")
@@ -312,7 +344,12 @@ namespace SwiftRide.Trips.Infrastructure
 
                     b.HasIndex("RiderId")
                         .IsUnique()
-                        .HasFilter("\"Status\" IN ('Requested','AwaitingRiderConfirmation','WalletHoldPending','ReservingDriver','AwaitingDriverAcceptance','AcceptingDriver','DriverAccepted','EnRoute','PickedUp')");
+                        .HasFilter(
+                            "\"Status\" IN ('Requested','AwaitingRiderConfirmation',"
+                                + "'WalletHoldPending',"
+                                + "'ReservingDriver','AwaitingDriverAcceptance','AcceptingDriver',"
+                                + "'DriverAccepted','EnRoute','PickedUp')"
+                        );
 
                     b.HasIndex("RiderId", "IdempotencyKey")
                         .IsUnique();
@@ -321,7 +358,14 @@ namespace SwiftRide.Trips.Infrastructure
 
                     b.ToTable("Trips", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Trips_Review", "(\"Rating\" IS NULL AND \"Review\" IS NULL AND \"RatedAt\" IS NULL) OR (\"Rating\" IS NOT NULL AND \"Rating\" BETWEEN 1 AND 5 AND \"RatedAt\" IS NOT NULL AND \"Status\" IN ('PaymentPending','PaymentReview','Paid'))");
+                            t.HasCheckConstraint(
+                                "CK_Trips_Review",
+                                "(\"Rating\" IS NULL AND \"Review\" IS NULL "
+                                    + "AND \"RatedAt\" IS NULL) OR "
+                                    + "(\"Rating\" IS NOT NULL AND \"Rating\" BETWEEN 1 AND 5 "
+                                    + "AND \"RatedAt\" IS NOT NULL AND "
+                                    + "\"Status\" IN ('PaymentPending','PaymentReview','Paid'))"
+                            );
                         });
                 });
 
@@ -330,6 +374,12 @@ namespace SwiftRide.Trips.Infrastructure
                     b.Property<string>("Id")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("Name")
                         .IsRequired()

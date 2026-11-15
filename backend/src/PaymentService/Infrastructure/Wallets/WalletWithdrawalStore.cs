@@ -22,11 +22,15 @@ public sealed class WalletWithdrawalStore(PayDb db) : IWalletWithdrawalStore
         string owner,
         int page,
         CancellationToken ct
-    ) =>
-        Page(db.WalletWithdrawals.AsNoTracking().Where(x => x.OwnerId == owner), page, ct);
+    ) => Page(db.WalletWithdrawals.AsNoTracking().Where(x => x.OwnerId == owner), page, ct);
 
-    public Task<PageResult<WalletWithdrawal>> Pending(int page, CancellationToken ct) =>
-        Page(db.WalletWithdrawals.AsNoTracking().Where(x => x.State == "Pending"), page, ct);
+    public Task<WalletWithdrawal?> NextPending(CancellationToken ct) =>
+        db
+            .WalletWithdrawals.AsNoTracking()
+            .Where(x => x.State == "Pending")
+            .OrderBy(x => x.RequestedAt)
+            .ThenBy(x => x.Id)
+            .FirstOrDefaultAsync(ct);
 
     public void Add(WalletWithdrawal withdrawal) => db.WalletWithdrawals.Add(withdrawal);
 
