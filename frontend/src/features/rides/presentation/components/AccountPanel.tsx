@@ -61,7 +61,7 @@ export function AccountPanel({
         </div>
       )}
       <form
-        className="grid sm:grid-cols-[1fr_1fr_auto] gap-4 items-end"
+        className="profile-form"
         onSubmit={(event) => {
           event.preventDefault();
           void run(async () => {
@@ -93,6 +93,7 @@ export function AccountPanel({
             minLength={9}
             maxLength={15}
             type="tel"
+            pattern="\+?[0-9]{9,15}"
             value={phone}
             onChange={(e) => {
               setPhone(e.target.value);

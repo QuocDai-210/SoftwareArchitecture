@@ -22,6 +22,8 @@ export function AddressField({
   const text = value?.label ?? query;
   const [results, setResults] = useState<Point[]>([]);
   const [error, setError] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
   useEffect(() => {
     if (value) {
       setQuery("");
@@ -29,7 +31,13 @@ export function AddressField({
     }
   }, [value]);
   useEffect(() => {
-    if (text.trim().length < 3 || text === value?.label || disabled) return;
+    if (text.trim().length < 3 || text === value?.label || disabled) {
+      setSearching(false);
+      setSearched(false);
+      return;
+    }
+    setSearching(true);
+    setSearched(false);
     let active = true;
     const timer = setTimeout(() => {
       service
@@ -44,6 +52,12 @@ export function AddressField({
           if (active) {
             setResults([]);
             setError(e.message);
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setSearching(false);
+            setSearched(true);
           }
         });
     }, 400);
@@ -77,6 +91,16 @@ export function AddressField({
       {error && (
         <p role="alert" className="text-sm text-red-800">
           {error}
+        </p>
+      )}
+      {searching && (
+        <p role="status" className="text-xs muted mt-2">
+          Đang tìm địa chỉ…
+        </p>
+      )}
+      {searched && !searching && !error && results.length === 0 && (
+        <p role="status" className="text-xs muted mt-2">
+          Không tìm thấy địa chỉ. Thử thêm tên đường hoặc chọn điểm trên bản đồ.
         </p>
       )}
       {results.length > 0 && (
