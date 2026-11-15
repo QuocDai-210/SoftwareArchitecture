@@ -1,6 +1,6 @@
 namespace SwiftRide.Payments.Infrastructure;
 
-public sealed class PaymentRepository(PayDb db) : IPaymentReader, IPaymentWriter, IWalletStore
+public sealed class PaymentRepository(PayDb db) : IPaymentReader, IPaymentWriter
 {
     public async Task<PageResult<PaymentView>> History(
         string subject,
@@ -55,31 +55,6 @@ public sealed class PaymentRepository(PayDb db) : IPaymentReader, IPaymentWriter
             .OrderBy(x => x.CreatedAt)
             .ToListAsync(ct);
 
-    public async Task<decimal> Balance(string riderId, CancellationToken ct) =>
-        await db
-            .Wallets.AsNoTracking()
-            .Where(x => x.RiderId == riderId)
-            .Select(x => (decimal?)x.Balance)
-            .SingleOrDefaultAsync(ct)
-        ?? 0;
-
-    public Task<Payment?> ByKey(string key, CancellationToken ct) =>
-        db.Payments.SingleOrDefaultAsync(x => x.IdempotencyKey == key, ct);
-
-    public async Task<Wallet> GetOrCreateLocked(string riderId, CancellationToken ct)
-    {
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtextextended({"wallet:" + riderId}, 0))",
-            ct
-        );
-        var wallet = await GetLocked(riderId, ct);
-        if (wallet is not null)
-            return wallet;
-        wallet = Wallet.Funded(riderId, 0);
-        db.Wallets.Add(wallet);
-        return wallet;
-    }
-
     public void Add(Payment payment) => db.Payments.Add(payment);
 
     public void Add(Journal journal) => db.Journals.Add(journal);
@@ -89,11 +64,4 @@ public sealed class PaymentRepository(PayDb db) : IPaymentReader, IPaymentWriter
             $"SELECT pg_advisory_xact_lock(hashtextextended({tripId.ToString()}, 0))",
             ct
         );
-
-    public Task<Wallet?> GetLocked(string riderId, CancellationToken ct) =>
-        db
-            .Wallets.FromSqlInterpolated(
-                $"SELECT * FROM \"Wallets\" WHERE \"RiderId\" = {riderId} FOR UPDATE"
-            )
-            .SingleOrDefaultAsync(ct);
 }

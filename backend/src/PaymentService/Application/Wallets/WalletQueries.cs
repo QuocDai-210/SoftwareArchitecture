@@ -1,5 +1,3 @@
-using SwiftRide.Payments.Application.Sandbox;
-
 namespace SwiftRide.Payments.Application.Wallets;
 
 public sealed class WalletQueries(IWalletAccounts accounts)
@@ -13,8 +11,8 @@ public sealed class WalletQueries(IWalletAccounts accounts)
             wallet?.Held ?? 0,
             wallet?.PendingEarnings ?? 0,
             "VND",
-            actor.IsRider && !actor.IsDriver && !actor.IsOps,
-            (actor.IsRider || actor.IsDriver) && !actor.IsOps && !actor.IsService
+            actor.IsRider && !actor.IsDriver,
+            (actor.IsRider || actor.IsDriver) && !actor.IsService
         );
     }
 
@@ -24,7 +22,7 @@ public sealed class WalletQueries(IWalletAccounts accounts)
         return accounts.History(actor.Id, Page(page), ct);
     }
 
-    public Task<PageResult<SandboxView>> TopUps(int page, Actor actor, CancellationToken ct)
+    public Task<PageResult<WalletActivity>> TopUps(int page, Actor actor, CancellationToken ct)
     {
         RequireOwner(actor);
         return accounts.TopUps(actor.Id, Page(page), ct);
@@ -32,7 +30,7 @@ public sealed class WalletQueries(IWalletAccounts accounts)
 
     private static void RequireOwner(Actor actor)
     {
-        if ((!actor.IsRider && !actor.IsDriver) || actor.IsOps || actor.IsService)
+        if ((!actor.IsRider && !actor.IsDriver) || actor.IsService)
         {
             throw new RuleException("Ví dành cho tài khoản User hoặc Driver.", ErrorKind.Forbidden);
         }

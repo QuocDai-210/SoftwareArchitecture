@@ -16,7 +16,8 @@ public sealed class RideCompletedConsumer(PaymentCommands payments) : IConsumer<
                 m.PaymentToken,
                 m.CorrelationId,
                 m.Attempt,
-                m.DriverId
+                m.DriverId,
+                m.WalletHoldId
             ),
             $"trip:{m.TripId}:charge",
             context.CancellationToken

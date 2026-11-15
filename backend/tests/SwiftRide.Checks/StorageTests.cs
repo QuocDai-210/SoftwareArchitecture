@@ -6,6 +6,17 @@ using Xunit;
 public sealed class StorageTests
 {
     [Fact]
+    public void PostgreSqlSnapshotMatchesPaymentModel()
+    {
+        using var db = new SwiftRide.Payments.Infrastructure.PayDb(
+            new DbContextOptionsBuilder<SwiftRide.Payments.Infrastructure.PayDb>()
+                .UseNpgsql("Host=localhost;Database=unused")
+                .Options
+        );
+        Assert.False(db.Database.HasPendingModelChanges());
+    }
+
+    [Fact]
     public void PostgreSqlSnapshotMatchesTripModel()
     {
         using var db = new TripDb(

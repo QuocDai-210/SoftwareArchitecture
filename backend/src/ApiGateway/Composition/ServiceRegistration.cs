@@ -36,8 +36,7 @@ public static class ServiceRegistration
                     booking ? "booking"
                     : reading ? "read"
                     : "write";
-                var identity =
-                    context.User.FindFirst("sub")?.Value
+                var identity = context.User.FindFirst("sub")?.Value
                     ?? context.Connection.RemoteIpAddress?.ToString()
                     ?? "anonymous";
                 return RateLimitPartition.GetFixedWindowLimiter(
@@ -57,6 +56,14 @@ public static class ServiceRegistration
         });
         var routes = new List<RouteConfig>
         {
+            new()
+            {
+                RouteId = "auth-login",
+                ClusterId = "trip",
+                Order = -1,
+                AuthorizationPolicy = "anonymous",
+                Match = new() { Path = "/auth/login", Methods = ["POST"] },
+            },
             new()
             {
                 RouteId = "offers",
@@ -95,27 +102,24 @@ public static class ServiceRegistration
                 ClusterId = "payment",
                 Match = new() { Path = "/wallets/{**rest}" },
             },
-            new()
-            {
-                RouteId = "ops-wallet-withdrawals",
-                ClusterId = "payment",
-                Order = -1,
-                Match = new() { Path = "/ops/wallet-withdrawals/{**rest}" },
-            },
-            new()
-            {
-                RouteId = "ops-trip-workflow",
-                ClusterId = "trip",
-                Order = -1,
-                Match = new() { Path = "/ops/trips/{id:guid}/workflow" },
-            },
         };
+        foreach (var prefix in new[] { "match", "reservations", "arrivals" })
+        {
+            routes.Add(
+                new RouteConfig
+                {
+                    RouteId = $"internal-{prefix}",
+                    ClusterId = "matching",
+                    AuthorizationPolicy = "service",
+                    Match = new() { Path = "/" + prefix + "/{**rest}" },
+                }
+            );
+        }
         foreach (
             var (prefix, cluster) in new[]
             {
                 ("profiles", "trip"),
                 ("maps", "matching"),
-                ("ops", "matching"),
                 ("simulations", "matching"),
             }
         )
@@ -127,23 +131,13 @@ public static class ServiceRegistration
                     Match = new() { Path = "/" + prefix + "/{**rest}" },
                 }
             );
-        routes.Add(
-            new RouteConfig
-            {
-                RouteId = "vnpay-ipn",
-                ClusterId = "payment",
-                Order = -1,
-                AuthorizationPolicy = "anonymous",
-                Match = new() { Path = "/payments/vnpay/ipn", Methods = ["GET"] },
-            }
-        );
         foreach (var name in new[] { "trip", "matching", "payment" })
             routes.Add(
                 new RouteConfig
                 {
                     RouteId = $"docs-{name}",
                     ClusterId = name,
-                    AuthorizationPolicy = "ops",
+                    AuthorizationPolicy = "default",
                     Match = new() { Path = $"/openapi/{name}.json" },
                     Transforms =
                     [
@@ -159,10 +153,7 @@ public static class ServiceRegistration
                 {
                     ["primary"] = new() { Address = url },
                 },
-                HttpRequest = new()
-                {
-                    ActivityTimeout = TimeSpan.FromSeconds(20)
-                },
+                HttpRequest = new() { ActivityTimeout = TimeSpan.FromSeconds(20) },
             };
         builder
             .Services.AddReverseProxy()

@@ -1,0 +1,1361 @@
+{
+  "info": {
+    "name": "SwiftRide Local Simulation",
+    "description": "Local HCMC ride simulation. Rider and Driver only; wallet and withdrawals are internal simulations.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{activeToken}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "paymentMethod", "value": "Wallet" }
+  ],
+  "item": [
+    {
+      "name": "1 - Auth",
+      "item": [
+        {
+          "name": "Login rider",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"{{riderUsername}}\",\"password\":\"{{riderPassword}}\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": { "type": "noauth" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"riderToken\", payload.accessToken);",
+                  "pm.environment.set(\"activeToken\", payload.accessToken);",
+                  "pm.environment.set(\"riderId\", payload.user.id);",
+                  "pm.test(\"login rider succeeds\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login driver",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"{{driverUsername}}\",\"password\":\"{{driverPassword}}\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": { "type": "noauth" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"driverToken\", payload.accessToken);",
+                  "pm.environment.set(\"activeToken\", payload.accessToken);",
+                  "pm.environment.set(\"driverId\", payload.user.id);",
+                  "pm.test(\"login driver succeeds\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rider profile and seeded pickup",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/profiles/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["profiles", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 - Maps and quote",
+      "item": [
+        {
+          "name": "Search address",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/maps/search?text=Ben%20Thanh",
+              "host": ["{{baseUrl}}"],
+              "path": ["maps", "search?text=Ben%20Thanh"]
+            }
+          }
+        },
+        {
+          "name": "Preview route",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/maps/route",
+              "host": ["{{baseUrl}}"],
+              "path": ["maps", "route"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Preview price",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/quote", "host": ["{{baseUrl}}"], "path": ["quote"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 - Rider trip",
+      "item": [
+        {
+          "name": "Create COD trip",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/trips", "host": ["{{baseUrl}}"], "path": ["trips"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"},\"method\":\"Cod\",\"paymentToken\":null}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"tripId\", payload.id);",
+                  "pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"trip created\", () => pm.expect(payload.id).to.be.ok);",
+                  "if (payload.driverId) {",
+                  "  const n = Number(payload.driverId.slice(-12));",
+                  "  pm.environment.set(\"driverUsername\", `driver${String(n).padStart(4, \"0\")}`);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read trip (repeat until quote appears)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"tripVersion\", payload.version);",
+                  "if (payload.quote) pm.environment.set(\"quoteId\", payload.quote.id);",
+                  "pm.test(\"trip is readable\", () => pm.response.to.have.status(200));",
+                  "if (payload.driverId) {",
+                  "  const n = Number(payload.driverId.slice(-12));",
+                  "  pm.environment.set(\"driverUsername\", `driver${String(n).padStart(4, \"0\")}`);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm quote",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/confirm-quote",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "confirm-quote"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}},\"quoteId\":\"{{quoteId}}\"}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wait for driver offer (repeat until AwaitingDriverAcceptance)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"tripVersion\", payload.version);",
+                  "if (payload.quote) pm.environment.set(\"quoteId\", payload.quote.id);",
+                  "if (payload.driverId) {",
+                  "  const n = Number(payload.driverId.slice(-12));",
+                  "  pm.environment.set(\"driverUsername\", `driver${String(n).padStart(4, \"0\")}`);",
+                  "}",
+                  "pm.test(\"trip state is available\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create wallet trip",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/trips", "host": ["{{baseUrl}}"], "path": ["trips"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"},\"method\":\"Wallet\",\"paymentToken\":null}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"tripId\", payload.id);",
+                  "pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"trip created\", () => pm.expect(payload.id).to.be.ok);",
+                  "if (payload.driverId) {",
+                  "  const n = Number(payload.driverId.slice(-12));",
+                  "  pm.environment.set(\"driverUsername\", `driver${String(n).padStart(4, \"0\")}`);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 - Driver actions",
+      "item": [
+        {
+          "name": "Driver offers (repeat until offer appears)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/offers",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers", "me", "offers"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const trip = response.find(x => x.id === pm.environment.get(\"tripId\"));",
+                  "pm.test(\"offers endpoint is available\", () => pm.response.to.have.status(200));",
+                  "if (trip) pm.environment.set(\"tripVersion\", trip.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept offer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/driver-accept",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "driver-accept"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wait for acceptance (repeat until DriverAccepted)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"trip is readable\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start ride",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/en-route",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "en-route"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wait for pickup arrival (repeat until arrived is true)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/simulations/{{driverId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["simulations", "{{driverId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.test(\"driver simulation is active\", () => pm.expect(payload.driverId).to.eql(pm.environment.get(\"driverId\")));",
+                  "pm.environment.set(\"arrived\", payload.arrived);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Arrive and pick up",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/pickup",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "pickup"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wait for destination arrival (repeat until arrived is true)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/simulations/{{driverId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["simulations", "{{driverId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.test(\"driver simulation is active\", () => pm.expect(payload.driverId).to.eql(pm.environment.get(\"driverId\")));",
+                  "pm.environment.set(\"arrived\", payload.arrived);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Drop off rider",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/dropoff",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "dropoff"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wait for COD payment record (repeat until status is Pending)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{tripId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "{{tripId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"payment record is available\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm COD cash received",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{tripId}}/confirm-cash",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "{{tripId}}", "confirm-cash"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"received\":true}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5 - Wallet (simulated)",
+      "item": [
+        {
+          "name": "Wallet balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/wallets/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallets", "me"]
+            }
+          }
+        },
+        {
+          "name": "Top up Rider wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallets/topups",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallets", "topups"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"amount\":100000}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Wallet ledger history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/wallets/history?page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallets", "history?page=1"]
+            }
+          }
+        },
+        {
+          "name": "Request simulated withdrawal",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallets/withdrawals",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallets", "withdrawals"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"amount\":10000}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Withdrawal history (worker completes automatically)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/wallets/withdrawals?page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallets", "withdrawals?page=1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6 - Read and reconcile",
+      "item": [
+        {
+          "name": "Get own trips",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/trips", "host": ["{{baseUrl}}"], "path": ["trips"] }
+          }
+        },
+        {
+          "name": "Get payment history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/history?page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "history?page=1"]
+            }
+          }
+        },
+        {
+          "name": "Get payment ledger for trip",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{tripId}}/ledger",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "{{tripId}}", "ledger"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7 - Sequential ride runner",
+      "description": "Run this folder only with AutoAcceptDrivers=false. paymentMethod is Wallet or Cod. Polling is bounded to 60 seconds per step. Uses retained demo data.",
+      "item": [
+        {
+          "name": "[Runner] Login Rider",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"{{riderUsername}}\",\"password\":\"{{riderPassword}}\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": { "type": "noauth" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "Object.keys(pm.collectionVariables.toObject()).filter(k => k.startsWith(\"poll:\")).forEach(k => pm.collectionVariables.unset(k));",
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"riderToken\", payload.accessToken);",
+                  "pm.environment.set(\"activeToken\", payload.accessToken);",
+                  "pm.environment.set(\"riderId\", payload.user.id);",
+                  "pm.test(\"login rider succeeds\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Create trip",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/trips", "host": ["{{baseUrl}}"], "path": ["trips"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"},\"method\":\"{{paymentMethod}}\",\"paymentToken\":null}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"tripId\", payload.id);",
+                  "pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"trip created\", () => pm.expect(payload.id).to.be.ok);",
+                  "if (payload.driverId) {",
+                  "  const n = Number(payload.driverId.slice(-12));",
+                  "  pm.environment.set(\"driverUsername\", `driver${String(n).padStart(4, \"0\")}`);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Wait for quote",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"tripVersion\", payload.version);",
+                  "if (payload.quote) pm.environment.set(\"quoteId\", payload.quote.id);",
+                  "pm.test(\"trip is readable\", () => pm.response.to.have.status(200));",
+                  "if (payload.driverId) {",
+                  "  const n = Number(payload.driverId.slice(-12));",
+                  "  pm.environment.set(\"driverUsername\", `driver${String(n).padStart(4, \"0\")}`);",
+                  "}",
+                  "const pollKey = \"poll:\" + pm.info.requestName;",
+                  "const started = Number(pm.collectionVariables.get(pollKey) || Date.now());",
+                  "const ready = pm.response.json().status === \"AwaitingRiderConfirmation\";",
+                  "if (ready) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "} else if (Date.now() - started >= 60000) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "  pm.test(\"workflow completed within 60 seconds\", () => { throw new Error(\"Timeout: \" + pm.response.text().slice(0, 400)); });",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  pm.collectionVariables.set(pollKey, started);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, 1000);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Confirm quote",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/confirm-quote",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "confirm-quote"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}},\"quoteId\":\"{{quoteId}}\"}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Wait for offer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"tripVersion\", payload.version);",
+                  "if (payload.quote) pm.environment.set(\"quoteId\", payload.quote.id);",
+                  "if (payload.driverId) {",
+                  "  const n = Number(payload.driverId.slice(-12));",
+                  "  pm.environment.set(\"driverUsername\", `driver${String(n).padStart(4, \"0\")}`);",
+                  "}",
+                  "pm.test(\"trip state is available\", () => pm.response.to.have.status(200));",
+                  "const pollKey = \"poll:\" + pm.info.requestName;",
+                  "const started = Number(pm.collectionVariables.get(pollKey) || Date.now());",
+                  "const ready = pm.response.json().status === \"AwaitingDriverAcceptance\";",
+                  "if (ready) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "} else if (Date.now() - started >= 60000) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "  pm.test(\"workflow completed within 60 seconds\", () => { throw new Error(\"Timeout: \" + pm.response.text().slice(0, 400)); });",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  pm.collectionVariables.set(pollKey, started);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, 1000);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Login assigned Driver",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"{{driverUsername}}\",\"password\":\"{{driverPassword}}\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": { "type": "noauth" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"driverToken\", payload.accessToken);",
+                  "pm.environment.set(\"activeToken\", payload.accessToken);",
+                  "pm.environment.set(\"driverId\", payload.user.id);",
+                  "pm.test(\"login driver succeeds\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Read offers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/offers",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers", "me", "offers"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const trip = response.find(x => x.id === pm.environment.get(\"tripId\"));",
+                  "pm.test(\"offers endpoint is available\", () => pm.response.to.have.status(200));",
+                  "if (trip) pm.environment.set(\"tripVersion\", trip.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Accept offer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/driver-accept",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "driver-accept"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Wait for acceptance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"trip is readable\", () => pm.response.to.have.status(200));",
+                  "const pollKey = \"poll:\" + pm.info.requestName;",
+                  "const started = Number(pm.collectionVariables.get(pollKey) || Date.now());",
+                  "const ready = pm.response.json().status === \"DriverAccepted\";",
+                  "if (ready) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "} else if (Date.now() - started >= 60000) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "  pm.test(\"workflow completed within 60 seconds\", () => { throw new Error(\"Timeout: \" + pm.response.text().slice(0, 400)); });",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  pm.collectionVariables.set(pollKey, started);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, 1000);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Start pickup route",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/en-route",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "en-route"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Wait for pickup arrival",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/simulations/{{driverId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["simulations", "{{driverId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pollKey = \"poll:\" + pm.info.requestName;",
+                  "const started = Number(pm.collectionVariables.get(pollKey) || Date.now());",
+                  "const ready = pm.response.code === 200 && pm.response.json()?.stage === \"EnRoute\" && pm.response.json()?.arrived === true;",
+                  "if (ready) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "} else if (Date.now() - started >= 60000) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "  pm.test(\"workflow completed within 60 seconds\", () => { throw new Error(\"Timeout: \" + pm.response.text().slice(0, 400)); });",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  pm.collectionVariables.set(pollKey, started);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, 1000);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Pick up",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/pickup",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "pickup"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Wait for destination arrival",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/simulations/{{driverId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["simulations", "{{driverId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pollKey = \"poll:\" + pm.info.requestName;",
+                  "const started = Number(pm.collectionVariables.get(pollKey) || Date.now());",
+                  "const ready = pm.response.code === 200 && pm.response.json()?.stage === \"PickedUp\" && pm.response.json()?.arrived === true;",
+                  "if (ready) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "} else if (Date.now() - started >= 60000) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "  pm.test(\"workflow completed within 60 seconds\", () => { throw new Error(\"Timeout: \" + pm.response.text().slice(0, 400)); });",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  pm.collectionVariables.set(pollKey, started);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, 1000);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Drop off",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/dropoff",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "dropoff"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "if (pm.variables.get(\"paymentMethod\") === \"Wallet\") pm.execution.setNextRequest(\"[Runner] Wait for payment settlement\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Wait for COD record",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{tripId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "{{tripId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pollKey = \"poll:\" + pm.info.requestName;",
+                  "const started = Number(pm.collectionVariables.get(pollKey) || Date.now());",
+                  "const ready = pm.response.code === 200 && pm.response.json().status === \"Pending\";",
+                  "if (ready) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "} else if (Date.now() - started >= 60000) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "  pm.test(\"workflow completed within 60 seconds\", () => { throw new Error(\"Timeout: \" + pm.response.text().slice(0, 400)); });",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  pm.collectionVariables.set(pollKey, started);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, 1000);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Confirm COD",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{tripId}}/confirm-cash",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "{{tripId}}", "confirm-cash"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"received\":true}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "[Runner] Wait for payment settlement",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"trip is readable\", () => pm.response.to.have.status(200));",
+                  "const pollKey = \"poll:\" + pm.info.requestName;",
+                  "const started = Number(pm.collectionVariables.get(pollKey) || Date.now());",
+                  "const ready = pm.response.json().status === \"Paid\";",
+                  "if (ready) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "} else if (Date.now() - started >= 60000) {",
+                  "  pm.collectionVariables.unset(pollKey);",
+                  "  pm.test(\"workflow completed within 60 seconds\", () => { throw new Error(\"Timeout: \" + pm.response.text().slice(0, 400)); });",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  pm.collectionVariables.set(pollKey, started);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, 1000);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Runner] Read ledger",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{tripId}}/ledger",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "{{tripId}}", "ledger"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"ledger is readable\", () => pm.response.to.have.status(200));",
+                  "const journals = pm.response.json();",
+                  "pm.test(\"settlement has a journal\", () => pm.expect(journals.length).to.be.above(0));",
+                  "for (const journal of journals) {",
+                  "  const debits = journal.lines.filter(x => x.side === \"Debit\").reduce((sum, x) => sum + x.amount, 0);",
+                  "  const credits = journal.lines.filter(x => x.side === \"Credit\").reduce((sum, x) => sum + x.amount, 0);",
+                  "  pm.test(\"journal balances: \" + journal.id, () => pm.expect(debits).to.eql(credits));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8 - Recovery toolbox",
+      "description": "Manual recovery actions. Log in as the assigned Driver and refresh tripVersion first.",
+      "item": [
+        {
+          "name": "Retry COD after restoring normal fixture (assigned Driver only)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/retry-payment",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "retry-payment"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refund COD (assigned Driver only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{tripId}}/refund",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "{{tripId}}", "refund"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"reason\":\"Simulated COD refund test\",\"cashReturned\":true}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

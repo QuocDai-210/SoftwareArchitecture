@@ -1,9 +1,16 @@
+import { AuthError } from "next-auth";
+import { redirect } from "next/navigation";
 import { auth, signIn, signOut } from "@/infrastructure/auth/auth";
 import RideClient from "@/composition/RideClient";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ login?: string }>;
+}) {
   const session = await auth();
-  if (!session)
+  const params = await searchParams;
+  if (!session || !session.user.roles?.includes("rider"))
     return (
       <main id="main" className="welcome-page">
         <header className="welcome-header">
@@ -67,32 +74,65 @@ export default async function Home() {
               từ đây.
             </h2>
             <p className="muted text-sm leading-relaxed mt-4 mb-7">
-              Đăng nhập để đặt xe, nhận chuyến hoặc quản lý hoạt động của bạn.
+              Đăng nhập bằng tài khoản Rider để đặt và theo dõi chuyến đi mô phỏng.
             </p>
             <form
-              action={async () => {
+              action={async (formData: FormData) => {
                 "use server";
-                await signIn("keycloak", { redirectTo: "/" });
+                try {
+                  await signIn("credentials", {
+                    username: formData.get("username"),
+                    password: formData.get("password"),
+                    redirectTo: "/",
+                  });
+                } catch (error) {
+                  if (error instanceof AuthError) {
+                    redirect(
+                      error.type === "CredentialsSignin" ? "/?login=failed" : "/?login=unavailable",
+                    );
+                  }
+                  throw error;
+                }
               }}
             >
+              <label className="block text-sm font-semibold" htmlFor="username">
+                Tên đăng nhập
+              </label>
+              <input
+                className="field mt-2"
+                id="username"
+                name="username"
+                autoComplete="username"
+                required
+              />
+              <label className="mt-4 block text-sm font-semibold" htmlFor="password">
+                Mật khẩu
+              </label>
+              <input
+                className="field mt-2"
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
+              {params.login === "failed" && (
+                <p className="mt-3 text-sm text-red-700" role="alert">
+                  Không thể đăng nhập. Hãy kiểm tra tên đăng nhập, mật khẩu và sử dụng tài khoản
+                  Rider.
+                </p>
+              )}
+              {params.login === "unavailable" && (
+                <p className="mt-3 text-sm text-red-700" role="alert">
+                  Dịch vụ đăng nhập tạm thời chưa sẵn sàng. Vui lòng thử lại.
+                </p>
+              )}
               <button className="btn w-full" type="submit">
-                Đăng nhập để tiếp tục <span aria-hidden="true">↗</span>
-              </button>
-            </form>
-            <form
-              className="mt-3"
-              action={async () => {
-                "use server";
-                await signIn("keycloak", { redirectTo: "/" }, { prompt: "create" });
-              }}
-            >
-              <button className="btn btn-secondary w-full" type="submit">
-                Đăng ký tài khoản User
+                Đăng nhập <span aria-hidden="true">↗</span>
               </button>
             </form>
             <div className="mt-7 pt-5 border-t border-emerald-100 text-xs leading-relaxed muted">
-              <strong className="text-emerald-900">Bạn muốn trở thành tài xế?</strong>
-              <p className="mt-1">Liên hệ bộ phận vận hành để gửi hồ sơ và được xét duyệt.</p>
+              Trang này dành cho tài khoản Rider được cấp sẵn trong môi trường mô phỏng.
             </div>
           </section>
         </div>

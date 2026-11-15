@@ -6,5 +6,4 @@ public interface IPaymentReader
     Task<object> Statistics(string subject, bool all, CancellationToken ct);
     Task<Payment?> Find(Guid id, CancellationToken ct);
     Task<IReadOnlyList<Journal>> Journals(Guid paymentId, CancellationToken ct);
-    Task<decimal> Balance(string riderId, CancellationToken ct);
 }

@@ -2,19 +2,12 @@ import { useRef, useState } from "react";
 import type { Trip, Simulation, AssignedDriver } from "../../domain/models";
 import { availableActions, type TripAction } from "../../domain/trip-rules";
 import { labels, money } from "../format";
-import { matchingProgress, tripTimeline } from "../trip-timeline";
 const actionLabels: Record<TripAction, string> = {
   "confirm-quote": "Đồng ý giá",
   cancel: "Hủy chuyến",
-  "driver-accept": "Nhận chuyến",
-  "driver-reject": "Từ chối",
-  "en-route": "Đang đến đón",
-  pickup: "Đã đón khách",
-  dropoff: "Đã trả khách",
 };
 export function TripDetails({
   trip: t,
-  isDriver,
   isRider,
   busy,
   act,
@@ -22,7 +15,6 @@ export function TripDetails({
   assignedDriver,
 }: {
   trip: Trip;
-  isDriver: boolean;
   isRider: boolean;
   busy: boolean;
   act: (t: Trip, action: TripAction, reason?: string) => Promise<void>;
@@ -34,8 +26,6 @@ export function TripDetails({
   const [cancelReason, setCancelReason] = useState("Thay đổi kế hoạch di chuyển");
   const hasCashReceipt =
     t.method === "Cod" && ["PaymentPending", "PaymentReview", "Paid"].includes(t.status);
-  const searchProgress = matchingProgress(t.status, t.rejections);
-  const timeline = tripTimeline(t.status, t.createdAt, t.history);
   return (
     <section className="card p-5" aria-label="Chi tiết chuyến">
       <h2 className="sr-only">Chi tiết chuyến</h2>
@@ -50,11 +40,6 @@ export function TripDetails({
       {t.method === "Wallet" && t.status === "AwaitingRiderConfirmation" && t.reason && (
         <p className="my-3 text-sm text-red-800" role="alert">
           {t.reason}
-        </p>
-      )}
-      {searchProgress && (
-        <p className="my-3 text-sm" role="status" aria-live="polite">
-          {searchProgress}
         </p>
       )}
       <details className="trip-route text-sm">
@@ -80,70 +65,7 @@ export function TripDetails({
           <strong>Ghi chú điểm đón:</strong> {t.pickupNote}
         </p>
       )}
-      <section className="mt-5 border-t border-[#dcebe5] pt-4" aria-label="Tiến độ chuyến đi">
-        <h3 className="text-sm font-bold">Tiến độ chuyến đi</h3>
-        <ol className="mt-4">
-          {timeline.map((item, index) => (
-            <li
-              key={`${item.title}-${index}`}
-              className={`relative flex gap-3 ${index < timeline.length - 1 ? "pb-4" : ""}`}
-              aria-current={item.state === "current" ? "step" : undefined}
-            >
-              <span
-                aria-hidden="true"
-                className={`z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${
-                  item.state === "complete"
-                    ? "border-[#087b66] bg-[#087b66] text-white"
-                    : item.state === "current"
-                      ? "border-[#087b66] bg-[#e5f8ef] text-[#087b66]"
-                      : "border-[#b8c9c1] bg-white text-[#62766b]"
-                }`}
-              >
-                {item.state === "complete" ? "✓" : item.state === "current" ? "•" : ""}
-              </span>
-              {index < timeline.length - 1 && (
-                <span
-                  aria-hidden="true"
-                  className={`absolute bottom-0 left-[11px] top-6 border-l-2 ${
-                    item.state === "complete" ? "border-[#087b66]" : "border-[#dcebe5]"
-                  }`}
-                />
-              )}
-              <div className="min-w-0 pb-0.5">
-                <p className={`text-sm ${item.state === "current" ? "font-bold" : ""}`}>
-                  {item.title}
-                </p>
-                {item.description && <p className="mt-0.5 text-xs muted">{item.description}</p>}
-                {item.at && (
-                  <time className="mt-0.5 block text-xs muted" dateTime={item.at}>
-                    {new Date(item.at).toLocaleString("vi-VN")}
-                  </time>
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-      {isDriver && t.riderName && (
-        <div className="driver-card">
-          <span className="avatar" aria-hidden="true">
-            {t.riderName.slice(0, 1)}
-          </span>
-          <div>
-            <p className="font-bold">{t.riderName}</p>
-            {t.riderPhone && (
-              <a
-                className="text-sm underline min-h-11 inline-flex items-center"
-                href={`tel:${t.riderPhone}`}
-              >
-                Gọi khách hàng
-              </a>
-            )}
-          </div>
-        </div>
-      )}
       {assignedDriver &&
-        !isDriver &&
         [
           "DriverAccepted",
           "EnRoute",
@@ -228,23 +150,13 @@ export function TripDetails({
           )}
         </div>
       )}
-      {t.reason && !searchProgress && <p className="text-sm my-4 text-[#6b5a32]">{t.reason}</p>}
-      {isDriver && ["EnRoute", "PickedUp"].includes(t.status) && !simulation?.arrived && (
-        <p className="text-sm mt-4" role="status">
-          Chờ xe đến điểm {t.status === "EnRoute" ? "đón" : "trả"} khách trước khi xác nhận.
-        </p>
-      )}
+      {t.reason && <p className="text-sm my-4 text-[#6b5a32]">{t.reason}</p>}
       <div className="flex flex-wrap gap-2 mt-5">
-        {availableActions(t, isRider ? "rider" : isDriver ? "driver" : "observer").map((action) => (
+        {availableActions(t, isRider ? "rider" : "observer").map((action) => (
           <button
             key={action}
-            disabled={
-              busy ||
-              ((action === "pickup" || action === "dropoff") &&
-                (!simulation?.arrived ||
-                  simulation.stage !== (action === "pickup" ? "EnRoute" : "PickedUp")))
-            }
-            className={`btn ${["cancel", "driver-reject"].includes(action) ? "btn-secondary" : "flex-1"}`}
+            disabled={busy}
+            className={`btn ${action === "cancel" ? "btn-secondary" : "flex-1"}`}
             onClick={() => {
               if (action === "cancel" && t.status !== "AwaitingRiderConfirmation")
                 cancelDialog.current?.showModal();

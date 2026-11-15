@@ -1,4 +1,3 @@
-using SwiftRide.Payments.Application.Sandbox;
 using SwiftRide.Payments.Application.Wallets;
 
 namespace SwiftRide.Payments.Infrastructure.Wallets;
@@ -43,29 +42,21 @@ public sealed class WalletAccounts(PayDb db) : IWalletAccounts
         return new(items, page, 10, total);
     }
 
-    public async Task<PageResult<SandboxView>> TopUps(string owner, int page, CancellationToken ct)
+    public async Task<PageResult<WalletActivity>> TopUps(
+        string owner,
+        int page,
+        CancellationToken ct
+    )
     {
         var query = db
-            .SandboxPayments.AsNoTracking()
-            .Where(p => p.OwnerId == owner && p.Purpose == "WalletTopUp");
+            .WalletActivities.AsNoTracking()
+            .Where(p => p.OwnerId == owner && p.Kind == "WalletTopUp");
         var total = await query.CountAsync(ct);
         var items = await query
             .OrderByDescending(p => p.CreatedAt)
             .ThenBy(p => p.Reference)
             .Skip((page - 1) * 10)
             .Take(10)
-            .Select(p => new SandboxView(
-                p.Reference,
-                p.Amount,
-                p.State,
-                p.CreatedAt,
-                p.ExpiresAt,
-                p.ConfirmedAt,
-                null,
-                p.NextQueryAt,
-                p.Purpose,
-                p.WalletCreditedAt
-            ))
             .ToListAsync(ct);
         return new(items, page, 10, total);
     }
@@ -76,22 +67,29 @@ public sealed class WalletAccounts(PayDb db) : IWalletAccounts
 
     public void Add(Journal journal) => db.Journals.Add(journal);
 
-    public Task HoldTrip(Guid tripId, string riderId, long amount, CancellationToken ct) =>
-        HoldTripCore(tripId, riderId, amount, ct);
-
-    private async Task HoldTripCore(Guid tripId, string riderId, long amount, CancellationToken ct)
+    public async Task HoldTrip(
+        Guid tripId,
+        string riderId,
+        long amount,
+        CancellationToken ct,
+        Guid? quoteId = null
+    )
     {
         await Lock(riderId, ct);
-        var reference = $"trip:{tripId:N}:hold";
-        var existing = await FindActivity(reference, ct);
+        if (await db.WalletHoldClosures.FindAsync([tripId, quoteId ?? Guid.Empty], ct) is not null)
+            throw new RuleException("Báo giá đã đóng khoản giữ. Cần xác nhận báo giá mới.");
+        if (await FindActivity($"trip:{tripId:N}:settle", ct) is not null)
+            throw new RuleException("Chuyến đã được quyết toán.");
+        var (reference, existing) = await ResolveHold(tripId, quoteId, ct);
         if (existing is not null)
         {
             if (existing.OwnerId != riderId || existing.Amount != amount)
                 throw new RuleException("Khoản giữ ví không khớp chuyến.");
+            if (await FindActivity(ReleaseReference(reference), ct) is not null)
+                throw new RuleException("Khoản giữ của báo giá đã được trả. Cần báo giá mới.");
             return;
         }
-        var wallet =
-            await Find(riderId, ct)
+        var wallet = await Find(riderId, ct)
             ?? throw new RuleException("Ví chưa có số dư.", ErrorKind.Validation);
         wallet.Hold(amount);
         AddTripActivity(
@@ -106,21 +104,42 @@ public sealed class WalletAccounts(PayDb db) : IWalletAccounts
         );
     }
 
-    public async Task ReleaseTrip(Guid tripId, string riderId, long amount, CancellationToken ct)
+    public async Task ReleaseTrip(
+        Guid tripId,
+        string riderId,
+        long amount,
+        CancellationToken ct,
+        Guid? quoteId = null
+    )
     {
         await Lock(riderId, ct);
-        var reference = $"trip:{tripId:N}:release";
+        var closed = await db.WalletHoldClosures.FindAsync([tripId, quoteId ?? Guid.Empty], ct);
+        if (closed is not null)
+        {
+            if (closed.RiderId != riderId || closed.Amount != amount)
+                throw new RuleException("Yêu cầu giải phóng khoản giữ không khớp.");
+            return;
+        }
+        var (holdReference, hold) = await ResolveHold(tripId, quoteId, ct);
+        var reference = ReleaseReference(holdReference);
+        db.WalletHoldClosures.Add(
+            new WalletHoldClosure
+            {
+                TripId = tripId,
+                QuoteId = quoteId ?? Guid.Empty,
+                RiderId = riderId,
+                Amount = amount,
+            }
+        );
         if (await FindActivity(reference, ct) is not null)
             return;
-        var hold = await FindActivity($"trip:{tripId:N}:hold", ct);
         if (hold is null)
             return;
         if (hold.OwnerId != riderId || hold.Amount != amount)
             throw new RuleException("Không tìm thấy khoản giữ ví cần hoàn.");
         if (await FindActivity($"trip:{tripId:N}:settle", ct) is not null)
             throw new RuleException("Khoản giữ đã được thanh toán.");
-        var wallet =
-            await Find(riderId, ct)
+        var wallet = await Find(riderId, ct)
             ?? throw new RuleException("Không tìm thấy ví.", ErrorKind.NotFound);
         wallet.Release(amount);
         AddTripActivity(
@@ -140,7 +159,8 @@ public sealed class WalletAccounts(PayDb db) : IWalletAccounts
         string riderId,
         string driverId,
         long amount,
-        CancellationToken ct
+        CancellationToken ct,
+        Guid? quoteId = null
     )
     {
         foreach (var owner in new[] { riderId, driverId }.Distinct().Order())
@@ -148,13 +168,12 @@ public sealed class WalletAccounts(PayDb db) : IWalletAccounts
         var reference = $"trip:{tripId:N}:settle";
         if (await FindActivity(reference, ct) is not null)
             return;
-        if (await FindActivity($"trip:{tripId:N}:release", ct) is not null)
+        var (holdReference, hold) = await ResolveHold(tripId, quoteId, ct);
+        if (await FindActivity(ReleaseReference(holdReference), ct) is not null)
             throw new RuleException("Khoản giữ đã được hoàn.");
-        var hold = await FindActivity($"trip:{tripId:N}:hold", ct);
         if (hold is null || hold.OwnerId != riderId || hold.Amount != amount)
             throw new RuleException("Khoản giữ không khớp chuyến.");
-        var wallet =
-            await Find(riderId, ct)
+        var wallet = await Find(riderId, ct)
             ?? throw new RuleException("Không tìm thấy ví.", ErrorKind.NotFound);
         var earningReference = $"trip:{tripId:N}:earning";
         if (await FindActivity(earningReference, ct) is not null)
@@ -188,6 +207,27 @@ public sealed class WalletAccounts(PayDb db) : IWalletAccounts
             new($"Wallet:{driverId}:Available", EntrySide.Credit, amount)
         );
     }
+
+    private async Task<(string Reference, WalletActivity? Activity)> ResolveHold(
+        Guid tripId,
+        Guid? quoteId,
+        CancellationToken ct
+    )
+    {
+        var legacy = $"trip:{tripId:N}:hold";
+        var reference = quoteId is null ? legacy : $"{legacy}:{quoteId:N}";
+        var activity = await FindActivity(reference, ct);
+        if (activity is not null || quoteId is null)
+            return (reference, activity);
+        // Preserve active holds created before quote-scoped references were introduced.
+        var previous = await FindActivity(legacy, ct);
+        if (previous is not null && await FindActivity(ReleaseReference(legacy), ct) is null)
+            return (legacy, previous);
+        return (reference, null);
+    }
+
+    private static string ReleaseReference(string holdReference) =>
+        holdReference.Replace(":hold", ":release", StringComparison.Ordinal);
 
     private void AddTripActivity(
         string reference,

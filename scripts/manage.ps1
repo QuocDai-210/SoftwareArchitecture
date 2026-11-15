@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet('setup', 'build', 'up', 'stop', 'status', 'logs', 'trip', 'matching', 'payment')]
     [string]$Command = 'status'
 )
@@ -67,17 +67,18 @@ try {
         default {
             Invoke-Python 'scripts/check-resources.py'
             if ($Command -eq 'up') {
-                Invoke-Checked 'docker' @('compose', 'stop', 'sqlserver', 'observability')
+                Invoke-Checked 'docker' @('compose', 'stop', 'observability')
             } else {
                 Invoke-Checked 'docker' @('compose', '--profile', '*', 'stop')
             }
             $env:OTEL_SDK_DISABLED = 'true'
-            $composeArgs = @('compose', 'up', '--no-build', '-d', '--wait', '--wait-timeout', '300')
+            $composeArgs = @(
+                'compose', 'up', '--no-build', '--remove-orphans', '-d', '--wait', '--wait-timeout', '300'
+            )
             if ($Command -ne 'up') {
                 $composeArgs += $Command
             }
             Invoke-Checked 'docker' $composeArgs
-            Invoke-Python 'scripts/sync-identity.py'
         }
     }
 } finally {

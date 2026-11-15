@@ -18,12 +18,13 @@ export function AddressField({
   disabled: boolean;
   onFocus?: () => void;
 }) {
-  const [text, setText] = useState(value?.label ?? "");
+  const [query, setQuery] = useState("");
+  const text = value?.label ?? query;
   const [results, setResults] = useState<Point[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
     if (value) {
-      setText(value.label);
+      setQuery("");
       setResults([]);
     }
   }, [value]);
@@ -63,7 +64,7 @@ export function AddressField({
           autoComplete="off"
           onFocus={onFocus}
           onChange={(e) => {
-            setText(e.target.value);
+            setQuery(e.target.value);
             setResults([]);
             setError("");
             onChange(null);
@@ -85,9 +86,10 @@ export function AddressField({
               <button
                 className="text-left w-full p-3 text-sm hover:bg-green-50"
                 type="button"
+                disabled={disabled}
                 onClick={() => {
                   onChange(point);
-                  setText(point.label);
+                  setQuery("");
                   setResults([]);
                 }}
               >

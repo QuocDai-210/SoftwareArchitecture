@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RideService } from "../application/RideService";
 import type {
-  Driver,
   Trip,
   Point,
   Simulation,
@@ -11,21 +10,18 @@ import type {
   Payment,
   AssignedDriver,
 } from "../domain/models";
-import { isActiveTrip, type TripAction } from "../domain/trip-rules";
+import { isActiveTrip, latestTrip, type TripAction } from "../domain/trip-rules";
 
 export type RideUser = { id: string; name: string; roles: string[] };
 
 export function useRides(user: RideUser, service: RideService) {
-  const isDriver = user.roles.includes("driver");
-  const isRider = user.roles.includes("user");
-  const isOps = user.roles.includes("ops");
+  const isRider = user.roles.includes("rider");
   const [trips, setTrips] = useState<Trip[]>([]);
-  const [driver, setDriver] = useState<Driver | null>(null);
-  const [driverPoint, setDriverPoint] = useState<Point | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [from, setFrom] = useState<Point | null>(null);
+  const [seedLocation, setSeedLocation] = useState<Point | null>(null);
   const [to, setTo] = useState<Point | null>(null);
   const [selecting, setSelecting] = useState<"pickup" | "destination">("pickup");
   const [payment, setPayment] = useState<Payment | null>(null);
@@ -47,28 +43,49 @@ export function useRides(user: RideUser, service: RideService) {
   const [selectedDetail, setSelectedDetail] = useState<Trip | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const lock = useRef(false);
+  const pickupChanged = useRef(false);
   const sequence = useRef(0);
-  const screenSequence = useRef(0);
   const active = trips.find(isActiveTrip);
-  const current =
-    (isDriver && active ? active : null) ??
-    trips.find((t) => t.id === selected) ??
-    history.items.find((t) => t.id === selected) ??
-    (selectedDetail?.id === selected ? selectedDetail : null) ??
-    (!selected ? active : undefined);
+  const currentId = selected ?? active?.id;
+  const current = latestTrip(
+    selectedDetail?.id === currentId ? selectedDetail : null,
+    trips.find((t) => t.id === currentId),
+    history.items.find((t) => t.id === currentId),
+  );
 
   const reload = useCallback(async () => {
     const request = ++sequence.current;
-    const [data, past, presence] = await Promise.all([
+    const [data, past] = await Promise.all([
       service.trips(),
       service.history(page, historyStatus || undefined),
-      isDriver ? service.driver() : Promise.resolve(null),
     ]);
     if (request !== sequence.current) return;
     setTrips(data);
     setHistory(past);
-    setDriver(presence);
-  }, [service, isDriver, page, historyStatus]);
+  }, [service, page, historyStatus]);
+
+  useEffect(() => {
+    let mounted = true;
+    service
+      .profile()
+      .then((profile) => {
+        if (!mounted || profile.latitude == null || profile.longitude == null) return;
+        const point = {
+          latitude: profile.latitude,
+          longitude: profile.longitude,
+          label: "Vị trí mô phỏng của bạn",
+        };
+        setSeedLocation(point);
+        if (!pickupChanged.current) {
+          setFrom(point);
+          setSelecting("destination");
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [service]);
 
   useEffect(() => {
     let mounted = true;
@@ -85,7 +102,7 @@ export function useRides(user: RideUser, service: RideService) {
     };
   }, [reload]);
 
-  const needsPolling = isDriver || isOps || !!active;
+  const needsPolling = !!active;
   useEffect(() => {
     if (!needsPolling) return;
     let pending = false;
@@ -102,14 +119,6 @@ export function useRides(user: RideUser, service: RideService) {
     }, 2000);
     return () => clearInterval(interval);
   }, [reload, needsPolling]);
-
-  useEffect(() => {
-    if (!isDriver || !driver?.available) return;
-    const ping = () => service.heartbeat().catch((e) => setError(e.message));
-    void ping();
-    const interval = setInterval(ping, 10000);
-    return () => clearInterval(interval);
-  }, [service, isDriver, driver?.available]);
 
   useEffect(() => {
     setPreview(null);
@@ -143,7 +152,6 @@ export function useRides(user: RideUser, service: RideService) {
     };
   }, [service, from, to, !!active, isRider]);
 
-  const currentId = isDriver && active ? active.id : (selected ?? current?.id);
   const currentStatus = current?.status;
   useEffect(() => {
     setSimulation(null);
@@ -156,11 +164,12 @@ export function useRides(user: RideUser, service: RideService) {
     const poll = async () => {
       if (pending) return;
       pending = true;
-      const request = screenSequence.current;
       try {
         const data = await service.screen(currentId);
-        if (mounted && request === screenSequence.current) {
-          setSelectedDetail(data.trip);
+        if (mounted) {
+          setSelectedDetail((previous) =>
+            previous?.id === data.trip.id ? latestTrip(data.trip, previous)! : data.trip,
+          );
           setSimulation(data.simulation);
           setPayment(data.payment);
           setAssignedDriver(data.driver);
@@ -201,22 +210,8 @@ export function useRides(user: RideUser, service: RideService) {
     }
   }
 
-  function controlSimulation(speed: number, paused: boolean) {
-    if (!simulation) return;
-    void run(async () => {
-      const updated = await service.control(simulation.driverId, speed, paused);
-      screenSequence.current++;
-      setSimulation(updated);
-    });
-  }
-
   function act(trip: Trip, action: TripAction, reason?: string) {
-    const role =
-      isRider && trip.riderId === user.id
-        ? "rider"
-        : isDriver && trip.driverId === user.id
-          ? "driver"
-          : "observer";
+    const role = trip.riderId === user.id ? "rider" : "observer";
     return run(async () => {
       await service.act(trip, action, role, reason);
     });
@@ -224,13 +219,7 @@ export function useRides(user: RideUser, service: RideService) {
 
   async function book(pickupNote = "", method: "Cod" | "Wallet" = "Cod") {
     if (!from || !to || !preview) throw new Error("Chọn điểm đón và điểm đến có đường đi hợp lệ.");
-    const trip = await service.book({
-      pickup: from,
-      destination: to,
-      method,
-      paymentToken: null,
-      pickupNote,
-    });
+    const trip = await service.book({ pickup: from, destination: to, method, pickupNote });
     setTrips((previous) => [trip, ...previous.filter((t) => t.id !== trip.id)]);
     setSelected(trip.id);
     window.location.hash = `ride/${trip.id}`;
@@ -242,6 +231,7 @@ export function useRides(user: RideUser, service: RideService) {
       setError("Hoàn tất hoặc hủy chuyến hiện tại trước khi đặt lại.");
       return;
     }
+    pickupChanged.current = true;
     setFrom(trip.pickup);
     setTo(trip.destination);
     setSelected(null);
@@ -257,50 +247,32 @@ export function useRides(user: RideUser, service: RideService) {
     });
   }
 
-  function toggleAvailability() {
-    if (!driver) return;
-    const point = driverPoint ?? driver;
-    void run(() => service.toggleAvailability(driver, point.latitude, point.longitude));
-  }
-
-  function locate(asDriver = false) {
-    if (!navigator.geolocation) {
-      setError("Trình duyệt không hỗ trợ định vị.");
-      return;
+  function locate() {
+    if (isRider && seedLocation && !busy && !active) {
+      pickupChanged.current = true;
+      setFrom({ ...seedLocation });
+      setSelected(null);
+      setSelecting("destination");
     }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        void run(async () => {
-          const point = await service.reverse(position.coords.latitude, position.coords.longitude);
-          if (asDriver) setDriverPoint(point);
-          else {
-            setSelected(null);
-            setFrom(point);
-            setSelecting("destination");
-          }
-        });
-      },
-      () => setError("Không lấy được vị trí. Chọn điểm trên bản đồ hoặc tìm địa chỉ."),
-      { timeout: 10000 },
-    );
   }
 
   function selectMap(latitude: number, longitude: number) {
-    if (busy || (isRider && active) || (isDriver && driver?.busy)) return;
+    pickupChanged.current = true;
+    if (busy || active) return;
     void run(async () => {
       const point = await service.reverse(latitude, longitude);
-      if (isDriver) setDriverPoint(point);
-      else {
-        setSelected(null);
-        if (selecting === "pickup") {
-          setFrom(point);
-          setSelecting("destination");
-        } else setTo(point);
+      setSelected(null);
+      if (selecting === "pickup") {
+        setFrom(point);
+        setSelecting("destination");
+      } else {
+        setTo(point);
       }
     });
   }
 
   function chooseFrom(point: Point | null) {
+    pickupChanged.current = true;
     setSelected(null);
     setFrom(point);
   }
@@ -308,15 +280,9 @@ export function useRides(user: RideUser, service: RideService) {
     setSelected(null);
     setTo(point);
   }
-  const complete = trips.filter((t) => t.status === "Paid").length;
   return {
-    isDriver,
     isRider,
-    isOps,
     trips,
-    driver,
-    driverPoint,
-    setDriverPoint,
     error,
     busy,
     loading,
@@ -353,9 +319,6 @@ export function useRides(user: RideUser, service: RideService) {
     book,
     rebook,
     review,
-    toggleAvailability,
-    controlSimulation,
-    complete,
   };
 }
 export type RidesViewModel = ReturnType<typeof useRides>;

@@ -5,7 +5,6 @@ import { HttpRideGateway } from "@/features/rides/infrastructure/HttpRideGateway
 import { RideDashboard } from "@/features/rides/presentation/RideDashboard";
 import type { RideUser } from "@/features/rides/presentation/useRides";
 import WalletClient from "./WalletClient";
-import WalletWithdrawalOpsClient from "./WalletWithdrawalOpsClient";
 export default function RideClient({
   user,
   logout,
@@ -23,7 +22,6 @@ export default function RideClient({
       service={service}
       mapKey={mapKey}
       wallet={<WalletClient />}
-      withdrawalOps={<WalletWithdrawalOpsClient />}
     />
   );
 }

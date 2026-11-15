@@ -1,32 +1,27 @@
-import { useState } from "react";
 import type { Payment, Trip } from "../../domain/models";
-import type { RideService } from "../../application/RideService";
 import { money } from "../format";
 
 export function CashReceipt({
   trip,
   payment,
   unavailable,
-  isDriver,
-  busy,
-  service,
-  run,
 }: {
   trip: Trip;
   payment: Payment | null;
   unavailable: boolean;
-  isDriver: boolean;
-  busy: boolean;
-  service: RideService;
-  run: (action: () => Promise<void>) => Promise<void>;
 }) {
-  const [received, setReceived] = useState(false);
   if (trip.method !== "Cod")
     return (
-      <section className="cash-receipt" aria-label="Giao dịch cũ">
-        <p className="font-semibold">Giao dịch cũ · {trip.method}</p>
-        <p className="text-sm muted mt-2">
-          Giữ nguyên lịch sử thanh toán. Liên hệ Ops để đối soát nếu còn giao dịch dang dở.
+      <section className="cash-receipt" aria-label="Thanh toán ví">
+        <p className="font-semibold">Thanh toán ví mô phỏng</p>
+        <p className="text-sm mt-2" role="status">
+          {unavailable
+            ? "Tạm mất kết nối thanh toán. Hệ thống sẽ cập nhật lại."
+            : payment?.status === "Settled"
+              ? "Đã thanh toán bằng ví."
+              : trip.status === "PaymentReview"
+                ? "Thanh toán đang chờ xử lý."
+                : "Đang chờ kết quả thanh toán ví."}
         </p>
       </section>
     );
@@ -62,33 +57,9 @@ export function CashReceipt({
       {!payment && !unavailable && (
         <p className="text-sm mt-3 muted">Đang tạo giao dịch. Vui lòng chờ.</p>
       )}
-      {isDriver && payment?.method === "Cod" && payment.status === "Pending" && !settled && (
-        <form
-          className="space-y-4 mt-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run(async () => {
-              await service.confirmCash(payment.id);
-            });
-          }}
-        >
-          <label className="check-label">
-            <input
-              type="checkbox"
-              required
-              checked={received}
-              onChange={(event) => setReceived(event.target.checked)}
-            />
-            Tôi đã nhận đủ {money(payment.amount)} từ khách.
-          </label>
-          <button className="btn w-full" disabled={busy || !received}>
-            Xác nhận đã thu tiền
-          </button>
-        </form>
-      )}
-      {!isDriver && !settled && (
+      {!settled && (
         <p className="text-sm mt-3 muted">
-          Thanh toán trực tiếp cho tài xế. Chuyến hoàn tất khi tài xế xác nhận đã nhận tiền.
+          Chuyến hoàn tất khi tài xế xác nhận thu tiền mô phỏng. Không sử dụng tiền thật.
         </p>
       )}
     </section>

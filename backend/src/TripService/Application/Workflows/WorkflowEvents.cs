@@ -13,12 +13,13 @@ public static class WorkflowEvents
             trip.CorrelationId,
             trip.Version,
             trip.DriverId,
-            trip.Method == PaymentMethod.Wallet
+            trip.Method == PaymentMethod.Wallet,
+            trip.Method == PaymentMethod.Wallet ? trip.Quote?.Id : null
         );
 
     public static WalletTripHoldRequested ReserveWallet(Trip trip) =>
         new(
-            Guid.NewGuid(),
+            trip.Quote!.Id,
             trip.Id,
             trip.RiderId,
             checked((long)trip.Quote!.Amount),
@@ -27,13 +28,20 @@ public static class WorkflowEvents
             trip.CorrelationId
         );
 
-    public static WalletTripHoldReleaseRequested ReleaseWallet(Trip trip) =>
+    public static WalletTripHoldReleaseRequested ReleaseWallet(
+        Trip trip,
+        bool rematch = false,
+        bool cancelRequested = false
+    ) =>
         new(
             Guid.NewGuid(),
             trip.Id,
             trip.RiderId,
             checked((long)trip.Quote!.Amount),
-            trip.CorrelationId
+            trip.CorrelationId,
+            rematch,
+            cancelRequested,
+            trip.Quote?.Id
         );
 
     public static Task Release(Trip trip, IEventPublisher bus, CancellationToken ct) =>

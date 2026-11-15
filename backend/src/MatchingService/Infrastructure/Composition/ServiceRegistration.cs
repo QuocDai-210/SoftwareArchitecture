@@ -16,14 +16,11 @@ public static class ServiceRegistration
         );
         builder.Services.AddMemoryCache(options => options.SizeLimit = 128);
         builder
-            .Services.AddHttpClient(
-                "geoapify",
-                client =>
-                {
-                    client.BaseAddress = new Uri("https://api.geoapify.com/v1/");
-                    client.Timeout = TimeSpan.FromSeconds(20);
-                }
-            )
+            .Services.AddHttpClient("geoapify", client =>
+            {
+                client.BaseAddress = new Uri("https://api.geoapify.com/v1/");
+                client.Timeout = TimeSpan.FromSeconds(20);
+            })
             .RemoveAllLoggers()
             .AddHttpMessageHandler<InternalRetryHandler>();
         if (builder.Configuration["Maps:Provider"] == "Test")
@@ -31,22 +28,7 @@ public static class ServiceRegistration
         else
             builder.Services.AddSingleton<IMapProvider, GeoapifyMapProvider>();
         builder.Services.AddScoped<MapQueries>();
-        builder
-            .Services.AddHttpClient(
-                "identity-admin",
-                client =>
-                {
-                    client.BaseAddress = new Uri(
-                        builder.Configuration["Auth:AdminUrl"] ?? "http://keycloak:8080/"
-                    );
-                    client.Timeout = TimeSpan.FromSeconds(10);
-                }
-            )
-            .RemoveAllLoggers();
-        builder.Services.AddScoped<IDriverIdentity, KeycloakDriverIdentity>();
-        builder.Services.AddScoped<IDriverAdministration, DriverAdministrationStore>();
         builder.Services.AddScoped<ISimulationStore, MongoSimulationStore>();
-        builder.Services.AddScoped<DriverAdministration>();
         builder.Services.AddScoped<SimulationWorkflow>();
         builder.Services.AddSingleton(
             new SimulationSettings(
@@ -60,11 +42,15 @@ public static class ServiceRegistration
         builder.Services.AddSingleton(s =>
             s.GetRequiredService<IMongoClient>().GetDatabase("MatchDB")
         );
+        builder.Services.AddHostedService<SeededDriverHeartbeatWorker>();
         builder.Services.AddSingleton<MongoDriverRepository>();
         builder.Services.AddSingleton<IDriverReader>(s =>
             s.GetRequiredService<MongoDriverRepository>()
         );
         builder.Services.AddSingleton<IDriverPresence>(s =>
+            s.GetRequiredService<MongoDriverRepository>()
+        );
+        builder.Services.AddSingleton<IDriverEligibility>(s =>
             s.GetRequiredService<MongoDriverRepository>()
         );
         builder.Services.AddSingleton<IDriverReservations>(s =>
@@ -97,15 +83,11 @@ public static class ServiceRegistration
             x.UsingRabbitMq(
                 (context, cfg) =>
                 {
-                    cfg.Host(
-                        builder.Configuration["Rabbit:Host"] ?? "rabbitmq",
-                        "/",
-                        host =>
-                        {
-                            host.Username(builder.Configuration["Rabbit:Username"]!);
-                            host.Password(builder.Configuration["Rabbit:Password"]!);
-                        }
-                    );
+                    cfg.Host(builder.Configuration["Rabbit:Host"] ?? "rabbitmq", "/", host =>
+                    {
+                        host.Username(builder.Configuration["Rabbit:Username"]!);
+                        host.Password(builder.Configuration["Rabbit:Password"]!);
+                    });
                     cfg.UseMessageRetry(r =>
                     {
                         r.Handle<Exception>(ex =>

@@ -22,8 +22,7 @@ public sealed class SimulationWorkflow(
             && previous.TripVersion >= message.Version
         )
             return;
-        var driver =
-            await drivers.Get(message.DriverId, ct)
+        var driver = await drivers.Get(message.DriverId, ct)
             ?? throw new RuleException("Không có tài xế.", ErrorKind.NotFound);
         var target = message.Stage == "EnRoute" ? message.Pickup : message.Destination;
         RoadRoute route;
@@ -66,7 +65,7 @@ public sealed class SimulationWorkflow(
 
     public async Task<Simulation?> Get(string driverId, Actor actor, CancellationToken ct)
     {
-        if (!actor.IsOps && !actor.IsService && (!actor.IsDriver || actor.Id != driverId))
+        if (!actor.IsService && (!actor.IsDriver || actor.Id != driverId))
             throw new RuleException("Không có quyền điều khiển xe.", ErrorKind.Forbidden);
         return await store.Get(driverId, ct);
     }
@@ -79,8 +78,7 @@ public sealed class SimulationWorkflow(
         CancellationToken ct
     )
     {
-        var simulation =
-            await Get(driverId, actor, ct)
+        var simulation = await Get(driverId, actor, ct)
             ?? throw new RuleException("Xe chưa có hành trình.", ErrorKind.NotFound);
         var revision = simulation.Revision;
         simulation.Control(speed, paused);
@@ -108,6 +106,11 @@ public sealed class SimulationWorkflow(
                 )
             )
                 continue;
+            if (simulation.Arrived || simulation.Paused)
+            {
+                await store.Position(simulation, simulation.Position(), ct);
+                continue;
+            }
             var revision = simulation.Revision;
             simulation.Advance(1, DateTimeOffset.UtcNow);
             try
@@ -137,6 +140,7 @@ public sealed class SimulationWorkflow(
         if (
             simulation is null
             || simulation.TripId != tripId
+            || !await store.Owns(driverId, tripId, simulation.ReservationId, ct)
             || simulation.Stage != (target == "PickedUp" ? "EnRoute" : "PickedUp")
             || GeoDistance.Kilometers(
                 simulation.Position().Latitude,
@@ -146,5 +150,7 @@ public sealed class SimulationWorkflow(
             ) > 0.1
         )
             throw new RuleException("Xe chưa đến điểm đón/trả khách.");
+        // Persist the position before the trip can advance or release the Driver.
+        await store.Position(simulation, simulation.Position(), ct);
     }
 }

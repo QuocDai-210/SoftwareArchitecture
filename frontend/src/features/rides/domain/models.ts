@@ -6,7 +6,7 @@ export type Trip = {
   destination: Point;
   driverId: string | null;
   status: string;
-  method: "Card" | "Wallet" | "Cod";
+  method: "Wallet" | "Cod";
   version: number;
   reason: string | null;
   createdAt: string;
@@ -38,8 +38,6 @@ export type Trip = {
   ratedAt: string | null;
 };
 export type Payment = {
-  isTopUp: boolean;
-  requiresCheckout: boolean;
   createdAt: string;
   id: string;
   amount: number;
@@ -60,14 +58,7 @@ export type AssignedDriver = {
   plate: string;
   vehicle: string;
 };
-export type Driver = {
-  id: string;
-  name: string;
-  available: boolean;
-  busy: boolean;
-  latitude: number;
-  longitude: number;
-};
+
 export type RoadRoute = { distanceKm: number; durationMinutes: number; coordinates: number[][] };
 export type Simulation = {
   currentPosition: Point;
@@ -81,35 +72,18 @@ export type Simulation = {
   arrived: boolean;
   remainingMinutes: number;
 };
-export type Profile = { id: string; name: string; phone: string };
-export type DriverApplication = {
+export type Profile = {
   id: string;
-  username: string;
   name: string;
-  email: string;
   phone: string;
-  plate: string;
-  vehicle: string;
-  status: string;
-  subject: string | null;
-  reason: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 };
-export type DriverRegistration = Pick<
-  DriverApplication,
-  "username" | "name" | "email" | "phone" | "plate" | "vehicle"
->;
 export type Page<T> = { items: T[]; page: number; pageSize: number; total: number };
-export type PaymentStatistic = {
-  status: string;
-  isTopUp: boolean;
-  method: string;
-  count: number;
-  amount: number;
-};
+export type PaymentStatistic = { status: string; method: string; count: number; amount: number };
 export type Journal = {
   id: string;
   kind: string;
   createdAt: string;
   lines: { account: string; side: "Debit" | "Credit"; amount: number }[];
 };
-export type TripStatistic = { status: string; count: number };

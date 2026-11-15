@@ -18,25 +18,23 @@ public sealed class CashCollection(
         CancellationToken ct
     )
     {
-        if (!actor.IsDriver && !actor.IsOps)
-            throw new RuleException("Cần quyền Driver hoặc Ops.", ErrorKind.Forbidden);
+        if (!actor.IsDriver)
+            throw new RuleException(
+                "Only Drivers can confirm COD collection.",
+                ErrorKind.Forbidden
+            );
         RequestKeys.Validate(key);
         var reason = request.Reason?.Trim();
-        if (
-            !request.Received
-            || reason?.Length > 200
-            || (actor.IsOps && string.IsNullOrEmpty(reason))
-        )
+        if (!request.Received || reason?.Length > 200)
             throw new RuleException(
-                "Xác nhận đã thu tiền; Ops cần lý do tối đa 200 ký tự.",
+                "Confirm receipt of the cash fare; the reason may contain up to 200 characters.",
                 ErrorKind.Validation
             );
         await using var tx = await unit.Begin(ct);
         await writer.Lock(id, ct);
-        var payment =
-            await writer.FindTracked(id, ct)
+        var payment = await writer.FindTracked(id, ct)
             ?? throw new RuleException("Giao dịch đang được tạo. Hãy thử lại.", ErrorKind.NotFound);
-        if (!actor.IsOps && payment.DriverId != actor.Id)
+        if (payment.DriverId != actor.Id)
             throw new RuleException("Không phải tài xế của chuyến.", ErrorKind.Forbidden);
         var hash = RequestKeys.Hash($"{actor.Id}|{reason}");
         if (payment.CollectCash(key, hash, actor.Id, reason))

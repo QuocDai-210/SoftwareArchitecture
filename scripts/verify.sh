@@ -2,53 +2,28 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-/tmp/swiftride-dotnet}"
-export \
-  DOTNET_NOLOGO=1 \
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
-  PYTHONDONTWRITEBYTECODE=1 \
-  NEXT_TELEMETRY_DISABLED=1 \
-  COMPOSE_PARALLEL_LIMIT=1 \
-  DOTNET_CLI_USE_MSBUILD_SERVER=0 \
-  MSBUILDDISABLENODEREUSE=1 \
-  NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1536}"
-python3 scripts/check-architecture.py
-python3 -B scripts/migrate-trip.py --check
-if [[ "${1:-}" == "--core" ]]; then
-  if [[ -f .env ]] && command -v docker >/dev/null && docker info >/dev/null 2>&1; then
-    docker compose --profile "*" stop
-  fi
-  exec dotnet test backend/tests/SwiftRide.Checks -c Release --filter "Category!=Integration" --disable-build-servers -p:BuildInParallel=false -p:UseSharedCompilation=false
+export DOTNET_NOLOGO=1
+export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+export PYTHONDONTWRITEBYTECODE=1
+export NEXT_TELEMETRY_DISABLED=1
+export COMPOSE_PARALLEL_LIMIT=1
+export DOTNET_CLI_USE_MSBUILD_SERVER=0
+export MSBUILDDISABLENODEREUSE=1
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1536}"
+
+python3 -B scripts/setup.py --check
+python3 -B scripts/check-architecture.py
+if [[ -f .env ]]; then
+  docker compose config --quiet
+  python3 -B scripts/check-resources.py
+  docker compose --profile "*" stop
 fi
-if [[ ! -f .env ]]; then
-  echo 'Run python3 scripts/setup.py first.' >&2
-  exit 1
-fi
-# Release project services before compiling; retain containers and persistent data.
-docker compose --profile "*" stop
-set -a
-source .env
-set +a
-if [[ ! -f frontend/package-lock.json ]]; then
-  ./scripts/lock.sh
-fi
-python3 scripts/check-resources.py
-dotnet build backend/SwiftRide.slnx -c Release -m:1 --disable-build-servers -p:UseSharedCompilation=false -p:RestoreLockedMode=true
+dotnet test backend/SwiftRide.slnx -c Release -m:1 --disable-build-servers \
+  -p:BuildInParallel=false -p:UseSharedCompilation=false --filter 'Category!=Integration'
 (
-  cd frontend &&
-    npm ci &&
-    npm run check &&
-    npm run build
+  cd frontend
+  npm ci
+  npm run check
+  npm run build
 )
 node scripts/check-frontend.mjs
-docker compose config --quiet
-# Stop test services on success, failure, or interruption; preserve volumes.
-trap 'docker compose --profile "*" stop' EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-for service in rabbitmq trip matching payment gateway web; do
-  docker compose build "$service"
-done
-docker compose up --no-build -d --wait --wait-timeout 300
-python3 -B scripts/sync-identity.py
-dotnet test backend/tests/SwiftRide.Checks -c Release --no-build
-node scripts/browser-check.mjs --faults

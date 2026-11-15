@@ -13,30 +13,7 @@ public sealed class TripQueries(ITripReader reader)
     {
         if (page is < 1 or > 10000)
             throw new RuleException("Trang không hợp lệ.", ErrorKind.Validation);
-        return reader.History(actor.Id, actor.IsOps, page, status, ct);
-    }
-
-    public Task<object> Statistics(Actor actor, CancellationToken ct)
-    {
-        if (!actor.IsOps)
-            throw new RuleException("Cần quyền Ops.", ErrorKind.Forbidden);
-        return reader.Statistics(ct);
-    }
-
-    public async Task<TripWorkflowView> Workflow(Guid id, Actor actor, CancellationToken ct)
-    {
-        if (!actor.IsOps)
-            throw new RuleException("Cần quyền Ops.", ErrorKind.Forbidden);
-        var trip = await reader.Get(id, ct);
-        return new(
-            trip.Id,
-            trip.Status,
-            trip.WorkflowRetries,
-            trip.NextAttemptAt,
-            trip.Reason,
-            trip.CorrelationId,
-            trip.UpdatedAt
-        );
+        return reader.History(actor.Id, false, page, status, ct);
     }
 
     public async Task<TripView> Get(Guid id, Actor actor, CancellationToken ct)
@@ -47,7 +24,7 @@ public sealed class TripQueries(ITripReader reader)
     }
 
     public async Task<IEnumerable<TripView>> List(Actor actor, CancellationToken ct) =>
-        (await reader.List(actor.Id, actor.IsOps, ct)).Select(TripView.From);
+        (await reader.List(actor.Id, false, ct)).Select(TripView.From);
 
     public async Task<IEnumerable<TripView>> Offers(Actor actor, CancellationToken ct)
     {

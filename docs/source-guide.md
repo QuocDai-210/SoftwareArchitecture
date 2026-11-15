@@ -1,114 +1,22 @@
-# Bản đồ mã nguồn
+# Source guide
 
-## Đi từ yêu cầu đến file
+| Concern | Location |
+|---|---|
+| Authoritative requirements | `chuc-nang-va-luong-hoat-dong.md` |
+| Windows setup and accounts | `README.md`, `scripts/setup.py`, `scripts/manage.ps1` |
+| Postman workflows | `postman/SwiftRide.postman_collection.json` |
+| Gateway routes and authentication | `backend/src/ApiGateway` |
+| Local login, seed accounts, Trip workflow | `backend/src/TripService` |
+| Driver seed, matching, pricing and route simulation | `backend/src/MatchingService` |
+| COD, wallets, ledger, withdrawals | `backend/src/PaymentService` |
+| Contracts and internal service JWT | `backend/src/Shared` |
+| Rider web and backend proxy | `frontend/src` |
+| Local databases, broker, service limits | `docker-compose.yml`, `deploy/postgres`, `deploy/mongo` |
 
-Đường dẫn backend trong bảng bắt đầu từ `backend/src/`.
+The database migration history includes old provider-related tables. Keep that history to preserve
+existing volumes. There is no current VNPAY provider, IPN endpoint, Keycloak realm, Ops dashboard,
+public registration flow, or Driver web client.
 
-| Việc cần đổi                                     | Bắt đầu tại                                                                                                        |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Endpoint, payload HTTP, policy User/Driver/Ops   | `<Service>/Api/Endpoints/`                                                                                         |
-| Luật chuyển trạng thái chuyến                    | `TripService/Domain/Trip.cs`, `TripState.cs`                                                                       |
-| Đặt, hủy, xác nhận và đánh giá chuyến            | `TripService/Application/Commands/TripCommands.cs`; luật đánh giá tại `Domain/Trip.cs`                              |
-| Quyền tài nguyên chuyến                          | `TripService/Application/Security/TripAccess.cs`                                                                   |
-| Danh sách/chi tiết chuyến                        | `TripService/Application/Queries/`; DTO tại `ReadModels/`                                                          |
-| Ops xem trạng thái Saga/retry của chuyến          | `GET /ops/trips/{id}/workflow`; `TripQueries.Workflow`                                                             |
-| Ghép xe, retry sau restart                       | `TripService/Application/Workflows/TripWorkflow.cs`                                                                |
-| PostgreSQL, index, optimistic concurrency        | `TripService/Infrastructure/Persistence/`                                                                          |
-| Trip gọi Matching qua HTTP                       | `TripService/Infrastructure/Clients/MatchingHttpClient.cs`                                                         |
-| Tính giá và decorator                            | `MatchingService/Domain/`; use case tại `Application/Pricing/`                                                     |
-| Bán kính/vị trí/giữ chỗ còn hiệu lực             | `MatchingService/Domain/MatchingPolicy.cs`                                                                         |
-| Tìm tài xế, vị trí, reservation                  | `MatchingService/Application/{Matching,Drivers,Reservations}/`                                                     |
-| GeoJSON, Mongo query, giữ chỗ nguyên tử          | `MatchingService/Infrastructure/Persistence/`                                                                      |
-| Tìm địa chỉ, định vị ngược, xem đường đi         | `MatchingService/Application/Maps/MapQueries.cs`, `Infrastructure/Maps/GeoapifyMapProvider.cs`                     |
-| Tạo, duyệt, từ chối, khóa Driver                 | `MatchingService/Application/Drivers/DriverAdministration.cs`, `Infrastructure/Identity/KeycloakDriverIdentity.cs` |
-| Xe di chuyển, tạm dừng, tốc độ, kiểm tra đến nơi | `MatchingService/Domain/Simulation.cs`, `Application/Simulation/SimulationWorkflow.cs`                             |
-| Lưu hành trình giả lập và revision               | `MatchingService/Infrastructure/Persistence/MongoSimulationStore.cs`                                               |
-| Hồ sơ User và lịch sử có phân trang              | `TripService/Application/{Commands/ProfileCommands.cs,Queries/TripQueries.cs}`, `Infrastructure/Persistence/`      |
-| Số dư, trạng thái thanh toán, cân bằng Nợ/Có     | `PaymentService/Domain/`                                                                                           |
-| Xác nhận thu COD, quyền Driver/Ops, idempotency  | `PaymentService/Application/Commands/CashCollection.cs`                                                            |
-| Tạo giao dịch, hoàn tiền và Outbox               | `PaymentService/Application/Commands/PaymentCommands.cs`                                                           |
-| Chiến lược COD và registry lựa chọn              | `PaymentService/Application/Methods/`                                                                              |
-| Adapter online cũ, không đăng ký ở runtime COD   | `PaymentService/Infrastructure/Providers/`                                                                         |
-| PostgreSQL, row/advisory lock, trigger sổ cái    | `PaymentService/Infrastructure/Persistence/`                                                                       |
-| Sự kiện giữa các service                         | `Shared/SwiftRide.Contracts/Events/`                                                                               |
-| Consumer RabbitMQ                                | `<Service>/Infrastructure/Messaging/`                                                                              |
-| Đăng ký DI và cấu hình adapter                   | `<Service>/Infrastructure/Composition/ServiceRegistration.cs`                                                      |
-| Khởi động host                                   | `<Service>/Api/Program.cs`                                                                                         |
-| JWT, chuyển HttpContext thành Actor              | `Shared/SwiftRide.Infrastructure/Security/`                                                                        |
-| Inbox/Outbox, retry broker, telemetry            | `Shared/SwiftRide.Infrastructure/{Messaging,Persistence,Resilience,Observability}/`                                |
-| Gateway routes, rate limit, upstream             | `ApiGateway/Composition/ServiceRegistration.cs`                                                                    |
-| Gom chuyến, vị trí xe, Driver và thanh toán COD  | `ApiGateway/Endpoints/ScreenEndpoints.cs`                                                                          |
-| Mô hình và thao tác chuyến trên web              | `frontend/src/features/rides/domain/`                                                                              |
-| Retry đặt xe, điều phối thao tác web             | `frontend/src/features/rides/application/RideService.ts`                                                           |
-| HTTP web gọi backend proxy                       | `frontend/src/features/rides/infrastructure/HttpRideGateway.ts`                                                    |
-| React state, polling/heartbeat                   | `frontend/src/features/rides/presentation/useRides.ts`                                                             |
-| Form, chi tiết chuyến, lịch sử, bản đồ           | `frontend/src/features/rides/presentation/components/`                                                             |
-| Timeline trạng thái và nhánh kết thúc chuyến     | `frontend/src/features/rides/presentation/trip-timeline.ts`                                                        |
-| Liên hệ, ghi chú đón, hủy có xác nhận, đánh giá | `frontend/src/features/rides/presentation/components/{BookingForm,TripDetails,TripReview}.tsx`                      |
-| Ghép service và adapter client                   | `frontend/src/composition/RideClient.tsx`                                                                          |
-| OIDC, session HttpOnly, refresh token            | `frontend/src/infrastructure/auth/`                                                                                |
-| Origin/path/body và chuyển tiếp Gateway          | `frontend/src/infrastructure/http/backend-proxy.ts`                                                                |
-| Đăng ký User và đồng bộ quyền, giữ danh tính cũ  | `deploy/keycloak/swiftride-realm.json`, `scripts/sync-identity.py`                                                 |
-| Bản đồ web, chọn địa chỉ và điều khiển xe        | `frontend/src/features/rides/presentation/components/{RouteMap,AddressField,SimulationControls}.tsx`               |
-| Giao diện quản trị Driver                        | `frontend/src/features/rides/presentation/components/OpsPanel.tsx`                                                 |
-| Giới hạn RAM và kiểm thử ba vai trò              | `scripts/check-resources.py`, `scripts/browser-check.mjs`, `scripts/verify.sh`                                     |
-| Quản lý nhóm API/database                        | `Makefile`, `docker-compose.yml`                                                                                   |
-| Bảo vệ ranh giới tầng                            | `scripts/check-architecture.py`                                                                                    |
-| Kiểm thử xUnit + Moq/hợp đồng adapter            | `backend/tests/SwiftRide.Checks/`; `scripts/check-frontend.mjs`                                                    |
-
-Các điểm vào mới:
-
-- `PaymentService/Application/Methods/CashMethod.cs`: chiến lược COD, chờ xác nhận thu.
-- `PaymentService/Application/Commands/CashCollection.cs`: quyền thu, idempotency, journal và Outbox.
-- `PaymentService/Domain/Payment.cs`: trạng thái và dấu vết thu/hoàn tiền.
-- `MatchingService/Application/ReadModels/DriverContact.cs`: dữ liệu Driver gửi cho chuyến có quyền xem.
-- `frontend/src/features/rides/presentation/components/CashReceipt.tsx`: xác nhận tiền mặt trên chuyến.
-- `frontend/src/features/rides/presentation/components/PaymentPanel.tsx`: lịch sử, tổng thu/hoàn và biên nhận.
-- `deploy/keycloak/themes/swiftride/login/`: theme mint–trắng kế thừa Keycloak.
-
-## Quy tắc đặt file
-
-`Domain` chứa luật nghiệp vụ và trạng thái; `Application` chứa use case và port; `Infrastructure` chứa adapter công nghệ; `Api` chứa HTTP và điểm khởi động. Port được đặt tên theo nhu cầu use case, không theo thư viện. Consumer/worker chuyển message, gọi use case và quản lý vòng đời hạ tầng.
-
-SharedKernel giữ kiểu dùng chung: tọa độ, hình học, dữ liệu giá, phương thức thanh toán và lỗi nghiệp vụ. Contracts chứa DTO/sự kiện. Shared Application giữ Actor và port chung, không tham chiếu service Domain. Entity Trip/Payment thuộc Domain của từng service.
-
-Gateway là edge adapter, dùng `Endpoints`, `Composition`, `Infrastructure`. Next.js `app/` giữ routing/server actions và composition; mã tính năng nằm trong `features/`.
-
-## Quy tắc format
-
-- Độ rộng mục tiêu: 100 ký tự, tính cả thụt lề.
-- Tham số, đối số, mảng và object trong `()`, `[]`, `{}` gom thành một dòng khi cả dòng còn đủ chỗ. Thuộc tính JSX ngắn áp dụng cùng quy tắc.
-- Khi vượt độ rộng, xuống dòng và thụt lề theo cấu trúc ngoặc. Không giữ nhóm ngắn trên nhiều dòng chỉ vì trước đó đã có dấu phẩy cuối.
-- Mỗi câu lệnh riêng một dòng; khối lệnh vẫn xuống dòng. Giữ nguyên nội dung chuỗi, SQL, template và chú thích cần thiết.
-
-Ví dụ nhóm ngắn:
-
-```ts
-const options = { busy, loading };
-await service.act(trip, action, role);
-```
-
-Quy tắc được cấu hình tại `.prettierrc.json` cho frontend/JavaScript, `backend/.csharpierrc.json` và `backend/.editorconfig` cho C#, `pyproject.toml` cho Python. Dùng Prettier 3.5 trở lên để hỗ trợ `objectWrap: "collapse"`.
-
-## Khi thêm chức năng
-
-1. Đặt luật bất biến vào Domain; giữ EF, HTTP, MongoDB và broker ở tầng ngoài.
-2. Viết use case tại Application. Tận dụng port hiện có; thêm port khi có giao tiếp ra ngoài cần đảo phụ thuộc.
-3. Viết adapter tại Infrastructure, đăng ký composition và thêm endpoint mỏng nếu cần HTTP.
-4. Thêm assert có ý nghĩa vào runner hiện có; chạy kiểm tra kiến trúc, nghiệp vụ và tích hợp liên quan.
-
-Thêm phương thức thanh toán bằng implementation `IPaymentMethod` và đăng ký DI; factory nhận danh sách implementation, không có switch. Thêm quy tắc giá qua `IPricingStrategy`/decorator và kiểm tra cùng hợp đồng đầu vào/đầu ra.
-
-## Tương thích dữ liệu
-
-Event nằm trong Contracts nhưng giữ namespace `SwiftRide.Core`: đây là tên wire đã triển khai trong MassTransit, không phải project Core cũ. Đổi namespace sẽ đổi message URN/exchange. Migration giữ ID `202611020001_Initial`, tên bảng/collection và tên consumer queue. Refactor không yêu cầu xóa volume hoặc tạo lại database.
-
-## Chuyển database Trip
-
-- `deploy/postgres/init.sh`: tạo/tách quyền TripDB và PayDB, nâng cấp volume Payment cũ.
-- `scripts/migrate-trip.py`: backup native, chuyển và đối chiếu dữ liệu SQL Server sang PostgreSQL; không ghi đè đích khác dữ liệu.
-- `backend/tests/SwiftRide.Checks/CoreTests.cs`: hợp đồng Domain, Payment và Maps.
-- `backend/tests/SwiftRide.Checks/WorkflowTests.cs`: Saga qua Moq, retry và bồi thường.
-- `backend/tests/SwiftRide.Checks/StorageTests.cs`: snapshot và quyền/ràng buộc database thật.
-
-SQL Server chỉ dùng profile `migration`; Matching vẫn dùng MongoDB.
+`PaymentService/Infrastructure/Persistence/HistoricalPaymentRows.cs` contains persistence-only
+shapes for those historical tables. Their existing entity names are preserved for EF migration
+compatibility; they are not part of the current Domain or provider workflows.

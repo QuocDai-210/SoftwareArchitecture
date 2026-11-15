@@ -111,27 +111,6 @@ static class MapChecks
                 && restored.CurrentPosition.Longitude == 106.71,
             "simulation stops at final route coordinate"
         );
-        var application = new DriverApplication
-        {
-            Username = "driver-test",
-            Name = "Driver",
-            Email = "driver@example.com",
-            Phone = "0901234567",
-            Plate = "59A-12345",
-            Vehicle = "SwiftCar",
-        };
-        application.Validate();
-        application.Provision();
-        application.Approve(Guid.NewGuid().ToString());
-        var saved = BsonSerializer.Deserialize<DriverApplication>(application.ToBson());
-        check(
-            saved.Status == "Approved" && saved.Subject == application.Subject,
-            "Mongo preserves Driver approval state"
-        );
-        check(
-            Invalid(() => saved.Reject("No")),
-            "approved Driver cannot be rejected retroactively"
-        );
         var profile = new UserProfile { Id = "user" };
         check(Invalid(() => profile.Update("User", null!)), "profile rejects null phone");
         check(
@@ -140,6 +119,26 @@ static class MapChecks
         );
         profile.Update(" User ", "+84901234567");
         check(profile.Name == "User", "profile validates and trims name");
+        var walletReview = new Trip { Method = PaymentMethod.Wallet };
+        walletReview.Move(TripStatus.AwaitingRiderConfirmation);
+        walletReview.Move(TripStatus.WalletHoldPending);
+        walletReview.Move(TripStatus.PaymentReview);
+        check(
+            walletReview.CanCancelWalletHold,
+            "Rider can cancel a failed wallet hold before pickup"
+        );
+        walletReview.Move(TripStatus.AwaitingRiderConfirmation);
+        walletReview.Move(TripStatus.WalletHoldPending);
+        walletReview.Move(TripStatus.ReservingDriver);
+        walletReview.Move(TripStatus.AwaitingDriverAcceptance);
+        walletReview.Move(TripStatus.AcceptingDriver);
+        walletReview.Move(TripStatus.DriverAccepted);
+        walletReview.Move(TripStatus.EnRoute);
+        walletReview.Move(TripStatus.PickedUp);
+        walletReview.Move(TripStatus.DroppedOff);
+        walletReview.Move(TripStatus.PaymentPending);
+        walletReview.Move(TripStatus.PaymentReview);
+        check(!walletReview.CanCancelWalletHold, "Rider cannot cancel wallet review after pickup");
         check(
             simulation.RemainingMinutes < route.DurationMinutes,
             "ETA decreases with simulated progress"

@@ -178,7 +178,7 @@ export function BookingForm({
           <select
             className="field mt-2"
             value={paymentMethod}
-            onChange={event => setPaymentMethod(event.target.value as "Cod" | "Wallet")}
+            onChange={(event) => setPaymentMethod(event.target.value as "Cod" | "Wallet")}
             disabled={disabled}
           >
             <option value="Cod">Tiền mặt · COD</option>
