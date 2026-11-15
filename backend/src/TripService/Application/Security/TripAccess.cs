@@ -5,13 +5,15 @@ public static class TripAccess
     public static void CanRead(Trip t, Actor user)
     {
         if (
-            !user.IsOps
-            && t.RiderId != user.Id
+            (!user.IsRider || t.RiderId != user.Id)
             && (
-                t.DriverId != user.Id
+                !user.IsDriver
+                || t.DriverId != user.Id
+                || t.ReservationId is null
                 || t.Status
                     is TripStatus.Requested
                         or TripStatus.AwaitingRiderConfirmation
+                        or TripStatus.WalletHoldPending
                         or TripStatus.ReservingDriver
             )
         )
@@ -30,9 +32,11 @@ public static class TripAccess
             (
                 !user.IsDriver
                 || t.DriverId != user.Id
+                || t.ReservationId is null
                 || t.Status
                     is TripStatus.Requested
                         or TripStatus.AwaitingRiderConfirmation
+                        or TripStatus.WalletHoldPending
                         or TripStatus.ReservingDriver
             )
         )

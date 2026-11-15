@@ -85,6 +85,6 @@ public static class PaymentEndpoints
                         )
                     )
             )
-            .RequireAuthorization("ops");
+            .RequireAuthorization();
     }
 }

@@ -6,25 +6,18 @@ public sealed class PaymentQueries(IPaymentReader reader)
 {
     public Task<PageResult<PaymentView>> History(int page, Actor actor, CancellationToken ct)
     {
-        if (!actor.IsRider && !actor.IsDriver && !actor.IsOps)
-            throw new RuleException("Cần quyền User, Driver hoặc Ops.", ErrorKind.Forbidden);
+        if (!actor.IsRider && !actor.IsDriver)
+            throw new RuleException("Rider or Driver role is required.", ErrorKind.Forbidden);
         if (page is < 1 or > 10000)
             throw new RuleException("Trang không hợp lệ.", ErrorKind.Validation);
-        return reader.History(actor.Id, actor.IsOps, page, ct);
+        return reader.History(actor.Id, false, page, ct);
     }
 
     public Task<object> Statistics(Actor actor, CancellationToken ct)
     {
-        if (!actor.IsOps && !actor.IsDriver && !actor.IsRider)
-            throw new RuleException("Không có quyền xem thống kê.", ErrorKind.Forbidden);
-        return reader.Statistics(actor.Id, actor.IsOps, ct);
-    }
-
-    public async Task<WalletBalance> Balance(Actor actor, CancellationToken ct)
-    {
-        if (!actor.IsRider)
-            throw new RuleException("Cần quyền User.", ErrorKind.Forbidden);
-        return new(await reader.Balance(actor.Id, ct), "VND");
+        if (!actor.IsDriver && !actor.IsRider)
+            throw new RuleException("Rider or Driver role is required.", ErrorKind.Forbidden);
+        return reader.Statistics(actor.Id, false, ct);
     }
 
     public async Task<PaymentView> Get(Guid id, Actor actor, CancellationToken ct)
@@ -43,12 +36,10 @@ public sealed class PaymentQueries(IPaymentReader reader)
 
     private async Task<Payment> Owned(Guid id, Actor actor, CancellationToken ct)
     {
-        var payment =
-            await reader.Find(id, ct)
+        var payment = await reader.Find(id, ct)
             ?? throw new RuleException("Chưa có giao dịch.", ErrorKind.NotFound);
         if (
             !actor.IsService
-            && !actor.IsOps
             && payment.RiderId != actor.Id
             && !(actor.IsDriver && payment.DriverId == actor.Id)
         )

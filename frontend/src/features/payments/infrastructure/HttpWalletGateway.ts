@@ -1,4 +1,4 @@
-import { SandboxRequestError, type SandboxPayment } from "../application/SandboxGateway";
+import { ApiRequestError } from "../application/ApiRequestError";
 import type {
   WalletGateway,
   Wallet,
@@ -14,10 +14,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     cache: "no-store",
     signal: AbortSignal.timeout(25000),
   });
-  const body = await response.json();
+  const body = await response.json().catch((error) => {
+    if (response.ok) {
+      throw error;
+    }
+    return {};
+  });
   if (!response.ok) {
-    throw new SandboxRequestError(
-      body.detail ?? "Không thể tải ví. Vui lòng thử lại.",
+    throw new ApiRequestError(
+      `${body.detail ?? (response.status === 401 ? "Phiên hết hạn. Hãy đăng nhập lại." : "Không thể tải ví. Vui lòng thử lại.")}${body.correlationId ? ` Mã tra cứu: ${body.correlationId}` : ""}`,
       response.status,
     );
   }
@@ -31,15 +36,11 @@ export class HttpWalletGateway implements WalletGateway {
   history(page: number) {
     return request<WalletPage<WalletActivity>>(`history?page=${page}`);
   }
-  topUps(page: number) {
-    return request<WalletPage<SandboxPayment>>(`topups?page=${page}`);
-  }
-
   async topUp(amount: number) {
     const storageKey = `swiftride:wallet-topup:${amount}`;
     const key = sessionStorage.getItem(storageKey) ?? crypto.randomUUID();
     sessionStorage.setItem(storageKey, key);
-    const payment = await request<SandboxPayment>("topups", {
+    const payment = await request<WalletActivity>("topups", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": key },
       body: JSON.stringify({ amount }),

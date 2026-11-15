@@ -10,6 +10,10 @@ public static class TransientErrors
     public static bool IsTransient(Exception error) =>
         error switch
         {
+            InvalidOperationException
+            {
+                InnerException: DbUpdateException or DbException
+            } wrapped => IsTransient(wrapped.InnerException!),
             TimeoutException or OperationCanceledException or DbUpdateConcurrencyException => true,
             RuleException { Kind: ErrorKind.Unavailable } => true,
             HttpRequestException h => h.StatusCode

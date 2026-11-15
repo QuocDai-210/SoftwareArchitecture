@@ -1,6 +1,9 @@
 namespace SwiftRide.Trips.Infrastructure;
 
-public sealed class TripRepository(TripDb db) : ITripReader, ITripWriter, ITripWorkflowQueue
+public sealed class TripRepository(TripDb db, TripSimulationSettings simulation)
+    : ITripReader,
+        ITripWriter,
+        ITripWorkflowQueue
 {
     public async Task<PageResult<TripView>> History(
         string subject,
@@ -16,8 +19,10 @@ public sealed class TripRepository(TripDb db) : ITripReader, ITripWriter, ITripW
                 x.RiderId == subject
                 || (
                     x.DriverId == subject
+                    && x.ReservationId != null
                     && x.Status != TripStatus.Requested
                     && x.Status != TripStatus.AwaitingRiderConfirmation
+                    && x.Status != TripStatus.WalletHoldPending
                     && x.Status != TripStatus.ReservingDriver
                 )
             );
@@ -37,16 +42,6 @@ public sealed class TripRepository(TripDb db) : ITripReader, ITripWriter, ITripW
         return new(items.Select(TripView.From).ToArray(), page, 10, total);
     }
 
-    public async Task<object> Statistics(CancellationToken ct)
-    {
-        var statuses = await db
-            .Trips.AsNoTracking()
-            .GroupBy(x => x.Status)
-            .Select(x => new { Status = x.Key, Count = x.Count() })
-            .ToListAsync(ct);
-        return new { total = statuses.Sum(x => x.Count), statuses };
-    }
-
     public async Task<Trip> Get(Guid id, CancellationToken ct) =>
         await db.Trips.SingleOrDefaultAsync(x => x.Id == id, ct)
         ?? throw new RuleException("Không tìm thấy chuyến.", ErrorKind.NotFound);
@@ -59,8 +54,10 @@ public sealed class TripRepository(TripDb db) : ITripReader, ITripWriter, ITripW
                 x.RiderId == subject
                 || (
                     x.DriverId == subject
+                    && x.ReservationId != null
                     && x.Status != TripStatus.Requested
                     && x.Status != TripStatus.AwaitingRiderConfirmation
+                    && x.Status != TripStatus.WalletHoldPending
                     && x.Status != TripStatus.ReservingDriver
                 )
             );
@@ -108,7 +105,10 @@ public sealed class TripRepository(TripDb db) : ITripReader, ITripWriter, ITripW
                     || t.Status == TripStatus.WalletHoldPending
                     || t.Status == TripStatus.ReservingDriver
                     || t.Status == TripStatus.AcceptingDriver
-                    || (t.Status == TripStatus.AwaitingDriverAcceptance && t.Deadline <= now)
+                    || (
+                        t.Status == TripStatus.AwaitingDriverAcceptance
+                        && (simulation.AutoAcceptDrivers || t.Deadline <= now)
+                    )
                     || (t.Status == TripStatus.AwaitingRiderConfirmation && t.Deadline <= now)
                 )
             )

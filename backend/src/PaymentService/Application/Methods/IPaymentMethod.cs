@@ -7,12 +7,7 @@ public enum CaptureOutcome
     Declined,
 }
 
-public sealed record CaptureResult(
-    CaptureOutcome Outcome,
-    string? Reason = null,
-    bool RequiresCompensation = false,
-    string? CheckoutReference = null
-)
+public sealed record CaptureResult(CaptureOutcome Outcome, string? Reason = null)
 {
     public bool Success => Outcome == CaptureOutcome.Settled;
 }

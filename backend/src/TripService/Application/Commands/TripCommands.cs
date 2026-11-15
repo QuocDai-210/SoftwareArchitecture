@@ -115,8 +115,8 @@ public sealed class TripCommands(
         if (trip.Method == PaymentMethod.Wallet)
         {
             trip.BeginWalletHold(request.QuoteId, DateTimeOffset.UtcNow);
-            await writer.Save(ct);
             await bus.Publish(WorkflowEvents.ReserveWallet(trip), trip.CorrelationId, ct);
+            await writer.Save(ct);
             return TripView.From(trip);
         }
         trip.ConfirmQuote(request.QuoteId, DateTimeOffset.UtcNow);
@@ -132,6 +132,24 @@ public sealed class TripCommands(
     )
     {
         var trip = await reader.Get(id, ct);
+        if (
+            actor.IsRider
+            && trip.Status == TripStatus.PaymentReview
+            && trip.Method == PaymentMethod.Wallet
+        )
+        {
+            TripAccess.Rider(trip, actor);
+            if (!trip.CanCancelWalletHold)
+                throw new RuleException("A completed wallet trip cannot be cancelled.");
+            trip.CheckVersion(request.ExpectedVersion);
+            await bus.Publish(
+                WorkflowEvents.ReleaseWallet(trip, cancelRequested: true),
+                trip.CorrelationId,
+                ct
+            );
+            await writer.Save(ct);
+            return TripView.From(trip);
+        }
         if (actor.IsRider && trip.Status == TripStatus.WalletHoldPending)
         {
             throw new RuleException(
@@ -162,7 +180,7 @@ public sealed class TripCommands(
             TripStatus.Cancelled,
             $"{(actor.IsRider ? "Người đặt xe" : "Tài xế")} hủy chuyến. {reason}".Trim()
         );
-        if (trip.Method == PaymentMethod.Wallet)
+        if (trip.Method == PaymentMethod.Wallet && trip.Quote is not null)
             await bus.Publish(WorkflowEvents.ReleaseWallet(trip), trip.CorrelationId, ct);
         await WorkflowEvents.Release(trip, bus, ct);
         await writer.Save(ct);
@@ -196,7 +214,11 @@ public sealed class TripCommands(
         trip.CheckVersion(request.ExpectedVersion);
         trip.RejectDriver();
         if (trip.Method == PaymentMethod.Wallet)
-            await bus.Publish(WorkflowEvents.ReleaseWallet(trip), trip.CorrelationId, ct);
+            await bus.Publish(
+                WorkflowEvents.ReleaseWallet(trip, rematch: true),
+                trip.CorrelationId,
+                ct
+            );
         await WorkflowEvents.Release(trip, bus, ct);
         await writer.Save(ct);
         return TripView.From(trip);
@@ -226,11 +248,12 @@ public sealed class TripCommands(
         CancellationToken ct
     )
     {
-        if (!actor.IsOps)
-            throw new RuleException("Cần quyền Ops.", ErrorKind.Forbidden);
         var trip = await reader.Get(id, ct);
+        TripAccess.Driver(trip, actor);
         if (trip.Method != PaymentMethod.Cod)
-            throw new RuleException("Giao dịch online cũ chỉ đọc; cần đối soát ngoài hệ thống.");
+            throw new RuleException("Only COD payments can be retried.");
+        if (trip.Status != TripStatus.PaymentReview)
+            throw new RuleException("Only trips in payment review can be retried.");
         trip.CheckVersion(request.ExpectedVersion);
         trip.Move(TripStatus.PaymentPending);
         await bus.Publish(WorkflowEvents.Completed(trip), trip.CorrelationId, ct);

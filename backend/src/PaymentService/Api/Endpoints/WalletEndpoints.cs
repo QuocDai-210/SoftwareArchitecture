@@ -1,4 +1,3 @@
-using SwiftRide.Payments.Application.Sandbox;
 using SwiftRide.Payments.Application.Wallets;
 
 namespace SwiftRide.Payments.Api;
@@ -7,10 +6,8 @@ public static class WalletEndpoints
 {
     public static void MapWalletEndpoints(this WebApplication app)
     {
-        app.MapGet(
-                "/wallets/me",
-                (HttpContext http, WalletQueries queries, CancellationToken ct) =>
-                    queries.Get(http.User.Actor(), ct)
+        app.MapGet("/wallets/me", (HttpContext http, WalletQueries queries, CancellationToken ct) =>
+                queries.Get(http.User.Actor(), ct)
             )
             .RequireAuthorization();
         app.MapGet(
@@ -28,19 +25,19 @@ public static class WalletEndpoints
         app.MapPost(
                 "/wallets/topups",
                 (
-                    SandboxCreateRequest request,
+                    WalletTopUpRequest request,
                     HttpContext http,
-                    SandboxPayments payments,
+                    IWalletFunding funding,
                     CancellationToken ct
                 ) =>
-                    payments.CreateTopUp(
+                    funding.TopUp(
                         request.Amount,
                         http.Request.Headers["Idempotency-Key"].ToString(),
                         http.User.Actor(),
                         ct
                     )
             )
-            .RequireAuthorization("user");
+            .RequireAuthorization("rider");
         app.MapGet(
                 "/wallets/withdrawals",
                 (
@@ -48,8 +45,7 @@ public static class WalletEndpoints
                     HttpContext http,
                     WalletWithdrawals withdrawals,
                     CancellationToken ct
-                ) =>
-                    withdrawals.History(page ?? 1, http.User.Actor(), ct)
+                ) => withdrawals.History(page ?? 1, http.User.Actor(), ct)
             )
             .RequireAuthorization();
         app.MapPost(
@@ -68,27 +64,5 @@ public static class WalletEndpoints
                     )
             )
             .RequireAuthorization();
-        app.MapGet(
-                "/ops/wallet-withdrawals",
-                (
-                    int? page,
-                    HttpContext http,
-                    WalletWithdrawals withdrawals,
-                    CancellationToken ct
-                ) =>
-                    withdrawals.Pending(page ?? 1, http.User.Actor(), ct)
-            )
-            .RequireAuthorization("ops");
-        app.MapPost(
-                "/ops/wallet-withdrawals/{id:guid}/decision",
-                (
-                    Guid id,
-                    WalletWithdrawalDecision decision,
-                    HttpContext http,
-                    WalletWithdrawals withdrawals,
-                    CancellationToken ct
-                ) => withdrawals.Review(id, decision, http.User.Actor(), ct)
-            )
-            .RequireAuthorization("ops");
     }
 }

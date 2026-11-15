@@ -9,7 +9,7 @@ public sealed class ProfileCommands(IUserProfileStore store)
 
     public async Task<UserProfile> Update(ProfileRequest request, Actor actor, CancellationToken ct)
     {
-        if (!actor.IsRider && !actor.IsDriver && !actor.IsOps)
+        if (!actor.IsRider && !actor.IsDriver)
             throw new RuleException("Cần tài khoản người dùng.", ErrorKind.Forbidden);
         var profile = await store.Get(actor.Id, ct) ?? new UserProfile { Id = actor.Id };
         profile.Update(request.Name, request.Phone);

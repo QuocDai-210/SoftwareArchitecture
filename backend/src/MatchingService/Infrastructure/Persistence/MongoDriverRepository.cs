@@ -3,19 +3,19 @@ namespace SwiftRide.Matching.Infrastructure;
 public sealed class MongoDriverRepository(IMongoDatabase database)
     : IDriverReader,
         IDriverPresence,
-        IDriverReservations
+        IDriverReservations,
+        IDriverEligibility
 {
     public async Task<DriverContact?> Contact(string driverId, CancellationToken ct)
     {
         var driver = await Drivers.Find(x => x.Id == driverId).FirstOrDefaultAsync(ct);
         if (driver is null)
             return null;
-        var application = await database
-            .GetCollection<DriverApplication>("driverApplications")
-            .Find(x => x.Subject == driverId)
-            .FirstOrDefaultAsync(ct);
-        return new(driver.Id, driver.Name, application?.Phone ?? "", driver.Plate, driver.Vehicle);
+        return new(driver.Id, driver.Name, "", driver.Plate, driver.Vehicle);
     }
+
+    public Task<bool> Approved(string driverId, CancellationToken ct) =>
+        Drivers.Find(x => x.Id == driverId && x.Approved && !x.Suspended).AnyAsync(ct);
 
     public Task Heartbeat(string driverId, CancellationToken ct) =>
         Drivers.UpdateOneAsync(

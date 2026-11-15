@@ -22,6 +22,17 @@ namespace SwiftRide.Payments.Infrastructure
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("SwiftRide.Payments.Domain.WalletHoldClosure", b =>
+            {
+                b.Property<Guid>("TripId").HasColumnType("uuid");
+                b.Property<Guid>("QuoteId").HasColumnType("uuid");
+                b.Property<string>("RiderId").IsRequired().HasMaxLength(100)
+                    .HasColumnType("character varying(100)");
+                b.Property<long>("Amount").HasColumnType("bigint");
+                b.HasKey("TripId", "QuoteId");
+                b.ToTable("WalletHoldClosures");
+            });
+
             modelBuilder.Entity("SwiftRide.Payments.Domain.SandboxPayment", b =>
             {
                 b.Property<string>("Reference").HasMaxLength(32).HasColumnType("character varying(32)");
@@ -74,7 +85,7 @@ namespace SwiftRide.Payments.Infrastructure
                 b.HasIndex("OwnerId", "CreatedAt");
                 b.HasIndex("JournalId").IsUnique();
                 b.ToTable("WalletActivities", t => t.HasCheckConstraint("CK_WalletActivity_Amounts",
-                    "\"Amount\" > 0 AND \"AvailableAfter\" >= 0 AND \"HeldAfter\" >= 0 AND \"PendingAfter\" >= 0"));
+                    "(\"Amount\" > 0 OR (\"Amount\" = 0 AND \"Kind\" IN ('TripHold', 'TripHoldReleased', 'TripSettled', 'DriverEarning'))) AND \"AvailableAfter\" >= 0 AND \"HeldAfter\" >= 0 AND \"PendingAfter\" >= 0"));
                 b.HasOne("SwiftRide.Payments.Domain.WalletAccount", null).WithMany()
                     .HasForeignKey("OwnerId").OnDelete(DeleteBehavior.Restrict).IsRequired();
                 b.HasOne("SwiftRide.Payments.Domain.Journal", null).WithMany()
@@ -353,7 +364,8 @@ namespace SwiftRide.Payments.Infrastructure
                     b.HasKey("Id");
 
                     b.HasIndex("PaymentId", "Kind")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"Kind\" NOT IN ('TripHold', 'TripHoldReleased')");
 
                     b.ToTable("Journals");
                 });

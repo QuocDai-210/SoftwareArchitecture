@@ -1,40 +1,39 @@
 import type { Trip } from "./models";
 export const terminal = new Set(["Paid", "Cancelled", "Failed"]);
 export function isActiveTrip(trip: Pick<Trip, "status" | "method">): boolean {
+  return !terminal.has(trip.status);
+}
+export function latestTrip(...snapshots: (Trip | null | undefined)[]): Trip | undefined {
+  return snapshots.reduce<Trip | undefined>((latest, trip) => {
+    return trip && (!latest || trip.version > latest.version) ? trip : latest;
+  }, undefined);
+}
+export function canReviewTrip(trip: Trip): boolean {
   return (
-    !terminal.has(trip.status) &&
-    (trip.method === "Cod" ||
-      !["DroppedOff", "PaymentPending", "PaymentReview", "Paid"].includes(trip.status))
+    ["PaymentPending", "PaymentReview", "Paid"].includes(trip.status) &&
+    trip.history.some((change) => change.status === "DroppedOff")
   );
 }
-export type TripAction =
-  | "confirm-quote"
-  | "cancel"
-  | "driver-accept"
-  | "driver-reject"
-  | "en-route"
-  | "pickup"
-  | "dropoff";
-export function availableActions(trip: Trip, role: "rider" | "driver" | "observer"): TripAction[] {
+export type TripAction = "confirm-quote" | "cancel";
+export function availableActions(trip: Trip, role: "rider" | "observer"): TripAction[] {
   if (role === "rider") {
     if (trip.status === "AwaitingRiderConfirmation") return ["confirm-quote", "cancel"];
+    if (
+      trip.status === "PaymentReview" &&
+      trip.method === "Wallet" &&
+      !trip.history.some((change) =>
+        ["DriverAccepted", "EnRoute", "PickedUp", "DroppedOff", "PaymentPending", "Paid"].includes(
+          change.status,
+        ),
+      )
+    ) {
+      return ["cancel"];
+    }
     return ["Requested", "AwaitingDriverAcceptance", "DriverAccepted", "EnRoute"].includes(
       trip.status,
     )
       ? ["cancel"]
       : [];
-  }
-  if (role === "driver") {
-    switch (trip.status) {
-      case "AwaitingDriverAcceptance":
-        return ["driver-accept", "driver-reject"];
-      case "DriverAccepted":
-        return ["en-route", "cancel"];
-      case "EnRoute":
-        return ["pickup", "cancel"];
-      case "PickedUp":
-        return ["dropoff"];
-    }
   }
   return [];
 }

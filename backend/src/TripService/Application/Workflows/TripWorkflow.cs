@@ -7,7 +7,8 @@ public sealed class TripWorkflow(
     ITripWriter writer,
     IMatchingClient matching,
     IEventPublisher bus,
-    ITripMetrics metrics
+    ITripMetrics metrics,
+    TripSimulationSettings? simulation = null
 )
 {
     public async Task RecordFailure(Guid id, bool transient, CancellationToken ct)
@@ -19,6 +20,7 @@ public sealed class TripWorkflow(
                 TripStatus.Requested
                 or TripStatus.ReservingDriver
                 or TripStatus.AcceptingDriver
+                or TripStatus.AwaitingDriverAcceptance
             )
         )
             return;
@@ -28,7 +30,25 @@ public sealed class TripWorkflow(
         }
         else
         {
-            trip.Move(TripStatus.Failed, "Không thể hoàn tất ghép xe. Hãy thử tạo chuyến mới.");
+            var walletHeld =
+                trip.Method == PaymentMethod.Wallet
+                && trip.Status
+                    is TripStatus.ReservingDriver
+                        or TripStatus.AcceptingDriver
+                        or TripStatus.AwaitingDriverAcceptance;
+            if (walletHeld)
+            {
+                trip.FailAfterWalletRelease("Matching failed. The wallet hold is being released.");
+                await bus.Publish(
+                    WorkflowEvents.ReleaseWallet(trip, rematch: true),
+                    trip.CorrelationId,
+                    ct
+                );
+            }
+            else
+            {
+                trip.Move(TripStatus.Failed, "Matching failed. Please create a new trip.");
+            }
             await WorkflowEvents.Release(trip, bus, ct);
             metrics.Outcome("failed");
         }
@@ -79,8 +99,13 @@ public sealed class TripWorkflow(
                 }
                 else
                 {
-                    trip.ExcludeDriver();
-                    trip.Move(TripStatus.Requested, "Tài xế vừa nhận chuyến khác. Đang tìm lại.");
+                    trip.DriverUnavailable("Driver reservation is no longer available.");
+                    if (trip.Method == PaymentMethod.Wallet)
+                        await bus.Publish(
+                            WorkflowEvents.ReleaseWallet(trip, rematch: true),
+                            trip.CorrelationId,
+                            ct
+                        );
                 }
                 break;
             }
@@ -108,14 +133,29 @@ public sealed class TripWorkflow(
                 }
                 else
                 {
-                    trip.ExcludeDriver();
-                    trip.Move(TripStatus.Requested, "Lời mời đã hết hiệu lực.");
+                    trip.DriverUnavailable("Driver offer expired before confirmation.");
+                    if (trip.Method == PaymentMethod.Wallet)
+                        await bus.Publish(
+                            WorkflowEvents.ReleaseWallet(trip, rematch: true),
+                            trip.CorrelationId,
+                            ct
+                        );
                     await WorkflowEvents.Release(trip, bus, ct);
                 }
                 break;
             }
+            case TripStatus.AwaitingDriverAcceptance
+                when simulation?.AutoAcceptDrivers == true && trip.Deadline > DateTimeOffset.UtcNow:
+                trip.Move(TripStatus.AcceptingDriver);
+                break;
             case TripStatus.AwaitingDriverAcceptance when trip.Deadline <= DateTimeOffset.UtcNow:
                 trip.RejectDriver();
+                if (trip.Method == PaymentMethod.Wallet)
+                    await bus.Publish(
+                        WorkflowEvents.ReleaseWallet(trip, rematch: true),
+                        trip.CorrelationId,
+                        ct
+                    );
                 await WorkflowEvents.Release(trip, bus, ct);
                 break;
             case TripStatus.AwaitingRiderConfirmation when trip.Deadline <= DateTimeOffset.UtcNow:

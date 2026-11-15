@@ -13,5 +13,6 @@ public sealed record RideCompleted(
     string CorrelationId,
     long Attempt = 0,
     string? DriverId = null,
-    bool WalletHeld = false
+    bool WalletHeld = false,
+    Guid? WalletHoldId = null
 );

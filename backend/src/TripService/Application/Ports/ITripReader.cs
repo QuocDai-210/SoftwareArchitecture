@@ -12,6 +12,5 @@ public interface ITripReader
         string? status,
         CancellationToken ct
     );
-    Task<object> Statistics(CancellationToken ct);
     Task<Trip?> ByBookingKey(string riderId, string key, CancellationToken ct);
 }

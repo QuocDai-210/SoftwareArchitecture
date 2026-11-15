@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readBackendToken } from "../auth/backend-token";
-import { sessionCookie } from "../auth/session-cookie";
 
 export async function proxy(
   request: NextRequest,
@@ -9,18 +8,7 @@ export async function proxy(
   const { path } = await params;
   if (
     !path.length ||
-    ![
-      "trips",
-      "drivers",
-      "payments",
-      "wallets",
-      "quote",
-      "screens",
-      "maps",
-      "profiles",
-      "ops",
-      "simulations",
-    ].includes(path[0]) ||
+    !["trips", "payments", "wallets", "quote", "screens", "maps", "profiles"].includes(path[0]) ||
     path.some((p) => !/^[a-zA-Z0-9-]+$/.test(p))
   )
     return NextResponse.json({ detail: "Đường dẫn không hợp lệ." }, { status: 400 });
@@ -37,6 +25,8 @@ export async function proxy(
   } catch {
     return NextResponse.json({ detail: "Phiên đã hết hạn. Hãy đăng nhập lại." }, { status: 401 });
   }
+  if (!session.roles.includes("rider"))
+    return NextResponse.json({ detail: "Web chỉ hỗ trợ tài khoản Rider." }, { status: 403 });
   const headers = new Headers({
     Authorization: `Bearer ${session.token}`,
     "Content-Type": "application/json",
@@ -67,23 +57,6 @@ export async function proxy(
         CorrelationId: upstream.headers.get("CorrelationId") ?? "",
       },
     });
-    if (session.cookie) {
-      // Auth.js tokens can exceed one cookie; use matching chunk convention.
-      for (const c of request.cookies
-        .getAll()
-        .filter(
-          (c) => c.name === sessionCookie.name || c.name.startsWith(`${sessionCookie.name}.`),
-        ))
-        response.cookies.set(c.name, "", { ...sessionCookie.options, maxAge: 0 });
-      const chunks = session.cookie.match(/.{1,3800}/g)!;
-      chunks.forEach((value, i) =>
-        response.cookies.set(
-          chunks.length === 1 ? sessionCookie.name : `${sessionCookie.name}.${i}`,
-          value,
-          { ...sessionCookie.options, maxAge: 30 * 24 * 3600 },
-        ),
-      );
-    }
     return response;
   } catch {
     return NextResponse.json(

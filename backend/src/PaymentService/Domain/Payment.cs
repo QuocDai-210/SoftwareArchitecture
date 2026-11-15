@@ -28,7 +28,7 @@ public sealed class Payment
     public string? RefundedBy { get; private set; }
     public DateTimeOffset? RefundedAt { get; private set; }
 
-    public void AwaitCash(string driverId)
+    public void AwaitCash(string driverId, long attempt = 0)
     {
         if (
             Method != PaymentMethod.Cod
@@ -39,6 +39,7 @@ public sealed class Payment
         )
             throw new RuleException("Giao dịch COD cần tài xế được phân công.");
         DriverId = driverId;
+        Attempt = attempt;
         Status = PaymentStatus.Pending;
         Reason = null;
     }
@@ -63,18 +64,6 @@ public sealed class Payment
         return true;
     }
 
-    public void AwaitCheckout(string reference, long attempt)
-    {
-        if (Status is not (PaymentStatus.Declined or PaymentStatus.Pending))
-            throw new RuleException("Không thể tạo thanh toán mới.");
-        Status = PaymentStatus.Pending;
-        CheckoutReference = reference;
-        Attempt = attempt;
-        Reason = null;
-    }
-
-    public void MarkTopUp() => IsTopUp = true;
-
     public bool Settle()
     {
         if (Status == PaymentStatus.Settled)
@@ -95,22 +84,6 @@ public sealed class Payment
         }
     }
 
-    public void RequestRefund(string key, string hash, string reason)
-    {
-        EnsureSettled();
-        Status = PaymentStatus.RefundPending;
-        RefundKey = key;
-        RefundHash = hash;
-        Reason = reason;
-    }
-
-    public void CompleteRefund()
-    {
-        if (Status != PaymentStatus.RefundPending)
-            throw new RuleException("Giao dịch không chờ hoàn tiền.");
-        Status = PaymentStatus.Refunded;
-    }
-
     public static Payment Captured(
         Guid id,
         string riderId,
@@ -120,12 +93,14 @@ public sealed class Payment
         string key,
         string correlation,
         bool success,
-        string? reason
+        string? reason,
+        string? driverId = null
     ) =>
         new()
         {
             Id = id,
             RiderId = riderId,
+            DriverId = driverId,
             Amount = amount,
             Method = method,
             RequestHash = hash,
@@ -134,13 +109,6 @@ public sealed class Payment
             Status = success ? PaymentStatus.Settled : PaymentStatus.Declined,
             Reason = reason,
         };
-
-    public void Compensate()
-    {
-        EnsureSettled();
-        Status = PaymentStatus.Compensated;
-        Reason = "Saga demo thất bại sau thu tiền; khoản thu đã được hoàn.";
-    }
 
     public void Refund(string key, string hash, string reason, string? subject = null)
     {

@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { SandboxPayment } from "../application/SandboxGateway";
+import { useEffect, useRef, useState } from "react";
 import type {
   Wallet,
   WalletActivity,
@@ -12,19 +11,13 @@ import type {
 
 const money = (amount: number) => `${amount.toLocaleString("vi-VN")} đ`;
 const date = (value: string) => new Date(value).toLocaleString("vi-VN");
-const status: Record<string, string> = {
-  Pending: "Chờ thanh toán / xác nhận",
-  Succeeded: "Đã nạp vào ví",
-  Failed: "Không thành công",
-  NeedsReview: "Đang xác minh",
-};
 const withdrawalStatus: Record<WalletWithdrawal["state"], string> = {
-  Pending: "Chờ Ops duyệt · đang giữ tiền",
+  Pending: "Chờ xử lý · đang giữ tiền",
   Completed: "Đã xử lý mô phỏng",
   Rejected: "Đã từ chối · tiền đã trả lại ví",
 };
 const activityLabel: Record<string, string> = {
-  WalletTopUp: "Nạp ví qua VNPAY",
+  WalletTopUp: "Nạp ví mô phỏng",
   TripHold: "Giữ tiền cho chuyến",
   TripHoldReleased: "Hoàn khoản giữ chuyến",
   TripSettled: "Thanh toán chuyến bằng ví",
@@ -47,10 +40,8 @@ const activitySign: Record<string, string> = {
 export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [history, setHistory] = useState<WalletPage<WalletActivity> | null>(null);
-  const [topUps, setTopUps] = useState<WalletPage<SandboxPayment> | null>(null);
   const [withdrawals, setWithdrawals] = useState<WalletPage<WalletWithdrawal> | null>(null);
   const [page, setPage] = useState(1);
-  const [topUpPage, setTopUpPage] = useState(1);
   const [withdrawalPage, setWithdrawalPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
   const [amount, setAmount] = useState(100000);
@@ -58,6 +49,7 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const submitting = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -65,10 +57,9 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
     setLoading(true);
     async function load() {
       try {
-        const [balance, activity, requests, payouts] = await Promise.all([
+        const [balance, activity, payouts] = await Promise.all([
           gateway.balance(),
           gateway.history(page),
-          gateway.topUps(topUpPage),
           gateway.withdrawals(withdrawalPage),
         ]);
         if (!active) {
@@ -76,7 +67,6 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
         }
         setWallet(balance);
         setHistory(activity);
-        setTopUps(requests);
         setWithdrawals(payouts);
         setError("");
       } catch (e) {
@@ -95,38 +85,39 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
       active = false;
       clearTimeout(timer);
     };
-  }, [gateway, page, topUpPage, withdrawalPage, refresh]);
+  }, [gateway, page, withdrawalPage, refresh]);
 
   async function topUp() {
+    if (submitting.current) {
+      return;
+    }
     if (!Number.isInteger(amount) || amount < 10000 || amount > 5000000) {
       setError("Nhập số tiền nguyên đồng từ 10.000 đến 5.000.000 đ.");
       return;
     }
+    submitting.current = true;
     setBusy(true);
     setError("");
     try {
-      const payment = await gateway.topUp(amount);
-      if (payment.checkoutUrl) {
-        const url = new URL(payment.checkoutUrl);
-        if (url.origin !== "https://sandbox.vnpayment.vn") {
-          throw new Error("Địa chỉ thanh toán không hợp lệ.");
-        }
-        window.location.assign(url.href);
-      } else {
-        window.location.assign(`/payments/sandbox?reference=${payment.reference}`);
-      }
+      await gateway.topUp(amount);
+      setRefresh((value) => value + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tạo yêu cầu nạp tiền.");
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
 
   async function withdraw() {
+    if (submitting.current) {
+      return;
+    }
     if (!Number.isInteger(withdrawAmount) || withdrawAmount < 10000 || withdrawAmount > 5000000) {
       setError("Số tiền rút mỗi lần từ 10.000 đến 5.000.000 đ.");
       return;
     }
+    submitting.current = true;
     setBusy(true);
     setError("");
     try {
@@ -135,6 +126,7 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tạo yêu cầu rút tiền.");
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -142,7 +134,7 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
   return (
     <section className="space-y-5" aria-label="Ví SwiftRide">
       <div className="flex flex-wrap gap-3 items-center justify-between">
-        <p className="badge">Ví mô phỏng · VNPAY sandbox</p>
+        <p className="badge">Ví mô phỏng · Không sử dụng tiền thật</p>
         <button
           className="btn btn-secondary"
           disabled={loading || busy}
@@ -185,7 +177,9 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
           }}
         >
           <h2 className="text-xl font-bold">Nạp tiền vào ví</h2>
-          <p className="muted text-sm">Dùng thẻ thử nghiệm VNPAY. Đây là số dư mô phỏng.</p>
+          <p className="muted text-sm">
+            Số tiền mô phỏng được cộng trực tiếp vào ví sau khi gửi yêu cầu thành công.
+          </p>
           <div className="flex flex-wrap gap-3">
             {[50000, 100000, 200000, 500000].map((value) => (
               <button
@@ -216,7 +210,7 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
           />
           <p className="text-sm muted">Từ 10.000 đến 5.000.000 đ mỗi lần nạp.</p>
           <button className="btn" disabled={busy} type="submit">
-            {busy ? "Đang tạo yêu cầu…" : `Nạp ${money(amount)} qua VNPAY`}
+            {busy ? "Đang tạo yêu cầu…" : `Nạp mô phỏng ${money(amount)}`}
           </button>
         </form>
       )}
@@ -230,8 +224,8 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
         >
           <h2 className="text-xl font-bold">Rút tiền mô phỏng</h2>
           <p className="muted text-sm">
-            Tiền sẽ được giữ khi gửi yêu cầu. Ops duyệt để ghi nhận chi mô phỏng; từ chối sẽ trả
-            tiền về số dư khả dụng. Không cần nhập thông tin ngân hàng.
+            Tiền được giữ khi gửi yêu cầu và hệ thống tự động xử lý. Nếu bị từ chối, khoản giữ được
+            trả về số dư khả dụng. Đây là thao tác mô phỏng.
           </p>
           <label htmlFor="wallet-withdraw-amount" className="block font-semibold">
             Số tiền (VND)
@@ -283,16 +277,7 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
               {history?.items.map((item) => (
                 <tr key={item.reference} className="border-t border-emerald-50">
                   <td className="p-3">
-                    {item.kind === "WalletTopUp" ? (
-                      <a
-                        className="underline font-semibold"
-                        href={`/payments/sandbox?reference=${item.reference}`}
-                      >
-                        {activityLabel[item.kind]}
-                      </a>
-                    ) : (
-                      <strong>{activityLabel[item.kind] ?? item.kind}</strong>
-                    )}
+                    <strong>{activityLabel[item.kind] ?? item.kind}</strong>
                     <p className="muted mt-1">{date(item.createdAt)}</p>
                   </td>
                   <td className="p-3 font-bold">
@@ -340,33 +325,6 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
             page={withdrawalPage}
             total={withdrawals?.total ?? 0}
             change={setWithdrawalPage}
-            loading={loading}
-          />
-        </section>
-      )}
-      {wallet?.canTopUp && (
-        <section className="card p-6 space-y-4">
-          <h2 className="text-xl font-bold">Yêu cầu nạp tiền</h2>
-          {topUps?.items.length === 0 && <p className="muted">Chưa có yêu cầu nạp tiền.</p>}
-          {topUps?.items.map((item) => (
-            <a
-              key={item.reference}
-              href={`/payments/sandbox?reference=${item.reference}`}
-              className="flex flex-wrap gap-3 justify-between border-t border-emerald-50 py-4"
-            >
-              <span>
-                <strong>{money(item.amount)}</strong>
-                <small className="block muted mt-1">
-                  {date(item.createdAt)} · {item.reference.slice(0, 8)}
-                </small>
-              </span>
-              <span className="badge">{status[item.state]}</span>
-            </a>
-          ))}
-          <Pagination
-            page={topUpPage}
-            total={topUps?.total ?? 0}
-            change={setTopUpPage}
             loading={loading}
           />
         </section>
