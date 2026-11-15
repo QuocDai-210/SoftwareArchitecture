@@ -132,7 +132,7 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
   }
 
   return (
-    <section className="space-y-5" aria-label="Ví SwiftRide">
+    <section className="wallet-panel" aria-label="Ví SwiftRide">
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <p className="badge">Ví mô phỏng · Không sử dụng tiền thật</p>
         <button
@@ -168,104 +168,108 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
           ))}
         </div>
       )}
-      {wallet?.canTopUp && (
-        <form
-          className="card p-6 space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void topUp();
-          }}
-        >
-          <h2 className="text-xl font-bold">Nạp tiền vào ví</h2>
-          <p className="muted text-sm">
-            Số tiền mô phỏng được cộng trực tiếp vào ví sau khi gửi yêu cầu thành công.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {[50000, 100000, 200000, 500000].map((value) => (
-              <button
-                type="button"
-                key={value}
-                disabled={busy}
-                aria-pressed={amount === value}
-                className={`btn ${amount === value ? "" : "btn-secondary"}`}
-                onClick={() => setAmount(value)}
-              >
-                {money(value)}
-              </button>
-            ))}
-          </div>
-          <label htmlFor="wallet-amount" className="block font-semibold">
-            Số tiền (VND)
-          </label>
-          <input
-            id="wallet-amount"
-            type="number"
-            min={10000}
-            max={5000000}
-            step={1}
-            value={amount}
-            required
-            disabled={busy}
-            onChange={(event) => setAmount(Number(event.target.value))}
-          />
-          <p className="text-sm muted">Từ 10.000 đến 5.000.000 đ mỗi lần nạp.</p>
-          <button className="btn" disabled={busy} type="submit">
-            {busy ? "Đang tạo yêu cầu…" : `Nạp mô phỏng ${money(amount)}`}
-          </button>
-        </form>
-      )}
-      {wallet?.canWithdraw && (
-        <form
-          className="card p-6 space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void withdraw();
-          }}
-        >
-          <h2 className="text-xl font-bold">Rút tiền mô phỏng</h2>
-          <p className="muted text-sm">
-            Tiền được giữ khi gửi yêu cầu và hệ thống tự động xử lý. Nếu bị từ chối, khoản giữ được
-            trả về số dư khả dụng. Đây là thao tác mô phỏng.
-          </p>
-          <label htmlFor="wallet-withdraw-amount" className="block font-semibold">
-            Số tiền (VND)
-          </label>
-          <input
-            id="wallet-withdraw-amount"
-            type="number"
-            min={10000}
-            max={5000000}
-            step={1}
-            value={withdrawAmount}
-            required
-            disabled={busy}
-            onChange={(event) => setWithdrawAmount(Number(event.target.value))}
-          />
-          {wallet.available < 10000 && (
-            <p className="muted text-sm">Cần tối thiểu 10.000 đ khả dụng để gửi yêu cầu rút.</p>
-          )}
-          {withdrawAmount > wallet.available && (
-            <p className="muted text-sm">
-              Số tiền rút vượt số dư khả dụng {money(wallet.available)}.
-            </p>
-          )}
-          <p className="text-sm muted">Giới hạn 10.000–5.000.000 đ mỗi yêu cầu.</p>
-          <button
-            className="btn"
-            disabled={
-              busy || loading || wallet.available < 10000 || withdrawAmount > wallet.available
-            }
-            type="submit"
+      <div className="wallet-actions">
+        {wallet?.canTopUp && (
+          <form
+            className="card p-6 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void topUp();
+            }}
           >
-            {busy ? "Đang gửi yêu cầu…" : `Yêu cầu rút ${money(withdrawAmount)}`}
-          </button>
-        </form>
-      )}
+            <h2 className="text-xl font-bold">Nạp tiền vào ví</h2>
+            <p className="muted text-sm">
+              Số tiền mô phỏng được cộng trực tiếp vào ví sau khi gửi yêu cầu thành công.
+            </p>
+            <div className="amount-presets">
+              {[50000, 100000, 200000, 500000].map((value) => (
+                <button
+                  type="button"
+                  key={value}
+                  disabled={busy}
+                  aria-pressed={amount === value}
+                  className={`btn ${amount === value ? "" : "btn-secondary"}`}
+                  onClick={() => setAmount(value)}
+                >
+                  {money(value)}
+                </button>
+              ))}
+            </div>
+            <label htmlFor="wallet-amount" className="block font-semibold">
+              Số tiền (VND)
+            </label>
+            <input
+              id="wallet-amount"
+              className="field"
+              type="number"
+              min={10000}
+              max={5000000}
+              step={1}
+              value={amount}
+              required
+              disabled={busy}
+              onChange={(event) => setAmount(Number(event.target.value))}
+            />
+            <p className="text-sm muted">Từ 10.000 đến 5.000.000 đ mỗi lần nạp.</p>
+            <button className="btn" disabled={busy} type="submit">
+              {busy ? "Đang tạo yêu cầu…" : `Nạp mô phỏng ${money(amount)}`}
+            </button>
+          </form>
+        )}
+        {wallet?.canWithdraw && (
+          <form
+            className="card p-6 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void withdraw();
+            }}
+          >
+            <h2 className="text-xl font-bold">Rút tiền mô phỏng</h2>
+            <p className="muted text-sm">
+              Tiền được giữ khi gửi yêu cầu và hệ thống tự động xử lý. Nếu bị từ chối, khoản giữ
+              được trả về số dư khả dụng. Đây là thao tác mô phỏng.
+            </p>
+            <label htmlFor="wallet-withdraw-amount" className="block font-semibold">
+              Số tiền (VND)
+            </label>
+            <input
+              id="wallet-withdraw-amount"
+              className="field"
+              type="number"
+              min={10000}
+              max={5000000}
+              step={1}
+              value={withdrawAmount}
+              required
+              disabled={busy}
+              onChange={(event) => setWithdrawAmount(Number(event.target.value))}
+            />
+            {wallet.available < 10000 && (
+              <p className="muted text-sm">Cần tối thiểu 10.000 đ khả dụng để gửi yêu cầu rút.</p>
+            )}
+            {withdrawAmount > wallet.available && (
+              <p className="muted text-sm">
+                Số tiền rút vượt số dư khả dụng {money(wallet.available)}.
+              </p>
+            )}
+            <p className="text-sm muted">Giới hạn 10.000–5.000.000 đ mỗi yêu cầu.</p>
+            <button
+              className="btn"
+              disabled={
+                busy || loading || wallet.available < 10000 || withdrawAmount > wallet.available
+              }
+              type="submit"
+            >
+              {busy ? "Đang gửi yêu cầu…" : `Yêu cầu rút ${money(withdrawAmount)}`}
+            </button>
+          </form>
+        )}
+      </div>
       <section className="card p-6 space-y-4">
         <h2 className="text-xl font-bold">Lịch sử ví</h2>
         {history?.items.length === 0 && <p className="muted">Chưa có giao dịch ví.</p>}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
+          <table className="responsive-table w-full text-sm text-left">
             <thead>
               <tr>
                 <th className="p-3">Giao dịch</th>
@@ -276,15 +280,17 @@ export function WalletPanel({ gateway }: { gateway: WalletGateway }) {
             <tbody>
               {history?.items.map((item) => (
                 <tr key={item.reference} className="border-t border-emerald-50">
-                  <td className="p-3">
+                  <td className="p-3" data-label="Giao dịch">
                     <strong>{activityLabel[item.kind] ?? item.kind}</strong>
                     <p className="muted mt-1">{date(item.createdAt)}</p>
                   </td>
-                  <td className="p-3 font-bold">
+                  <td className="p-3 font-bold" data-label="Số tiền">
                     {activitySign[item.kind] ?? ""}
                     {money(item.amount)}
                   </td>
-                  <td className="p-3">{money(item.availableAfter)}</td>
+                  <td className="p-3" data-label="Khả dụng">
+                    {money(item.availableAfter)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -345,7 +351,7 @@ function Pagination({
   loading: boolean;
 }) {
   return (
-    <div className="flex justify-between items-center gap-3">
+    <div className="pagination">
       <button
         className="btn btn-secondary"
         disabled={loading || page <= 1}

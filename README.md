@@ -6,6 +6,8 @@ Driver, chuyến đi và tiền đều là dữ liệu mô phỏng. Chỉ phần
 
 ## Chạy trên Windows
 
+Kiểm tra tự động khi push/PR: xem [hướng dẫn CI](docs/ci.md).
+
 Cần Docker Desktop ở chế độ Linux containers và Python 3. Tại thư mục gốc repo, chạy:
 
 ```powershell
@@ -23,7 +25,9 @@ Khi `FIXTURES_ENABLED=true`, Trip Service tạo tối đa 100 Rider và Matching
 1.000 Driver. Seed có ID/vị trí tái lập, không nhân đôi dữ liệu khi khởi động lại và không ghi đè
 trạng thái chuyến hay sổ cái. Tài khoản và hồ sơ được lưu tại database do từng service sở hữu.
 
-- Web chỉ đăng nhập Rider: `rider001` đến `rider100`.
+- Web: chọn `rider001` đến `rider100` trong danh sách rồi nhấn **Đăng nhập**, không nhập mật khẩu.
+  Đây là chế độ chọn tài khoản mô phỏng; bất kỳ người truy cập web nào cũng có thể chọn Rider.
+  Server web dùng `RIDER_PASSWORD` để xác thực với backend, không gửi mật khẩu xuống trình duyệt.
 - Đăng nhập Driver để gọi API bằng Postman: `driver0001` đến `driver1000`.
 - Mật khẩu chung của Rider nằm trong `RIDER_PASSWORD`; mật khẩu Driver nằm trong `DRIVER_PASSWORD`
   của file `.env`.
