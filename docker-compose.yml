@@ -170,7 +170,6 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?Run scripts/setup.py}
       AUTH_TRUST_HOST: true
       GATEWAY_URL: http://gateway:8080
-      RIDER_PASSWORD: ${RIDER_PASSWORD:?Run scripts/setup.py}
       GEOAPIFY_MAP_KEY: ${NEXT_PUBLIC_GEOAPIFY_MAP_KEY:-}
     ports: [127.0.0.1:3000:3000]
     networks: [backend]

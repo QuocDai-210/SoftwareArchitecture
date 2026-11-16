@@ -15,12 +15,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   cookies: { sessionToken: sessionCookie },
   providers: [
     Credentials({
-      credentials: { username: { label: "Tên đăng nhập", type: "text" } },
+      credentials: {
+        username: { label: "Tên đăng nhập", type: "text" },
+        password: { label: "Mật khẩu", type: "password" },
+      },
       async authorize(credentials) {
         const username = String(credentials.username ?? "").trim();
-        if (!/^rider(00[1-9]|0[1-9][0-9]|100)$/.test(username)) return null;
-        const password = process.env.RIDER_PASSWORD;
-        if (!password) throw new Error("Rider demo login is not configured");
+        const password = String(credentials.password ?? "");
+        if (!username || !password) return null;
         const response = await fetch(`${process.env.GATEWAY_URL}/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

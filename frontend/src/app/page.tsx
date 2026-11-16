@@ -71,7 +71,7 @@ export default async function Home({
             <p className="eyebrow mt-6">CHÀO MỪNG ĐẾN SWIFTRIDE</p>
             <h2 className="text-3xl font-bold mt-3">Bắt đầu hành trình</h2>
             <p className="muted text-sm leading-relaxed mt-4 mb-7">
-              Chọn một tài khoản Rider có sẵn để đặt và theo dõi chuyến đi mô phỏng.
+              Đăng nhập bằng tài khoản Rider để đặt và theo dõi chuyến đi mô phỏng.
             </p>
             <form
               className="login-form"
@@ -80,6 +80,7 @@ export default async function Home({
                 try {
                   await signIn("credentials", {
                     username: formData.get("username"),
+                    password: formData.get("password"),
                     redirectTo: "/",
                   });
                 } catch (error) {
@@ -93,27 +94,30 @@ export default async function Home({
               }}
             >
               <label className="block text-sm font-semibold" htmlFor="username">
-                Tài khoản Rider
+                Tên đăng nhập
               </label>
-              <select
+              <input
                 className="field mt-2"
                 id="username"
                 name="username"
-                defaultValue="rider001"
+                autoComplete="username"
                 required
-              >
-                {Array.from({ length: 100 }, (_, index) => {
-                  const username = `rider${String(index + 1).padStart(3, "0")}`;
-                  return (
-                    <option key={username} value={username}>
-                      {username}
-                    </option>
-                  );
-                })}
-              </select>
+              />
+              <label className="mt-4 block text-sm font-semibold" htmlFor="password">
+                Mật khẩu
+              </label>
+              <input
+                className="field mt-2"
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
               {params.login === "failed" && (
                 <p className="mt-3 text-sm text-red-700" role="alert">
-                  Không thể đăng nhập tài khoản đã chọn. Vui lòng thử lại hoặc chọn Rider khác.
+                  Không thể đăng nhập. Hãy kiểm tra tên đăng nhập, mật khẩu và sử dụng tài khoản
+                  Rider.
                 </p>
               )}
               {params.login === "unavailable" && (
