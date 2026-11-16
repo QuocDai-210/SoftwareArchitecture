@@ -2,6 +2,7 @@ import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { auth, signIn, signOut } from "@/infrastructure/auth/auth";
 import RideClient from "@/composition/RideClient";
+import { LoginButton } from "@/composition/LoginButton";
 
 export default async function Home({
   searchParams,
@@ -26,9 +27,9 @@ export default async function Home({
           <section className="welcome-hero">
             <p className="eyebrow">MỖI ĐIỂM ĐẾN, MỘT KHỞI ĐẦU</p>
             <h1>
-              Thành phố rộng.
+              Đi gần hơn.
               <br />
-              Mình đi <span>cùng nhau.</span>
+              <span>Mỗi ngày.</span>
             </h1>
             <p className="welcome-description">
               Đặt xe dễ dàng. Giá rõ ràng.
@@ -68,15 +69,12 @@ export default async function Home({
               S
             </span>
             <p className="eyebrow mt-6">CHÀO MỪNG ĐẾN SWIFTRIDE</p>
-            <h2 className="text-3xl font-bold mt-3">
-              Chuyến đi bắt đầu
-              <br />
-              từ đây.
-            </h2>
+            <h2 className="text-3xl font-bold mt-3">Bắt đầu hành trình</h2>
             <p className="muted text-sm leading-relaxed mt-4 mb-7">
               Đăng nhập bằng tài khoản Rider để đặt và theo dõi chuyến đi mô phỏng.
             </p>
             <form
+              className="login-form"
               action={async (formData: FormData) => {
                 "use server";
                 try {
@@ -127,11 +125,9 @@ export default async function Home({
                   Dịch vụ đăng nhập tạm thời chưa sẵn sàng. Vui lòng thử lại.
                 </p>
               )}
-              <button className="btn w-full" type="submit">
-                Đăng nhập <span aria-hidden="true">↗</span>
-              </button>
+              <LoginButton />
             </form>
-            <div className="mt-7 pt-5 border-t border-emerald-100 text-xs leading-relaxed muted">
+            <div className="login-note">
               Trang này dành cho tài khoản Rider được cấp sẵn trong môi trường mô phỏng.
             </div>
           </section>

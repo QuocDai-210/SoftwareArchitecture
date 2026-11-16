@@ -64,7 +64,7 @@ export function TripHistory({
                 onClick={() => setSelected(t.id)}
                 aria-pressed={current?.id === t.id}
               >
-                <div className="flex justify-between gap-3">
+                <div className="trip-history-title">
                   <span className="font-bold text-sm">{t.destination.label}</span>
                   <span className="font-bold text-sm whitespace-nowrap">
                     {t.quote

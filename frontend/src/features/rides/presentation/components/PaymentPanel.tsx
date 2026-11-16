@@ -39,6 +39,7 @@ export function PaymentPanel({
   const [statistics, setStatistics] = useState<PaymentStatistic[]>([]);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const reload = useCallback(async () => {
     const [payments, stats] = await Promise.all([
       service.payments(page),
@@ -50,6 +51,7 @@ export function PaymentPanel({
   }, [service, page]);
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
     Promise.all([service.payments(page), service.paymentStatistics()])
       .then(([payments, stats]) => {
         if (mounted) {
@@ -60,6 +62,9 @@ export function PaymentPanel({
       })
       .catch((cause) => {
         if (mounted) setError((cause as Error).message);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
       });
     return () => {
       mounted = false;
@@ -92,14 +97,18 @@ export function PaymentPanel({
         </p>
       )}
       <div className="card p-5 sm:p-6">
-        <div className="flex justify-between gap-3 items-center mb-5">
+        <div className="panel-toolbar mb-5">
           <h2 className="text-lg font-bold">Lịch sử thanh toán</h2>
-          <button className="btn btn-secondary" disabled={busy} onClick={() => void run(reload)}>
+          <button
+            className="btn btn-secondary"
+            disabled={busy || loading}
+            onClick={() => void run(reload)}
+          >
             Làm mới
           </button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
+          <table className="responsive-table w-full text-sm text-left">
             <caption className="sr-only">Lịch sử thanh toán tiền mặt và ví</caption>
             <thead>
               <tr>
@@ -112,7 +121,7 @@ export function PaymentPanel({
             <tbody>
               {data.items.map((payment) => (
                 <tr key={payment.id} className="border-t border-slate-100">
-                  <td className="p-3">
+                  <td className="p-3" data-label="Chuyến đi">
                     <a
                       className="font-bold underline"
                       href={`#ride/${payment.id}`}
@@ -124,8 +133,10 @@ export function PaymentPanel({
                       {new Date(payment.createdAt).toLocaleString("vi-VN")}
                     </p>
                   </td>
-                  <td className="p-3 whitespace-nowrap font-semibold">{money(payment.amount)}</td>
-                  <td className="p-3">
+                  <td className="p-3 whitespace-nowrap font-semibold" data-label="Số tiền">
+                    {money(payment.amount)}
+                  </td>
+                  <td className="p-3" data-label="Trạng thái">
                     <span className="badge">{statuses[payment.status] ?? payment.status}</span>
                     <p className="muted text-xs mt-2">
                       {payment.method === "Cod" ? "Tiền mặt mô phỏng" : "Ví SwiftRide"}
@@ -136,7 +147,7 @@ export function PaymentPanel({
                       </p>
                     )}
                   </td>
-                  <td className="p-3">
+                  <td className="p-3" data-label="Biên nhận">
                     <button
                       className="btn btn-secondary"
                       disabled={busy}
@@ -154,7 +165,12 @@ export function PaymentPanel({
             </tbody>
           </table>
         </div>
-        {!data.items.length && (
+        {loading && (
+          <p role="status" className="muted py-5">
+            Đang tải thanh toán…
+          </p>
+        )}
+        {!loading && !error && !data.items.length && (
           <div className="empty-state">
             <h3>Chưa có giao dịch</h3>
             <p>Lịch sử thanh toán sẽ xuất hiện sau khi hoàn tất chuyến.</p>
@@ -163,7 +179,7 @@ export function PaymentPanel({
         <div className="pagination">
           <button
             className="btn btn-secondary"
-            disabled={busy || page <= 1}
+            disabled={busy || loading || page <= 1}
             onClick={() => setPage(page - 1)}
           >
             Trang trước
@@ -173,7 +189,7 @@ export function PaymentPanel({
           </span>
           <button
             className="btn btn-secondary"
-            disabled={busy || page * data.pageSize >= data.total}
+            disabled={busy || loading || page * data.pageSize >= data.total}
             onClick={() => setPage(page + 1)}
           >
             Trang sau

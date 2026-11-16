@@ -1,0 +1,96 @@
+name: SwiftRide CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Architecture, backend and frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_CLI_USE_MSBUILD_SERVER: "0"
+      MSBUILDDISABLENODEREUSE: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+      NODE_OPTIONS: --max-old-space-size=1536
+      PYTHONDONTWRITEBYTECODE: "1"
+      COMPOSE_PARALLEL_LIMIT: "1"
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.11.1"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Check architecture and local configuration
+        run: |
+          python3 -B scripts/setup.py --check
+          python3 -B scripts/setup.py
+          python3 -B scripts/check-architecture.py
+          docker compose config --quiet
+          python3 -B scripts/check-resources.py
+
+      # One job, sequential builds; no application containers or external API calls.
+      - name: Build backend
+        run: >-
+          dotnet build backend/SwiftRide.slnx -c Release -m:1 --disable-build-servers
+          -p:BuildInParallel=false -p:UseSharedCompilation=false
+
+      - name: Run backend unit and model tests
+        run: >-
+          dotnet test backend/tests/SwiftRide.Checks -c Release --no-build --no-restore
+          --filter 'Category!=Integration'
+          --logger 'trx;LogFileName=backend.trx'
+          --results-directory artifacts/test-results
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Check TypeScript
+        working-directory: frontend
+        run: npm run check
+
+      - name: Run frontend logic checks
+        run: node scripts/check-frontend.mjs
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload backend test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results-${{ github.run_attempt }}
+          path: artifacts/test-results/*.trx
+          if-no-files-found: ignore
+          retention-days: 7
