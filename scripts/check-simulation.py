@@ -115,7 +115,6 @@ def main():
                 "label": "Test destination",
             },
             "method": args.method,
-            "paymentToken": None,
         },
         key=str(uuid.uuid4()),
     )

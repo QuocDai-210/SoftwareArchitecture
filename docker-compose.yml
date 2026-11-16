@@ -9,7 +9,6 @@ x-api-env: &api-env
   OTEL_EXPORTER_OTLP_ENDPOINT: http://observability:4317
   OTEL_EXPORTER_OTLP_PROTOCOL: grpc
   OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
-  Payments__Provider: Cod
   Logging__LogLevel__Microsoft: Warning
 x-api: &api
   mem_limit: 384m
@@ -131,7 +130,6 @@ services:
     build: { context: ./backend, args: { SERVICE: PaymentService } }
     environment:
       <<: *api-env
-      Payments__Provider: Cod
       Payments__SimulationOutcome: ${PAYMENT_SIMULATION_OUTCOME:-Pending}
       Fixtures__Enabled: ${FIXTURES_ENABLED:-true}
       Wallets__WithdrawalOutcome: ${WALLET_WITHDRAWAL_OUTCOME:-Completed}

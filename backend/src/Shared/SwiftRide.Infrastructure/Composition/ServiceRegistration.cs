@@ -88,16 +88,6 @@ public static class ServiceRegistration
             })
             .AddHttpMessageHandler<ServiceAuthHandler>()
             .AddHttpMessageHandler<InternalRetryHandler>();
-        builder
-            .Services.AddHttpClient("payment", c =>
-            {
-                c.BaseAddress = new Uri(
-                    builder.Configuration["Services:Payment"] ?? "http://payment:8080"
-                );
-                c.Timeout = TimeSpan.FromSeconds(20);
-            })
-            .AddHttpMessageHandler<ServiceAuthHandler>()
-            .AddHttpMessageHandler<InternalRetryHandler>();
         if (builder.Configuration.GetValue<bool>("OTEL_SDK_DISABLED"))
             return;
         builder

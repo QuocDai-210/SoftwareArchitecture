@@ -157,7 +157,7 @@
             "url": { "raw": "{{baseUrl}}/trips", "host": ["{{baseUrl}}"], "path": ["trips"] },
             "body": {
               "mode": "raw",
-              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"},\"method\":\"Cod\",\"paymentToken\":null}",
+              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"},\"method\":\"Cod\"}",
               "options": { "raw": { "language": "json" } }
             }
           },
@@ -281,7 +281,7 @@
             "url": { "raw": "{{baseUrl}}/trips", "host": ["{{baseUrl}}"], "path": ["trips"] },
             "body": {
               "mode": "raw",
-              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"},\"method\":\"Wallet\",\"paymentToken\":null}",
+              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"},\"method\":\"Wallet\"}",
               "options": { "raw": { "language": "json" } }
             }
           },
@@ -742,7 +742,7 @@
             "url": { "raw": "{{baseUrl}}/trips", "host": ["{{baseUrl}}"], "path": ["trips"] },
             "body": {
               "mode": "raw",
-              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"},\"method\":\"{{paymentMethod}}\",\"paymentToken\":null}",
+              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"destination\":{\"latitude\":10.7599,\"longitude\":106.6822,\"label\":\"Destination\"},\"method\":\"{{paymentMethod}}\"}",
               "options": { "raw": { "language": "json" } }
             }
           },

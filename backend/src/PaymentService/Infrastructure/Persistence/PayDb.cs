@@ -104,8 +104,9 @@ public sealed class PayDb(DbContextOptions<PayDb> options) : DbContext(options)
         p.Property(x => x.Status).HasConversion<string>();
         p.Property(x => x.Method).HasConversion<string>();
         p.ToTable(t => t.HasCheckConstraint("CK_Payment_Amount", "\"Amount\" >= 0"));
-        p.Property(x => x.CheckoutReference).HasMaxLength(32);
-        p.HasIndex(x => x.CheckoutReference).IsUnique();
+        // Legacy checkout metadata stays mapped for existing databases.
+        p.Property<string?>("CheckoutReference").HasMaxLength(32);
+        p.HasIndex("CheckoutReference").IsUnique();
         var checkout = b.Entity<CheckoutAttempt>();
         checkout.HasKey(x => x.Reference);
         checkout.Property(x => x.Reference).HasMaxLength(32);

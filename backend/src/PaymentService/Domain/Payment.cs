@@ -17,7 +17,6 @@ public sealed class Payment
     public string CorrelationId { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public bool IsTopUp { get; private set; }
-    public string? CheckoutReference { get; private set; }
     public long Attempt { get; private set; }
     public string? DriverId { get; private set; }
     public string? CollectionKey { get; private set; }
