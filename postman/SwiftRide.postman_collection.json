@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "SwiftRide Local Simulation",
-    "description": "Local HCMC ride simulation. Rider and Driver only; wallet and withdrawals are internal simulations.",
+    "description": "SwiftRide: 47 endpoint nghiệp vụ/tổng hợp qua Gateway, thêm health và OpenAPI (53 cặp method/path; các request polling/runner là biến thể). Import kèm SwiftRide.local.postman_environment.json, chọn SwiftRide Local và điền riderPassword/driverPassword từ .env cục bộ. Không lưu mật khẩu hoặc token thật vào Git. Folder 1–6 và 8–10 là toolbox thủ công; chỉ chạy riêng folder 7 - Sequential ride runner trong Collection Runner. paymentMethod nhận Wallet hoặc Cod. Folder 9 cần JWT role service riêng. Mọi request tự thêm CorrelationId, Postman Console hiển thị ID phản hồi để đối chiếu telemetry. Tài khoản, chuyến, thanh toán và rút tiền đều là mô phỏng; request ghi tạo dữ liệu được lưu lại.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -10,7 +10,17 @@
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8080" },
-    { "key": "paymentMethod", "value": "Wallet" }
+    { "key": "paymentMethod", "value": "Wallet" },
+    {
+      "key": "serviceToken",
+      "value": "",
+      "description": "JWT role service cho folder 9; để trống nếu chỉ thử Rider/Driver."
+    },
+    {
+      "key": "reservationId",
+      "value": "",
+      "description": "GUID của reservation khi kiểm tra API nội bộ thủ công."
+    }
   ],
   "item": [
     {
@@ -93,6 +103,35 @@
               "path": ["profiles", "me"]
             }
           }
+        },
+        {
+          "name": "Update own profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/profiles/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["profiles", "me"]
+            },
+            "description": "Trip Service. Rider/Driver cập nhật hồ sơ của mình. Điền họ tên và số điện thoại thật sự muốn dùng cho dữ liệu mô phỏng trước khi Send.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Postman Rider\",\"phone\":\"0900000001\"}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -140,6 +179,34 @@
               "options": { "raw": { "language": "json" } }
             }
           }
+        },
+        {
+          "name": "Reverse geocode coordinates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/maps/reverse?latitude=10.7769&longitude=106.7009",
+              "host": ["{{baseUrl}}"],
+              "path": ["maps", "reverse"],
+              "query": [
+                { "key": "latitude", "value": "10.7769" },
+                { "key": "longitude", "value": "106.7009" }
+              ]
+            },
+            "description": "Matching Service. Đăng nhập; tra địa chỉ từ latitude/longitude qua Geoapify."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -299,6 +366,72 @@
                   "  const n = Number(payload.driverId.slice(-12));",
                   "  pm.environment.set(\"driverUsername\", `driver${String(n).padStart(4, \"0\")}`);",
                   "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel own trip",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "cancel"]
+            },
+            "description": "Trip Service. Rider hoặc Driver của chuyến; đọc lại trip để lấy version mới. Driver chỉ hủy sau khi nhận chuyến và trước khi đón khách.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}},\"reason\":\"Hủy chuyến mô phỏng từ Postman\"}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Review completed ride",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/review",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "review"]
+            },
+            "description": "Trip Service. Rider của chuyến; chỉ sau khi đã trả khách. Rating 1–5, comment tối đa 500 ký tự; dùng tripVersion mới nhất.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}},\"rating\":5,\"comment\":\"Chuyến đi mô phỏng\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{riderToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
                 ]
               }
             }
@@ -572,6 +705,196 @@
               "options": { "raw": { "language": "json" } }
             }
           }
+        },
+        {
+          "name": "Read own Driver status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers", "me"]
+            },
+            "description": "Matching Service. Driver hiện tại; trả vị trí, available, busy và lastSeenAt.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{driverToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Driver location",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/location",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers", "me", "location"]
+            },
+            "description": "Matching Service. Driver đã được duyệt; cập nhật vị trí của mình. Chỉ dùng với Driver rảnh khi kiểm tra thủ công.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"latitude\":10.7769,\"longitude\":106.7009}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{driverToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Driver availability",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/availability",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers", "me", "availability"]
+            },
+            "description": "Matching Service. Driver đã được duyệt; đặt trạng thái sẵn sàng nhận chuyến.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"available\":true}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{driverToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Driver heartbeat",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/heartbeat",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers", "me", "heartbeat"]
+            },
+            "description": "Matching Service. Driver đã được duyệt; không cần body, thành công trả 204.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{driverToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject assigned offer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/driver-reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "driver-reject"]
+            },
+            "description": "Trip Service. Driver được mời; dùng tripVersion mới nhất. Workflow giải phóng giữ chỗ/giữ ví và tìm Driver khác.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expectedVersion\":{{tripVersion}}}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{driverToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "if (payload.version !== undefined) pm.environment.set(\"tripVersion\", payload.version);",
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Control Driver simulation",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/simulations/{{driverId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["simulations", "{{driverId}}"]
+            },
+            "description": "Matching Service. Driver sở hữu; mô phỏng phải tồn tại. Speed chỉ nhận 1, 5, 10 hoặc 20; paused dùng để dừng/tiếp tục.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"speed\":10,\"paused\":false}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{driverToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -653,6 +976,31 @@
               "path": ["wallets", "withdrawals?page=1"]
             }
           }
+        },
+        {
+          "name": "Wallet top-up history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/wallets/topups?page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallets", "topups"],
+              "query": [{ "key": "page", "value": "1" }]
+            },
+            "description": "Payment Service. Rider/Driver xem lịch sử nạp của ví mình, 10 mục/trang."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -690,6 +1038,79 @@
               "path": ["payments", "{{tripId}}", "ledger"]
             }
           }
+        },
+        {
+          "name": "Trip history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/history?page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "history"],
+              "query": [{ "key": "page", "value": "1" }]
+            },
+            "description": "Trip Service. Lịch sử của tài khoản, 10 mục/trang. Có thể thêm query status theo tên TripStatus, ví dụ Paid."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Trip screen aggregation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/screens/trips/{{tripId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["screens", "trips", "{{tripId}}"]
+            },
+            "description": "API Gateway. Rider/Driver của chuyến; tổng hợp trip, payment, simulation, driver và paymentUnavailable. Các phần bổ sung có thể null."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/statistics",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "statistics"]
+            },
+            "description": "Payment Service. Thống kê thanh toán của Rider/Driver hiện tại."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1356,6 +1777,405 @@
           }
         }
       ]
+    },
+    {
+      "name": "9 - Internal service APIs",
+      "description": "API nội bộ Matching/Payment. Điền serviceToken cục bộ và ID hợp lệ trước khi dùng. Login Rider/Driver không cấp role service. Không chạy folder này trong luồng Rider/Driver hoặc Collection Runner: các request ghi thay đổi reservation/payment. Không lưu token thật vào Git.",
+      "item": [
+        {
+          "name": "Find nearest eligible Driver",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/match", "host": ["{{baseUrl}}"], "path": ["match"] },
+            "description": "Matching Service. Token Service; không giữ Driver. Driver có thể null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"pickup\":{\"latitude\":10.7769,\"longitude\":106.7009,\"label\":\"Pickup\"},\"excludedDrivers\":[]}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{serviceToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reserve Driver",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/reservations",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations"]
+            },
+            "description": "Matching Service. Token Service. Điền reservationId dạng GUID hợp lệ; acquired=false nghĩa là không giữ được xe. Làm thay đổi giữ chỗ của Driver.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tripId\":\"{{tripId}}\",\"reservationId\":\"{{reservationId}}\",\"driverId\":\"{{driverId}}\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{serviceToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm Driver reservation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations", "confirm"]
+            },
+            "description": "Matching Service. Token Service; dùng đúng tripId/reservationId/driverId của lần giữ chỗ. Kiểm tra acquired trong response.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tripId\":\"{{tripId}}\",\"reservationId\":\"{{reservationId}}\",\"driverId\":\"{{driverId}}\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{serviceToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Release Driver reservation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/release",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations", "release"]
+            },
+            "description": "Matching Service. Token Service; giải phóng giữ chỗ tương ứng, trả 204.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tripId\":\"{{tripId}}\",\"reservationId\":\"{{reservationId}}\",\"driverId\":\"{{driverId}}\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{serviceToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check pickup arrival",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/arrivals", "host": ["{{baseUrl}}"], "path": ["arrivals"] },
+            "description": "Matching Service. Token Service; target là PickedUp hoặc DroppedOff. Chỉ kiểm tra xe đã đến nơi, không tự chuyển trạng thái trip.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"driverId\":\"{{driverId}}\",\"tripId\":\"{{tripId}}\",\"target\":\"PickedUp\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{serviceToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read Driver contact",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/{{driverId}}/contact",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers", "{{driverId}}", "contact"]
+            },
+            "description": "Matching Service. Chỉ token Service; trả thông tin liên hệ Driver.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{serviceToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create internal COD payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "trip:{{tripId}}:charge" }
+            ],
+            "url": { "raw": "{{baseUrl}}/payments", "host": ["{{baseUrl}}"], "path": ["payments"] },
+            "description": "Payment Service. Chỉ token Service. Ví dụ COD; phải dùng đúng thông tin và số tiền của chuyến, không chạy cùng workflow thanh toán đang hoạt động. Key bắt buộc trip:{tripId}:charge. Handler lấy CorrelationId từ header.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tripId\":\"{{tripId}}\",\"riderId\":\"{{riderId}}\",\"driverId\":\"{{driverId}}\",\"amount\":10000,\"method\":\"Cod\",\"attempt\":0}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{serviceToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 - Health and OpenAPI",
+      "description": "Health của Gateway và tài liệu API. Health riêng từng service chỉ truy cập trong mạng Compose, không có cổng public tương ứng.",
+      "item": [
+        {
+          "name": "Gateway liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "live"]
+            },
+            "description": "API Gateway. Công khai; kiểm tra tiến trình, không kiểm tra dependency.",
+            "auth": { "type": "noauth" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gateway readiness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/ready",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "ready"]
+            },
+            "description": "API Gateway. Công khai; 200 nếu sẵn sàng, 503 nếu dependency chưa sẵn sàng.",
+            "auth": { "type": "noauth" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gateway OpenAPI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1.json"]
+            },
+            "description": "Gateway OpenAPI JSON, cần JWT. Gateway chuyển tiếp tài liệu của từng service; không có Swagger UI."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Trip OpenAPI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/openapi/trip.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "trip.json"]
+            },
+            "description": "Trip OpenAPI JSON, cần JWT. Gateway chuyển tiếp tài liệu của từng service; không có Swagger UI."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Matching OpenAPI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/openapi/matching.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "matching.json"]
+            },
+            "description": "Matching OpenAPI JSON, cần JWT. Gateway chuyển tiếp tài liệu của từng service; không có Swagger UI."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment OpenAPI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/openapi/payment.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "payment.json"]
+            },
+            "description": "Payment OpenAPI JSON, cần JWT. Gateway chuyển tiếp tài liệu của từng service; không có Swagger UI."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"request succeeded\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.request.headers.upsert({ key: \"CorrelationId\", value: pm.variables.replaceIn(\"{{$guid}}\") });"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const correlation = pm.response.headers.get(\"CorrelationId\");",
+          "console.log(\"CorrelationId:\", correlation);",
+          "pm.test(\"response carries the request correlation ID\", () => {",
+          "  pm.expect(correlation).to.eql(pm.request.headers.get(\"CorrelationId\"));",
+          "});"
+        ]
+      }
     }
   ]
 }

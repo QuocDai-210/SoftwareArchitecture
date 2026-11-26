@@ -6,8 +6,8 @@ Web chỉ dành cho Rider. Driver được điều khiển qua API/Postman hoặ
 
 ## Chuẩn bị
 
-1. Mở Docker Desktop, chạy `powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 build`.
-2. Chạy `powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 up`.
+1. Mở Docker Desktop, chạy `powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 build-demo`.
+2. Chạy `powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 demo`.
 3. Mở http://localhost:3000, đăng nhập `rider001` bằng `RIDER_PASSWORD` trong `.env`.
 4. Chọn hai địa chỉ gần nhau tại TP.HCM, chọn COD hoặc Wallet. Ví phải đủ tiền.
 5. Tạo chuyến. Sao chép ID sau `#ride/` trên thanh địa chỉ.

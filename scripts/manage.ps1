@@ -1,5 +1,5 @@
 ﻿param(
-    [ValidateSet('setup', 'build', 'up', 'stop', 'status', 'logs', 'trip', 'matching', 'payment')]
+    [ValidateSet('setup', 'build', 'build-demo', 'up', 'demo', 'stop', 'status', 'logs', 'trip', 'matching', 'payment')]
     [string]$Command = 'status'
 )
 
@@ -41,17 +41,22 @@ function Invoke-Python {
 }
 
 Push-Location (Split-Path $PSScriptRoot -Parent)
+$previousMaps = $env:MAPS_PROVIDER
 $previousOtel = $env:OTEL_SDK_DISABLED
 try {
     switch ($Command) {
         'setup' {
             Invoke-Python 'scripts/setup.py'
         }
-        'build' {
+        { $_ -in @('build', 'build-demo') } {
             Invoke-Python 'scripts/check-architecture.py'
             Invoke-Python 'scripts/check-resources.py'
             Invoke-Checked 'docker' @('compose', '--profile', '*', 'stop')
-            foreach ($service in @('rabbitmq', 'trip', 'matching', 'payment', 'gateway', 'web')) {
+            $services = @('rabbitmq', 'trip', 'matching', 'payment', 'gateway')
+            if ($Command -eq 'build-demo') {
+                $services += 'web'
+            }
+            foreach ($service in $services) {
                 Invoke-Checked 'docker' @('compose', 'build', $service)
             }
         }
@@ -66,22 +71,26 @@ try {
         }
         default {
             Invoke-Python 'scripts/check-resources.py'
+            $target = $Command
+            $env:OTEL_SDK_DISABLED = 'true'
             if ($Command -eq 'up') {
+                Invoke-Checked 'docker' @('compose', '--profile', '*', 'stop', 'web', 'observability')
+                $env:MAPS_PROVIDER = 'Test'
+                $target = 'gateway'
+            } elseif ($Command -eq 'demo') {
                 Invoke-Checked 'docker' @('compose', 'stop', 'observability')
+                $target = 'web'
             } else {
                 Invoke-Checked 'docker' @('compose', '--profile', '*', 'stop')
             }
-            $env:OTEL_SDK_DISABLED = 'true'
             $composeArgs = @(
-                'compose', 'up', '--no-build', '--remove-orphans', '-d', '--wait', '--wait-timeout', '300'
+                'compose', 'up', '--no-build', '-d', '--wait', '--wait-timeout', '300', $target
             )
-            if ($Command -ne 'up') {
-                $composeArgs += $Command
-            }
             Invoke-Checked 'docker' $composeArgs
         }
     }
 } finally {
+    $env:MAPS_PROVIDER = $previousMaps
     $env:OTEL_SDK_DISABLED = $previousOtel
     Pop-Location
 }

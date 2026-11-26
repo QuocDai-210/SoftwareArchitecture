@@ -2,7 +2,19 @@
 
 Nguồn đối chiếu: [đề bài PDF](../RideLite-KienTrucPhanMem.pdf) và
 [phạm vi mô phỏng cập nhật](../chuc-nang-va-luong-hoat-dong.md).
-Ngày cập nhật kiểm tra: 15/11/2026. Không dùng trạng thái container `Healthy` thay cho bằng chứng nghiệp vụ.
+Ngày cập nhật kiểm tra: 26/11/2026. Không dùng trạng thái container `Healthy` thay cho bằng chứng nghiệp vụ.
+
+## Chạy qua Postman và terminal ngày 26/11/2026
+
+- Chạy folder 7 bằng Newman qua Gateway trên bộ volume riêng `swiftride-postman`. Wallet
+  đạt 81 request và 106 assertion. COD đạt 84 request và 107 assertion. Cả hai chuyến tới
+  `Paid` và có sổ cái cân bằng. Gửi lại yêu cầu hoàn COD cùng key chỉ tạo một journal hoàn tiền.
+- Mỗi phản hồi trả đúng `CorrelationId` của request. Khi đọc sổ cái, log Gateway và Payment
+  có cùng ID. Luồng API dùng tuyến đường ước lượng, không cần web hoặc Grafana.
+- Bốn lần từ chối kết thúc `Failed` và trả hết tiền giữ. Khi hai Rider tranh cùng Driver,
+  chỉ một reservation thành công. Điểm đón không có Driver gần kết thúc `Failed`.
+- 38 test unit/model và 2 test tích hợp đạt. Ca OIDC dùng khóa RSA và metadata kiểm thử.
+  PostgreSQL và MongoDB chạy thật trong hai test tích hợp.
 
 ## Cách áp dụng hai tài liệu
 
@@ -11,13 +23,12 @@ Ngày cập nhật kiểm tra: 15/11/2026. Không dùng trạng thái container 
 - PDF mục 3.3 cho phép cùng công nghệ CSDL nhưng tách database/schema theo service.
   TripDB và PayDB là hai database/tài khoản riêng trong PostgreSQL; Matching dùng MongoDB.
   Đây là lựa chọn được đề bài cho phép, không phải bỏ ranh giới dữ liệu.
-- PDF mục 8 và 9.3 đề xuất OAuth/OIDC. File phạm vi cập nhật mục 4 thay bằng tài khoản seed,
-  mật khẩu hash và JWT nội bộ, đúng hai role Rider/Driver. Báo cáo cần nêu rõ điều chỉnh này;
-  không mô tả JWT nội bộ thành một hệ thống OAuth/OIDC hoàn chỉnh.
+- PDF mục 8 và 9.3: cấu hình `AUTH_AUTHORITY` để Gateway và service xác thực access token
+  từ nhà cung cấp OIDC. Với Postman runner mặc định, tài khoản seed nhận JWT cục bộ.
 - File cập nhật quy định Rider-only web, Driver qua API/worker, không GPS, không đăng ký,
   không VNPAY/Ops/ngân hàng. Không khôi phục các tính năng này để mở rộng ngoài phạm vi.
 - PDF cho phép luồng cơ bản và xem broker/Outbox/observability là mở rộng; phạm vi cập nhật
-  vẫn giữ broker và Outbox. Observability chạy theo profile, không bật thường xuyên.
+  vẫn giữ broker và Outbox. Observability chạy theo profile, được bật khi chạy `make demo`.
 
 ## Bản đồ yêu cầu đến mã nguồn
 

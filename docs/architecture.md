@@ -1,7 +1,9 @@
 # Current architecture
 
-The authoritative scope is [`chuc-nang-va-luong-hoat-dong.md`](../chuc-nang-va-luong-hoat-dong.md).
-This document describes the implemented local system and supersedes the old Keycloak/VNPAY/Ops design.
+The [assignment](../RideLite-KienTrucPhanMem.pdf) defines the three business services.
+The default Postman stack runs the gateway, services, databases and RabbitMQ. The Rider web
+is optional. Matching estimates routes locally for the Postman run and uses the configured
+map provider in the web demo.
 
 ```mermaid
 flowchart LR
@@ -23,7 +25,7 @@ flowchart LR
 - The only account roles are `rider` and `driver`; machine-to-machine JWTs are not user roles.
 - Trip, Matching, and Payment own separate data stores. There is no SQL Server, Keycloak, or fourth
   business service in the active Compose stack.
-- Geoapify is the only external integration. Fares, COD collection, wallet funding, and withdrawals
+- The web demo uses Geoapify. An optional HTTPS OIDC issuer supplies user access tokens. Fares, COD collection, wallet funding, and withdrawals
   are simulations; no bank transfer or payment-provider request is made.
 - Old VNPAY/checkout migration records are retained as historical schema/data for existing volumes.
   They have no active route, worker, provider, or frontend flow.

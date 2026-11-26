@@ -1,11 +1,23 @@
 # Postman guide
 
-Import `SwiftRide.postman_collection.json` and `SwiftRide.local.postman_environment.json` from
-`postman/`. Select the `SwiftRide Local` environment and replace the two password placeholders using
+Import [SwiftRide.postman_collection.json](../postman/SwiftRide.postman_collection.json) and
+[SwiftRide.local.postman_environment.json](../postman/SwiftRide.local.postman_environment.json).
+Select the `SwiftRide Local` environment and replace the two password placeholders using
 `RIDER_PASSWORD` and `DRIVER_PASSWORD` from the local `.env`. Do not save real passwords in a shared
 export or commit them.
 
-Base URL: `http://localhost:8080`.
+Base URL: `http://localhost:8080`. Folder 7 uses seeded login with `AUTH_AUTHORITY` empty.
+For manual OAuth 2.0 requests, see [OIDC setup](../README.md#oauth-20--openid-connect).
+
+The Postman v2.1 collection covers all 47 business/aggregation endpoints, plus Gateway health and
+OpenAPI: 53 distinct method/path pairs, with 76 request examples including polling and the runner.
+Folders group requests by function; each added request describes its owning service, permissions,
+and required state. Web session endpoints are separate from this Gateway collection.
+
+Every request generates a `CorrelationId` header. Open **View → Show Postman Console** to see the
+response ID. Follow `docker compose logs -f gateway trip matching payment` and look for that ID.
+The API stack started by `make up` uses local route estimates. With `make demo`, Grafana is available at
+`http://localhost:3001`; log in as `admin` using `GRAFANA_PASSWORD` from local `.env`.
 
 ## Collection Runner
 
@@ -13,7 +25,7 @@ Run only the folder **7 - Sequential ride runner**. Set the collection variable 
 to `Wallet` or `Cod` and select an idle Rider in the environment. The folder logs in the matched
 Driver automatically and polls quote, offer, acceptance, arrival, and payment with a one-second
 interval and a 60-second limit per step. Keep `SIMULATION_AUTO_ACCEPT_DRIVERS=false` for this runner.
-Do not run all folders at once: folders 1-6 are a manual request toolbox and contain alternate flows.
+Do not run all folders at once: folders 1–6 and 8–10 are manual toolboxes and contain alternate flows.
 
 ## Rider and Driver sequence
 
@@ -31,8 +43,21 @@ Do not run all folders at once: folders 1-6 are a manual request toolbox and con
    history and wallet balance.
 
 Use each request's generated `Idempotency-Key`; reuse it only when retrying that same request body.
-The collection does not expose internal service routes. Stale versions, ownership violations, and
-insufficient balances should fail without applying the operation.
+Stale versions, ownership violations, and insufficient balances should fail without applying the
+operation. A newly generated `{{$guid}}` changes on every Send: replace it with the original request's
+key when retrying the same write after an uncertain response.
+
+## Internal routes and diagnostics
+
+Folder **9 - Internal service APIs** requires a separate JWT with role `service`. Rider/Driver login
+does not issue this role. Set `serviceToken` locally only if testing these routes; never commit it.
+Reservation requests also need a valid `reservationId` and matching trip/Driver IDs. The payment
+example must use the real simulated trip amount. Internal writes change reservation/payment state;
+do not run them alongside an active ride workflow or include them in the sequential runner.
+
+Folder **10 - Health and OpenAPI** includes anonymous Gateway live/ready probes and authenticated
+OpenAPI documents for Gateway, Trip, Matching and Payment. Per-service health routes are only
+reachable inside the Compose network; see [API endpoints](api-endpoints.md) for the full inventory.
 
 ## Automated API smoke test
 

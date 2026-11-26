@@ -1,15 +1,15 @@
 # Scope implementation status
 
-The scope document [`chuc-nang-va-luong-hoat-dong.md`](../chuc-nang-va-luong-hoat-dong.md) is the
-source of truth. This status replaces the earlier assessment against the obsolete VNPAY/Ops version.
+The [assignment](../RideLite-KienTrucPhanMem.pdf) defines the coursework. The table below
+also lists features already present in the [web demo](../chuc-nang-va-luong-hoat-dong.md).
 
 | Area | Implemented direction | Verify |
 |---|---|---|
-| Authentication | Local seeded login, rider/driver roles, Rider-only web | Postman login and Driver web denial |
+| Authentication | Seeded demo login or configured OIDC issuer, rider/driver roles | Postman login and Driver web denial |
 | Seed data | Additive 100 Rider and 1,000 Driver seed in HCMC | Startup logs and Matching records |
 | Trips | Quote, versioned confirmation, reservations, Driver API, route simulation | COD and Wallet Postman sequences |
 | Payments | Simulated COD, wallet ledger, top-up and automatic withdrawal worker | Idempotency, insufficient funds, duplicate messages |
-| External services | Geoapify maps only | No active VNPAY/Keycloak routes or credentials |
+| External services | Optional Geoapify maps and OIDC issuer | No active VNPAY/Keycloak routes or credentials |
 | Operations UI | Removed from active UI/API scope | Confirm no Ops account, route, or approval step |
 | Documentation | Windows setup and Postman collection/environment | Follow README from a fresh clone |
 

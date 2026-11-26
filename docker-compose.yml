@@ -1,6 +1,7 @@
 name: swiftride
 x-api-env: &api-env
   ASPNETCORE_ENVIRONMENT: Development
+  Auth__Authority: ${AUTH_AUTHORITY:-}
   Auth__Issuer: swiftride-local
   Auth__SigningKey: ${AUTH_SIGNING_KEY:?Run scripts/setup.py}
   Rabbit__Host: rabbitmq
@@ -160,6 +161,7 @@ services:
       matching: { condition: service_healthy }
       payment: { condition: service_healthy }
   web:
+    profiles: [web]
     mem_limit: 384m
     memswap_limit: 384m
     build: ./frontend

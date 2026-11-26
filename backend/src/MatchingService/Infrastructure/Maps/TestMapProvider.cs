@@ -1,6 +1,6 @@
 namespace SwiftRide.Matching.Infrastructure;
 
-// ponytail: deterministic adapter for isolated tests; coursework always uses Geoapify.
+// ponytail: Postman uses estimated routes; select Geoapify for real road distances.
 public sealed class TestMapProvider : IMapProvider
 {
     public Task<IReadOnlyList<Point>> Search(string text, CancellationToken ct) =>

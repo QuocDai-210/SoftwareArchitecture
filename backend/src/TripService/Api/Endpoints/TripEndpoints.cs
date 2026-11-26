@@ -7,12 +7,15 @@ public static class TripEndpoints
 {
     public static void MapTripEndpoints(this WebApplication app)
     {
-        app.MapPost(
-                "/auth/login",
-                (LoginRequest request, LocalAuthentication auth, CancellationToken ct) =>
-                    auth.Login(request, ct)
-            )
-            .AllowAnonymous();
+        if (string.IsNullOrWhiteSpace(app.Configuration["Auth:Authority"]))
+        {
+            app.MapPost(
+                    "/auth/login",
+                    (LoginRequest request, LocalAuthentication auth, CancellationToken ct) =>
+                        auth.Login(request, ct)
+                )
+                .AllowAnonymous();
+        }
         app.MapGet(
                 "/profiles/me",
                 async (ClaimsPrincipal user, ProfileCommands commands, CancellationToken ct) =>

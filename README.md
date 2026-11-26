@@ -1,14 +1,31 @@
 # SwiftRide
 
-SwiftRide là đồ án mô phỏng đặt xe tại TP. Hồ Chí Minh. Dự án giữ Next.js, .NET 10, API Gateway,
-Trip Service, Matching Service, Payment Service, PostgreSQL, MongoDB và RabbitMQ. Tài khoản,
-Driver, chuyến đi và tiền đều là dữ liệu mô phỏng. Chỉ phần bản đồ gọi dịch vụ Geoapify bên ngoài.
+SwiftRide triển khai luồng đặt xe trong [đề bài](RideLite-KienTrucPhanMem.pdf). Postman gọi
+Gateway YARP ở `http://localhost:8080`. Trip quản lý trạng thái trong TripDB, Matching tìm tài xế
+và tính giá trên dữ liệu MatchDB (MongoDB), Payment ghi sổ kép trong PayDB. TripDB và PayDB là
+hai database PostgreSQL riêng, dùng tài khoản riêng theo phương án được phép ở mục 3.3.
+RabbitMQ chuyển sự kiện giữa các service. Mã nguồn nằm trong `backend/src`, chia theo service
+và các tầng Domain, Application, Infrastructure, Api.
 
-## Chạy trên Windows
+## Chạy và kiểm thử bằng Postman
 
-Kiểm tra tự động khi push/PR: xem [hướng dẫn CI](docs/ci.md).
+Cần Docker Compose và Python 3.
 
-Cần Docker Desktop ở chế độ Linux containers và Python 3. Tại thư mục gốc repo, chạy:
+Để dùng bộ dữ liệu kiểm thử riêng trên máy đã có volume SwiftRide, đặt
+`export COMPOSE_PROJECT_NAME=swiftride-postman` trước khi build và giữ biến này trong các
+terminal chạy Compose. Trên PowerShell, dùng `$env:COMPOSE_PROJECT_NAME = "swiftride-postman"`.
+Tên project quyết định bộ volume sử dụng. Nếu cần mở lại dữ liệu cũ, dùng tên project và file
+`.env` có mật khẩu tương ứng với các volume đó.
+
+Trên Linux, chạy tại thư mục gốc:
+
+```sh
+python3 scripts/setup.py
+make build
+make up
+```
+
+Trên Windows, chạy các lệnh tương ứng:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 setup
@@ -16,8 +33,23 @@ powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 build
 powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 up
 ```
 
-Trong `.env`, đặt `GEOAPIFY_API_KEY` và `NEXT_PUBLIC_GEOAPIFY_MAP_KEY` nếu muốn dùng tìm địa chỉ
-và bản đồ. Không đưa `.env` lên Git. Mở web tại <http://localhost:3000>.
+1. Import [collection](postman/SwiftRide.postman_collection.json) và
+   [environment](postman/SwiftRide.local.postman_environment.json). Chọn **SwiftRide Local**,
+   điền `riderPassword` và `driverPassword` từ file `.env` cục bộ.
+2. Chạy riêng folder **7 - Sequential ride runner** trong Collection Runner. Chọn
+   `paymentMethod=Wallet` để kiểm tra từ đặt xe, báo giá, nhận chuyến, đón/trả đến khi chuyến
+   chuyển sang `Paid` và đọc sổ cái. Chế độ API dùng tuyến đường ước lượng cục bộ.
+3. Theo dõi từng request ở terminal thứ hai. Đối chiếu `CorrelationId` trong Postman Console
+   với log để xem service, route, mã HTTP và thời gian xử lý.
+
+```sh
+docker compose ps
+docker compose logs --tail=30 -f gateway trip matching payment
+```
+
+Dừng sau khi thử bằng `docker compose --profile "*" stop`. Dữ liệu chuyến và sổ cái được giữ
+trong volume. Xem các nhánh từ chối, hết lượt tìm tài xế và lỗi thanh toán trong
+[hướng dẫn Postman](docs/postman-guide.md).
 
 ## Tài khoản mô phỏng
 
@@ -50,6 +82,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 up
 Không xóa volume để tạo lại dữ liệu. Khởi động lại service sẽ bổ sung các tài khoản/Driver seed
 còn thiếu mà giữ nguyên bản ghi đã tồn tại.
 
+## OAuth 2.0 / OpenID Connect
+
+Bộ Postman mặc định dùng tài khoản seed. Khi đã có nhà cung cấp OIDC, đặt `AUTH_AUTHORITY`
+bằng URL issuer HTTPS mà các container truy cập được, rồi chạy lại `make up`. Ở chế độ này,
+Gateway và từng service kiểm tra chữ ký qua discovery/JWKS, issuer, thời hạn và audience
+`swiftride-api`. JWT nội bộ chỉ dành cho giao tiếp giữa các service.
+
+Trong Postman, lấy **access token** bằng Authorization Code với PKCE của nhà cung cấp. Cấu hình
+nhà cung cấp cấp claim `role` là `rider` hoặc `driver` và `sub` trùng ID của tài khoản tương
+ứng trong dữ liệu thử. Dùng token ở các request thủ công. Folder 7 và web demo dùng luồng
+đăng nhập seed khi `AUTH_AUTHORITY` để trống.
+
 ## Quản lý service
 
 ```powershell
@@ -59,19 +103,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\manage.ps1 stop
 ```
 
 Chỉ chạy nhóm service cần thiết. Build nặng chạy tuần tự sau khi dừng container dự án; tổng RAM
-dành cho dự án không vượt 12 GB. Observability chỉ bật khi cần.
+dành cho dự án không vượt 12 GB.
 
-## Postman API demo
-
-Import `postman/SwiftRide.postman_collection.json` and `postman/SwiftRide.local.postman_environment.json`.
-Set the Rider and Driver password variables from local `.env` (do not commit those values), select
-`SwiftRide Local`, and follow [the Postman guide](docs/postman-guide.md). The collection covers
-login, maps/quotes, COD and wallet rides, Driver API actions, wallet top-ups, and automatic simulated
-withdrawals. It uses `http://localhost:8080`; the Rider web is `http://localhost:3000`.
-
-## Scope
-
-Only Rider and Driver user roles are seeded. The web app is Rider-only; Driver workflows use API/Postman.
-Payments and withdrawals are internal simulations. Geoapify is the only external integration. No
-Keycloak, VNPAY, bank transfer, Ops approval, public registration, or browser geolocation is active.
-See [architecture](docs/architecture.md) and the [acceptance checklist](docs/acceptance.md).
+Nếu cần chạy cả web, dùng `make build-demo` rồi `make demo` trên Linux (gồm Grafana), hoặc
+`manage.ps1 build-demo` rồi `manage.ps1 demo` trên Windows. Cấu hình Geoapify trong `.env` cho
+bản đồ web. Xem [kiến trúc](docs/architecture.md) và [kiểm thử CI](docs/ci.md).

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -51,10 +52,20 @@ public static class ServiceRegistration
         if (string.IsNullOrWhiteSpace(signingKey) || Encoding.UTF8.GetByteCount(signingKey) < 32)
             throw new InvalidOperationException("Auth:SigningKey must contain at least 32 bytes.");
         var issuer = builder.Configuration["Auth:Issuer"] ?? "swiftride-local";
-        builder
-            .Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        const string local = JwtBearerDefaults.AuthenticationScheme;
+        var authority = builder.Configuration["Auth:Authority"];
+        var federated = !string.IsNullOrWhiteSpace(authority);
+        var authentication = builder
+            .Services.AddAuthentication(local)
             .AddJwtBearer(o =>
             {
+                if (federated)
+                    o.Events.OnTokenValidated = context =>
+                    {
+                        if (context.Principal?.IsInRole("service") != true)
+                            context.Fail("User tokens must come from the configured authority.");
+                        return Task.CompletedTask;
+                    };
                 o.MapInboundClaims = false;
                 o.TokenValidationParameters = new TokenValidationParameters
                 {
@@ -70,11 +81,42 @@ public static class ServiceRegistration
                     RoleClaimType = "role",
                 };
             });
-        builder
-            .Services.AddAuthorizationBuilder()
-            .AddPolicy("rider", p => p.RequireRole("rider"))
-            .AddPolicy("driver", p => p.RequireRole("driver"))
-            .AddPolicy("service", p => p.RequireRole("service"));
+        var authorization = builder.Services.AddAuthorizationBuilder();
+        var users = local;
+        if (federated)
+        {
+            users = "oidc";
+            authentication.AddJwtBearer(
+                users,
+                o =>
+                {
+                    o.Authority = authority;
+                    o.Audience = "swiftride-api";
+                    o.MapInboundClaims = false;
+                    o.BackchannelTimeout = TimeSpan.FromSeconds(10);
+                    o.TokenValidationParameters.RoleClaimType = "role";
+                    o.TokenValidationParameters.NameClaimType = "preferred_username";
+                    o.Events.OnTokenValidated = context =>
+                    {
+                        var user = context.Principal;
+                        if (
+                            string.IsNullOrWhiteSpace(user?.FindFirst("sub")?.Value)
+                            || user.IsInRole("service")
+                            || !(user.IsInRole("rider") || user.IsInRole("driver"))
+                        )
+                            context.Fail("Expected a Rider or Driver access token.");
+                        return Task.CompletedTask;
+                    };
+                }
+            );
+            authorization.SetDefaultPolicy(
+                new AuthorizationPolicyBuilder(local, users).RequireAuthenticatedUser().Build()
+            );
+        }
+        authorization
+            .AddPolicy("rider", p => p.AddAuthenticationSchemes(users).RequireRole("rider"))
+            .AddPolicy("driver", p => p.AddAuthenticationSchemes(users).RequireRole("driver"))
+            .AddPolicy("service", p => p.AddAuthenticationSchemes(local).RequireRole("service"));
         builder.Services.AddSingleton<ServiceTokens>();
         builder.Services.AddTransient<ServiceAuthHandler>();
         builder.Services.AddTransient<InternalRetryHandler>();

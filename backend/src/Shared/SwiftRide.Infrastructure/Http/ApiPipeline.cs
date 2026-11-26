@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SwiftRide.Application.Health;
@@ -25,6 +26,7 @@ public static class ApiPipeline
                 using var scope = app.Logger.BeginScope(
                     new Dictionary<string, object> { ["CorrelationId"] = correlation }
                 );
+                var started = Stopwatch.GetTimestamp();
                 try
                 {
                     await next(context);
@@ -74,6 +76,21 @@ public static class ApiPipeline
                                 }
                             )
                             .ExecuteAsync(context);
+                }
+                if (
+                    !context.Request.Path.StartsWithSegments("/health")
+                    && !context.RequestAborted.IsCancellationRequested
+                )
+                {
+                    var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText;
+                    app.Logger.LogInformation(
+                        "{Method} {Route} {StatusCode} {ElapsedMs}ms CorrelationId={CorrelationId}",
+                        context.Request.Method,
+                        route ?? "(unmatched)",
+                        context.Response.StatusCode,
+                        Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                        correlation
+                    );
                 }
             }
         );
