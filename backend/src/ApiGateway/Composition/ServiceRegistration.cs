@@ -18,7 +18,7 @@ public static class ServiceRegistration
         var tripUrl = urls.Trip;
         var matchUrl = urls.Matching;
         var payUrl = urls.Payment;
-        builder.Services.AddHttpClient("screens", c => c.Timeout = TimeSpan.FromSeconds(5));
+        builder.Services.AddHttpClient("readiness", c => c.Timeout = TimeSpan.FromSeconds(5));
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = 429;
@@ -36,7 +36,8 @@ public static class ServiceRegistration
                     booking ? "booking"
                     : reading ? "read"
                     : "write";
-                var identity = context.User.FindFirst("sub")?.Value
+                var identity =
+                    context.User.FindFirst("sub")?.Value
                     ?? context.Connection.RemoteIpAddress?.ToString()
                     ?? "anonymous";
                 return RateLimitPartition.GetFixedWindowLimiter(
@@ -54,83 +55,45 @@ public static class ServiceRegistration
                 );
             });
         });
-        var routes = new List<RouteConfig>
-        {
-            new()
-            {
-                RouteId = "auth-login",
-                ClusterId = "trip",
-                Order = -1,
-                AuthorizationPolicy = "anonymous",
-                Match = new() { Path = "/auth/login", Methods = ["POST"] },
-            },
-            new()
-            {
-                RouteId = "offers",
-                ClusterId = "trip",
-                Order = 0,
-                Match = new() { Path = "/drivers/me/offers" },
-            },
-            new()
-            {
-                RouteId = "trips",
-                ClusterId = "trip",
-                Match = new() { Path = "/trips/{**rest}" },
-            },
-            new()
-            {
-                RouteId = "drivers",
-                ClusterId = "matching",
-                Order = 10,
-                Match = new() { Path = "/drivers/{**rest}" },
-            },
-            new()
-            {
-                RouteId = "quote",
-                ClusterId = "matching",
-                Match = new() { Path = "/quote" },
-            },
-            new()
-            {
-                RouteId = "payments",
-                ClusterId = "payment",
-                Match = new() { Path = "/payments/{**rest}" },
-            },
-            new()
-            {
-                RouteId = "wallets",
-                ClusterId = "payment",
-                Match = new() { Path = "/wallets/{**rest}" },
-            },
-        };
-        foreach (var prefix in new[] { "match", "reservations", "arrivals" })
-        {
+        var routes = new List<RouteConfig>();
+        void Route(string path, string cluster, string policy, params string[] methods) =>
             routes.Add(
                 new RouteConfig
                 {
-                    RouteId = $"internal-{prefix}",
-                    ClusterId = "matching",
-                    AuthorizationPolicy = "service",
-                    Match = new() { Path = "/" + prefix + "/{**rest}" },
+                    RouteId = $"{cluster}-{path}-{string.Join('-', methods)}",
+                    ClusterId = cluster,
+                    AuthorizationPolicy = policy,
+                    Match = new() { Path = path, Methods = methods },
                 }
             );
-        }
+        Route("/trips", "trip", "rider", "POST");
+        Route("/trips", "trip", "participant", "GET");
+        Route("/trips/{id:guid}", "trip", "participant", "GET");
+        foreach (var action in new[] { "confirm-quote", "cancel" })
+            Route($"/trips/{{id:guid}}/{action}", "trip", "rider", "POST");
         foreach (
-            var (prefix, cluster) in new[]
+            var action in new[]
             {
-                ("profiles", "trip"),
-                ("maps", "matching"),
-                ("simulations", "matching"),
+                "driver-accept",
+                "driver-reject",
+                "en-route",
+                "pickup",
+                "dropoff",
             }
         )
-            routes.Add(
-                new RouteConfig
-                {
-                    RouteId = prefix,
-                    ClusterId = cluster,
-                    Match = new() { Path = "/" + prefix + "/{**rest}" },
-                }
-            );
+            Route($"/trips/{{id:guid}}/{action}", "trip", "driver", "POST");
+        Route("/trips/{id:guid}/retry-payment", "trip", "service", "POST");
+        Route("/drivers/me/offers", "trip", "driver", "GET");
+        Route("/drivers/me", "matching", "driver", "GET");
+        foreach (var action in new[] { "location", "availability" })
+            Route($"/drivers/me/{action}", "matching", "driver", "PUT");
+        foreach (var path in new[] { "/match", "/quote", "/reservations", "/reservations/confirm" })
+            Route(path, "matching", "service", "POST");
+        Route("/payments", "payment", "service", "POST");
+        Route("/payments/{id:guid}/refund", "payment", "service", "POST");
+        Route("/payments/{id:guid}", "payment", "payment-read", "GET");
+        Route("/payments/{id:guid}/ledger", "payment", "payment-read", "GET");
+        Route("/wallets/me", "payment", "rider", "GET");
         foreach (var name in new[] { "trip", "matching", "payment" })
             routes.Add(
                 new RouteConfig

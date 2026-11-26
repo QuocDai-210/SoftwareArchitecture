@@ -2,15 +2,12 @@ using SwiftRide.Application.Observability;
 
 namespace SwiftRide.Infrastructure;
 
-public sealed class ApplicationMetrics : ITripMetrics, IPaymentMetrics, IMatchingMetrics
+public sealed class ApplicationMetrics : ITripMetrics, IMatchingMetrics
 {
     public void Requested() => Telemetry.Trips.Add(1);
 
     void ITripMetrics.Outcome(string status) =>
         Telemetry.Outcomes.Add(1, new KeyValuePair<string, object?>("status", status));
-
-    void IPaymentMetrics.Outcome(string status) =>
-        Telemetry.Payments.Add(1, new KeyValuePair<string, object?>("status", status));
 
     public void Duration(double seconds) => Telemetry.Matching.Record(seconds);
 

@@ -10,16 +10,14 @@ public sealed record PricingSettings(
 public sealed class QuoteTrip(
     FareCalculator calculator,
     PricingSettings settings,
-    TimeProvider clock,
-    SwiftRide.Matching.Application.Ports.IMapProvider maps
+    TimeProvider clock
 )
 {
-    public async Task<Quote> Execute(QuoteRequest request, CancellationToken ct)
+    public Quote Execute(QuoteRequest request)
     {
         if (request.Pickup is null || request.Destination is null)
             throw new RuleException("Cần điểm đón và điểm đến.", ErrorKind.Validation);
-        var route = await maps.Route(request.Pickup, request.Destination, ct);
-        route.Validate();
+        var route = Routes.Estimate(request.Pickup, request.Destination);
         var fare = new FareInput(
             route.DistanceKm,
             route.DurationMinutes,
@@ -33,8 +31,7 @@ public sealed class QuoteTrip(
             calculator.Calculate(fare),
             "VND",
             fare,
-            clock.GetUtcNow().AddSeconds(120),
-            route
+            clock.GetUtcNow().AddMinutes(2)
         );
     }
 }

@@ -1,9 +1,7 @@
-name: swiftride
+name: swiftride-pdf
 x-api-env: &api-env
   ASPNETCORE_ENVIRONMENT: Development
-  Auth__Authority: ${AUTH_AUTHORITY:-}
-  Auth__Issuer: swiftride-local
-  Auth__SigningKey: ${AUTH_SIGNING_KEY:?Run scripts/setup.py}
+  Auth__Authority: http://auth.swiftride.test:8180/realms/swiftride
   Rabbit__Host: rabbitmq
   Rabbit__Username: ${RABBIT_USER:-swiftride}
   Rabbit__Password: ${RABBIT_PASSWORD:?Run scripts/setup.py}
@@ -11,6 +9,7 @@ x-api-env: &api-env
   OTEL_EXPORTER_OTLP_PROTOCOL: grpc
   OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
   Logging__LogLevel__Microsoft: Warning
+  Logging__LogLevel__System.Net.Http.HttpClient: Warning
 x-api: &api
   mem_limit: 384m
   memswap_limit: 384m
@@ -23,6 +22,37 @@ x-api: &api
     retries: 10
     start_period: 40s
 services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2.5
+    command: [start-dev, --import-realm, --http-port=8180, --health-enabled=true]
+    mem_limit: 1280m
+    memswap_limit: 1280m
+    environment:
+      JAVA_OPTS_KC_HEAP: -Xms128m -Xmx512m -XX:ActiveProcessorCount=2
+      KC_LOG_LEVEL: info,org.keycloak.events:error
+      KC_HOSTNAME: http://auth.swiftride.test:8180
+      RIDER_PASSWORD: ${RIDER_PASSWORD:?Run scripts/setup.py}
+      DRIVER_PASSWORD: ${DRIVER_PASSWORD:?Run scripts/setup.py}
+      SERVICE_CLIENT_SECRET: ${SERVICE_CLIENT_SECRET:?Run scripts/setup.py}
+    ports: [127.0.0.1:8180:8180]
+    networks:
+      backend:
+        aliases: [auth.swiftride.test]
+    volumes:
+      - identity-data:/opt/keycloak/data
+      - ./deploy/keycloak/realm.json:/opt/keycloak/data/import/swiftride.json:ro
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.0\r\n\r\n' >&3 &&
+          head -1 <&3 | grep -q 200
+      interval: 8s
+      timeout: 5s
+      retries: 30
   mongo:
     mem_limit: 768m
     memswap_limit: 768m
@@ -70,6 +100,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
   rabbitmq:
+    hostname: rabbitmq
     mem_limit: 384m
     memswap_limit: 384m
     build: ./deploy/rabbitmq
@@ -90,10 +121,7 @@ services:
     build: { context: ./backend, args: { SERVICE: TripService } }
     environment:
       <<: *api-env
-      Fixtures__Enabled: ${FIXTURES_ENABLED:-true}
-      Fixtures__RiderPassword: ${RIDER_PASSWORD:?Run scripts/setup.py}
-      Fixtures__DriverPassword: ${DRIVER_PASSWORD:?Run scripts/setup.py}
-      Simulation__AutoAcceptDrivers: ${SIMULATION_AUTO_ACCEPT_DRIVERS:-false}
+      Auth__ServiceSecret: ${SERVICE_CLIENT_SECRET:?Run scripts/setup.py}
       ConnectionStrings__Trip: Host=postgres;Database=TripDB;Username=trip;Password=${TRIP_DB_PASSWORD};GSS Encryption Mode=Disable
     healthcheck:
       test: [CMD, dotnet, TripService.dll, --health]
@@ -102,6 +130,8 @@ services:
       retries: 10
       start_period: 40s
     depends_on:
+      keycloak: { condition: service_healthy }
+      matching: { condition: service_healthy }
       postgres-init: { condition: service_completed_successfully }
       rabbitmq: { condition: service_healthy }
   matching:
@@ -110,8 +140,6 @@ services:
     environment:
       <<: *api-env
       ConnectionStrings__Matching: mongodb://matching:${MATCH_DB_PASSWORD}@mongo:27017/MatchDB?authSource=MatchDB
-      Maps__Provider: ${MAPS_PROVIDER:-Geoapify}
-      Maps__ApiKey: ${GEOAPIFY_API_KEY:-}
       Fixtures__Enabled: ${FIXTURES_ENABLED:-true}
       Pricing__Surge: ${PRICING_SURGE:-1}
       Pricing__Toll: ${PRICING_TOLL:-0}
@@ -124,6 +152,7 @@ services:
       retries: 10
       start_period: 40s
     depends_on:
+      keycloak: { condition: service_healthy }
       mongo: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
   payment:
@@ -131,9 +160,6 @@ services:
     build: { context: ./backend, args: { SERVICE: PaymentService } }
     environment:
       <<: *api-env
-      Payments__SimulationOutcome: ${PAYMENT_SIMULATION_OUTCOME:-Pending}
-      Fixtures__Enabled: ${FIXTURES_ENABLED:-true}
-      Wallets__WithdrawalOutcome: ${WALLET_WITHDRAWAL_OUTCOME:-Completed}
       ConnectionStrings__Payment: Host=postgres;Database=PayDB;Username=payment_app;Password=${PAY_DB_PASSWORD};GSS Encryption Mode=Disable
     healthcheck:
       test: [CMD, dotnet, PaymentService.dll, --health]
@@ -142,6 +168,7 @@ services:
       retries: 10
       start_period: 40s
     depends_on:
+      keycloak: { condition: service_healthy }
       postgres-init: { condition: service_completed_successfully }
       rabbitmq: { condition: service_healthy }
   gateway:
@@ -160,34 +187,6 @@ services:
       trip: { condition: service_healthy }
       matching: { condition: service_healthy }
       payment: { condition: service_healthy }
-  web:
-    profiles: [web]
-    mem_limit: 384m
-    memswap_limit: 384m
-    build: ./frontend
-    environment:
-      AUTH_URL: http://localhost:3000
-      AUTH_SECRET: ${AUTH_SECRET:?Run scripts/setup.py}
-      AUTH_TRUST_HOST: true
-      GATEWAY_URL: http://gateway:8080
-      GEOAPIFY_MAP_KEY: ${NEXT_PUBLIC_GEOAPIFY_MAP_KEY:-}
-    ports: [127.0.0.1:3000:3000]
-    networks: [backend]
-    restart: unless-stopped
-    init: true
-    depends_on:
-      gateway: { condition: service_healthy }
-    healthcheck:
-      test:
-        [
-          CMD,
-          node,
-          -e,
-          'fetch("http://127.0.0.1:3000/api/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 10
   observability:
     profiles: [observability]
     mem_limit: 2g
@@ -213,6 +212,7 @@ services:
 networks:
   backend:
 volumes:
+  identity-data:
   match-data:
   pay-data:
   rabbit-data:

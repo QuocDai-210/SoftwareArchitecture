@@ -7,21 +7,21 @@ public sealed class TripWorkflow(
     ITripWriter writer,
     IMatchingClient matching,
     IEventPublisher bus,
-    ITripMetrics metrics,
-    TripSimulationSettings? simulation = null
+    ITripMetrics metrics
 )
 {
-    public async Task RecordFailure(Guid id, bool transient, CancellationToken ct)
+    public async Task RecordFailure(Guid id, long version, bool transient, CancellationToken ct)
     {
         var trip = await reader.Get(id, ct);
         if (
-            trip.Status
-            is not (
-                TripStatus.Requested
-                or TripStatus.ReservingDriver
-                or TripStatus.AcceptingDriver
-                or TripStatus.AwaitingDriverAcceptance
-            )
+            trip.Version != version
+            || trip.Status
+                is not (
+                    TripStatus.Requested
+                    or TripStatus.ReservingDriver
+                    or TripStatus.AcceptingDriver
+                    or TripStatus.AwaitingDriverAcceptance
+                )
         )
             return;
         if (transient && trip.WorkflowRetries < 3)
@@ -30,25 +30,7 @@ public sealed class TripWorkflow(
         }
         else
         {
-            var walletHeld =
-                trip.Method == PaymentMethod.Wallet
-                && trip.Status
-                    is TripStatus.ReservingDriver
-                        or TripStatus.AcceptingDriver
-                        or TripStatus.AwaitingDriverAcceptance;
-            if (walletHeld)
-            {
-                trip.FailAfterWalletRelease("Matching failed. The wallet hold is being released.");
-                await bus.Publish(
-                    WorkflowEvents.ReleaseWallet(trip, rematch: true),
-                    trip.CorrelationId,
-                    ct
-                );
-            }
-            else
-            {
-                trip.Move(TripStatus.Failed, "Matching failed. Please create a new trip.");
-            }
+            trip.Move(TripStatus.Failed, "Matching failed. Please create a new trip.");
             await WorkflowEvents.Release(trip, bus, ct);
             metrics.Outcome("failed");
         }
@@ -61,9 +43,6 @@ public sealed class TripWorkflow(
         using var activity = metrics.TraceWorkflow(id, trip.CorrelationId);
         switch (trip.Status)
         {
-            case TripStatus.WalletHoldPending:
-                await bus.Publish(WorkflowEvents.ReserveWallet(trip), trip.CorrelationId, ct);
-                break;
             case TripStatus.Requested:
             {
                 var match = (
@@ -100,12 +79,6 @@ public sealed class TripWorkflow(
                 else
                 {
                     trip.DriverUnavailable("Driver reservation is no longer available.");
-                    if (trip.Method == PaymentMethod.Wallet)
-                        await bus.Publish(
-                            WorkflowEvents.ReleaseWallet(trip, rematch: true),
-                            trip.CorrelationId,
-                            ct
-                        );
                 }
                 break;
             }
@@ -133,30 +106,14 @@ public sealed class TripWorkflow(
                 }
                 else
                 {
-                    trip.DriverUnavailable("Driver offer expired before confirmation.");
-                    if (trip.Method == PaymentMethod.Wallet)
-                        await bus.Publish(
-                            WorkflowEvents.ReleaseWallet(trip, rematch: true),
-                            trip.CorrelationId,
-                            ct
-                        );
                     await WorkflowEvents.Release(trip, bus, ct);
+                    trip.DriverUnavailable("Driver offer expired before confirmation.");
                 }
                 break;
             }
-            case TripStatus.AwaitingDriverAcceptance
-                when simulation?.AutoAcceptDrivers == true && trip.Deadline > DateTimeOffset.UtcNow:
-                trip.Move(TripStatus.AcceptingDriver);
-                break;
             case TripStatus.AwaitingDriverAcceptance when trip.Deadline <= DateTimeOffset.UtcNow:
-                trip.RejectDriver();
-                if (trip.Method == PaymentMethod.Wallet)
-                    await bus.Publish(
-                        WorkflowEvents.ReleaseWallet(trip, rematch: true),
-                        trip.CorrelationId,
-                        ct
-                    );
                 await WorkflowEvents.Release(trip, bus, ct);
+                trip.RejectDriver();
                 break;
             case TripStatus.AwaitingRiderConfirmation when trip.Deadline <= DateTimeOffset.UtcNow:
                 trip.Move(TripStatus.Requested, "Báo giá hết hạn. Đang lấy giá mới.");

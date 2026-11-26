@@ -5,17 +5,14 @@ public static class PaymentEndpoints
     public static void MapPaymentEndpoints(this WebApplication app)
     {
         app.MapGet(
-                "/payments/history",
-                (int? page, ClaimsPrincipal user, PaymentQueries queries, CancellationToken ct) =>
-                    queries.History(page ?? 1, user.Actor(), ct)
+                "/wallets/me",
+                async (
+                    ClaimsPrincipal user,
+                    SwiftRide.Payments.Application.Ports.IWalletAccounts wallets,
+                    CancellationToken ct
+                ) => new { available = await wallets.Balance(user.Subject(), ct), currency = "VND" }
             )
-            .RequireAuthorization();
-        app.MapGet(
-                "/payments/statistics",
-                (ClaimsPrincipal user, PaymentQueries queries, CancellationToken ct) =>
-                    queries.Statistics(user.Actor(), ct)
-            )
-            .RequireAuthorization();
+            .RequireAuthorization("rider");
         app.MapPost(
                 "/payments",
                 async (
@@ -41,31 +38,13 @@ public static class PaymentEndpoints
                 (Guid id, ClaimsPrincipal user, PaymentQueries queries, CancellationToken ct) =>
                     queries.Get(id, user.Actor(), ct)
             )
-            .RequireAuthorization();
+            .RequireAuthorization("payment-read");
         app.MapGet(
                 "/payments/{id:guid}/ledger",
                 (Guid id, ClaimsPrincipal user, PaymentQueries queries, CancellationToken ct) =>
                     queries.Ledger(id, user.Actor(), ct)
             )
-            .RequireAuthorization();
-        app.MapPost(
-                "/payments/{id:guid}/confirm-cash",
-                (
-                    Guid id,
-                    CashCollectionRequest request,
-                    HttpContext http,
-                    CashCollection commands,
-                    CancellationToken ct
-                ) =>
-                    commands.Confirm(
-                        id,
-                        request,
-                        http.Request.Headers["Idempotency-Key"].FirstOrDefault()!,
-                        http.User.Actor(),
-                        ct
-                    )
-            )
-            .RequireAuthorization();
+            .RequireAuthorization("payment-read");
         app.MapPost(
                 "/payments/{id:guid}/refund",
                 async (
@@ -85,6 +64,6 @@ public static class PaymentEndpoints
                         )
                     )
             )
-            .RequireAuthorization();
+            .RequireAuthorization("service");
     }
 }

@@ -59,7 +59,7 @@
       "datasource": { "type": "prometheus", "uid": "swiftride-prometheus" },
       "targets": [
         {
-          "expr": "sum(rate(swiftride_payments_outcomes_total{status=~\"declined|compensated|error\"}[5m])) / clamp_min(sum(rate(swiftride_payments_outcomes_total[5m])),0.000001)",
+          "expr": "sum(rate(swiftride_payments_outcomes_total{status=~\"declined\"}[5m])) / clamp_min(sum(rate(swiftride_payments_outcomes_total[5m])),0.000001)",
           "refId": "A",
           "legendFormat": "{{service_name}}"
         }

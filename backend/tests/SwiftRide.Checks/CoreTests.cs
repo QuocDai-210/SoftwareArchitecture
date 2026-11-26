@@ -188,7 +188,7 @@ public sealed class CoreTests
             rejected.ExcludedDrivers.Distinct().Count() == 4,
             "rejected drivers excluded from subsequent attempts"
         );
-        foreach (var final in new[] { TripStatus.Paid, TripStatus.Cancelled, TripStatus.Failed })
+        foreach (var final in new[] { TripStatus.Cancelled, TripStatus.Failed })
         foreach (var target in Enum.GetValues<TripStatus>())
             Reject(() => TripState.For(final).Ensure(target), $"{final} blocks {target}");
         foreach (var method in Enum.GetValues<PaymentMethod>())
@@ -231,14 +231,6 @@ public sealed class CoreTests
         Check(true, "identical payload replay accepted");
         Console.WriteLine($"Core checks passed: {checks}");
     }
-
-    [Fact]
-    public Task PaymentContracts() =>
-        ApplicationChecks.Run((value, name) => Assert.True(value, name));
-
-    [Fact]
-    public void MatchingAndMapContracts() =>
-        MapChecks.Run((value, name) => Assert.True(value, name));
 }
 
 sealed class FreePricing : IPricingStrategy

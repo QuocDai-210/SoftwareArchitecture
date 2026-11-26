@@ -29,32 +29,23 @@ public abstract class TripState
         ),
         [TripStatus.AwaitingRiderConfirmation] = new Allowed(
             TripStatus.ReservingDriver,
-            TripStatus.WalletHoldPending,
             TripStatus.Cancelled,
             TripStatus.Requested
-        ),
-        [TripStatus.WalletHoldPending] = new Allowed(
-            TripStatus.ReservingDriver,
-            TripStatus.PaymentReview,
-            TripStatus.Cancelled
         ),
         [TripStatus.ReservingDriver] = new Allowed(
             TripStatus.AwaitingDriverAcceptance,
             TripStatus.Requested,
-            TripStatus.PaymentReview,
             TripStatus.Failed
         ),
         [TripStatus.AwaitingDriverAcceptance] = new Allowed(
             TripStatus.AcceptingDriver,
             TripStatus.Requested,
-            TripStatus.PaymentReview,
             TripStatus.Cancelled,
             TripStatus.Failed
         ),
         [TripStatus.AcceptingDriver] = new Allowed(
             TripStatus.DriverAccepted,
             TripStatus.Requested,
-            TripStatus.PaymentReview,
             TripStatus.Failed
         ),
         [TripStatus.DriverAccepted] = new Allowed(TripStatus.EnRoute, TripStatus.Cancelled),
@@ -62,15 +53,8 @@ public abstract class TripState
         [TripStatus.PickedUp] = new Allowed(TripStatus.DroppedOff),
         [TripStatus.DroppedOff] = new Allowed(TripStatus.PaymentPending),
         [TripStatus.PaymentPending] = new Allowed(TripStatus.Paid, TripStatus.PaymentReview),
-        [TripStatus.PaymentReview] = new Allowed(
-            TripStatus.PaymentPending,
-            TripStatus.Paid,
-            TripStatus.Requested,
-            TripStatus.AwaitingRiderConfirmation,
-            TripStatus.Failed,
-            TripStatus.Cancelled
-        ),
-        [TripStatus.Paid] = new Allowed(),
+        [TripStatus.PaymentReview] = new Allowed(TripStatus.PaymentPending, TripStatus.Paid),
+        [TripStatus.Paid] = new Allowed(TripStatus.PaymentReview),
         [TripStatus.Cancelled] = new Allowed(),
         [TripStatus.Failed] = new Allowed(),
     };

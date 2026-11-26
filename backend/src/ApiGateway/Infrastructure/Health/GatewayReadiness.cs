@@ -12,7 +12,7 @@ public sealed class GatewayReadiness(IHttpClientFactory clients, ServiceUrls url
                 new[] { urls.Trip, urls.Matching, urls.Payment }.Select(async url =>
                 {
                     using var r = await clients
-                        .CreateClient("screens")
+                        .CreateClient("readiness")
                         .GetAsync($"{url}/health/ready", ct);
                     return r.IsSuccessStatusCode;
                 })

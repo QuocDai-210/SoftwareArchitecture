@@ -1,6 +1,8 @@
 namespace SwiftRide.Trips.Application.Ports;
 
+public sealed record DueTrip(Guid Id, long Version);
+
 public interface ITripWorkflowQueue
 {
-    Task<IReadOnlyList<Guid>> Due(DateTimeOffset now, CancellationToken ct);
+    Task<IReadOnlyList<DueTrip>> Due(DateTimeOffset now, CancellationToken ct);
 }

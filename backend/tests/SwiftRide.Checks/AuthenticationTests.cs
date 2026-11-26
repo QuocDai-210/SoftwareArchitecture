@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
@@ -16,7 +17,7 @@ using Xunit;
 public sealed class AuthenticationTests
 {
     [Fact]
-    public async Task OidcAuthenticatesRidersAndReservesLocalTokensForServices()
+    public async Task OnlyIssuerTokensWithTheApiAudienceAndRequiredRoleAreAccepted()
     {
         const string issuer = "https://issuer.example";
         var builder = WebApplication.CreateBuilder();
@@ -28,7 +29,7 @@ public sealed class AuthenticationTests
         using var rsa = RSA.Create(2048);
         var key = new RsaSecurityKey(rsa) { KeyId = "test" };
         builder.Services.Configure<JwtBearerOptions>(
-            "oidc",
+            "Bearer",
             options =>
             {
                 options.Configuration = new OpenIdConnectConfiguration { Issuer = issuer };
@@ -42,6 +43,9 @@ public sealed class AuthenticationTests
             using var scope = app.Services.CreateScope();
             var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
             context.Request.Headers.Authorization = "Bearer " + token;
+            var result = await context.AuthenticateAsync();
+            if (result.Principal is not null)
+                context.User = result.Principal;
             var policies = scope.ServiceProvider.GetRequiredService<IAuthorizationPolicyProvider>();
             var policy = policyName is null
                 ? await policies.GetDefaultPolicyAsync()
@@ -75,9 +79,9 @@ public sealed class AuthenticationTests
         Assert.True(await Authorized(rider, "rider"));
         Assert.False(await Authorized(rider, "driver"));
         Assert.False(await Authorized(Issue("rider", "other-api")));
-        Assert.False(await Authorized(Issue("service", "swiftride-api")));
+        Assert.False(await Authorized(Issue("service", "swiftride-api"), "rider"));
         Assert.False(await Authorized(Issue("rider", "swiftride-api", local: true)));
-        var machine = await app.Services.GetRequiredService<ServiceTokens>().Get(default);
+        var machine = Issue("service", "swiftride-api");
         Assert.True(await Authorized(machine, "service"));
         Assert.True(await Authorized(machine));
     }

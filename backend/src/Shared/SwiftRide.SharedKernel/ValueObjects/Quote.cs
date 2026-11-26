@@ -5,6 +5,5 @@ public sealed record Quote(
     decimal Amount,
     string Currency,
     FareInput Breakdown,
-    DateTimeOffset ExpiresAt,
-    RoadRoute? Route = null
+    DateTimeOffset ExpiresAt
 );

@@ -5,6 +5,6 @@ public sealed record PaymentFailed(
     Guid EventId,
     Guid TripId,
     string Reason,
-    bool Compensated,
+    long Attempt,
     string CorrelationId
 );

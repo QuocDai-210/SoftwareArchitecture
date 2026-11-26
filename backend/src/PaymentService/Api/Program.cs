@@ -10,5 +10,4 @@ var app = builder.Build();
 app.UsePlatform();
 await app.Services.InitializePaymentDatabase();
 app.MapPaymentEndpoints();
-app.MapWalletEndpoints();
 app.Run();

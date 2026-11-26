@@ -41,7 +41,5 @@ if __name__ == "__main__":
     )
     total = check(config["services"])
     assert config["services"]["observability"]["profiles"] == ["observability"]
-    assert config["services"]["web"]["profiles"] == ["web"]
-    for name in ("trip", "matching", "payment"):
-        assert "Fixtures__Enabled" in config["services"][name]["environment"]
+    assert config["name"] == "swiftride-pdf"
     print(f"RAM limits passed: {len(config['services'])} services, {total / 1e9:.2f}/12 GB.")

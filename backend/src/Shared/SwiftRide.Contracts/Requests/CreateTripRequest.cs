@@ -7,7 +7,5 @@ public sealed record CreateTripRequest(
     [property: JsonRequired] Point Pickup,
     [property: JsonRequired] Point Destination,
     [property: JsonRequired] PaymentMethod Method,
-    string? PaymentToken,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        string? PickupNote = null
+    string? PaymentToken
 );

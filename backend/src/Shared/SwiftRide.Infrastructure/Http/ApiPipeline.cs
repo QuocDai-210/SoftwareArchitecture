@@ -60,7 +60,10 @@ public static class ApiPipeline
                             "Dữ liệu xung đột. Hãy tải lại trạng thái trước khi thử lại."
                         ),
                         HttpRequestException => (503, "Dịch vụ tạm thời chưa sẵn sàng."),
-                        OperationCanceledException => (503, "Dịch vụ phản hồi quá hạn."),
+                        TimeoutException or OperationCanceledException => (
+                            503,
+                            "Dịch vụ phản hồi quá hạn."
+                        ),
                         _ => (500, "Lỗi hệ thống. Dùng CorrelationId để tra cứu."),
                     };
                     if (status == 500)
@@ -97,10 +100,12 @@ public static class ApiPipeline
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous();
-        app.MapGet("/health/ready", async (IReadinessProbe probe, CancellationToken ct) =>
-                await probe.Ready(ct)
-                    ? Results.Ok(new { status = "ready" })
-                    : Results.StatusCode(503)
+        app.MapGet(
+                "/health/ready",
+                async (IReadinessProbe probe, CancellationToken ct) =>
+                    await probe.Ready(ct)
+                        ? Results.Ok(new { status = "ready" })
+                        : Results.StatusCode(503)
             )
             .AllowAnonymous();
         app.MapOpenApi().RequireAuthorization();

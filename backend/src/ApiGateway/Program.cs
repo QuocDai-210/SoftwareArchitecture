@@ -9,5 +9,5 @@ builder.AddGateway();
 var app = builder.Build();
 app.UsePlatform();
 app.UseRateLimiter();
-app.MapGatewayEndpoints();
+app.MapReverseProxy();
 app.Run();
