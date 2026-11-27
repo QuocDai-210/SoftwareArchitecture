@@ -14,28 +14,6 @@ public static class ServiceRegistration
                 MongoDB.Bson.GuidRepresentation.Standard
             )
         );
-        builder.Services.AddMemoryCache(options => options.SizeLimit = 128);
-        builder
-            .Services.AddHttpClient("geoapify", client =>
-            {
-                client.BaseAddress = new Uri("https://api.geoapify.com/v1/");
-                client.Timeout = TimeSpan.FromSeconds(20);
-            })
-            .RemoveAllLoggers()
-            .AddHttpMessageHandler<InternalRetryHandler>();
-        if (builder.Configuration["Maps:Provider"] == "Test")
-            builder.Services.AddSingleton<IMapProvider, TestMapProvider>();
-        else
-            builder.Services.AddSingleton<IMapProvider, GeoapifyMapProvider>();
-        builder.Services.AddScoped<MapQueries>();
-        builder.Services.AddScoped<ISimulationStore, MongoSimulationStore>();
-        builder.Services.AddScoped<SimulationWorkflow>();
-        builder.Services.AddSingleton(
-            new SimulationSettings(
-                builder.Configuration.GetValue("Simulation:EnforceArrival", true)
-            )
-        );
-        builder.Services.AddHostedService<SimulationWorker>();
         builder.Services.AddSingleton<IMongoClient>(_ => new MongoClient(
             builder.Configuration.GetConnectionString("Matching")
         ));
@@ -83,16 +61,19 @@ public static class ServiceRegistration
             x.UsingRabbitMq(
                 (context, cfg) =>
                 {
-                    cfg.Host(builder.Configuration["Rabbit:Host"] ?? "rabbitmq", "/", host =>
-                    {
-                        host.Username(builder.Configuration["Rabbit:Username"]!);
-                        host.Password(builder.Configuration["Rabbit:Password"]!);
-                    });
+                    cfg.Host(
+                        builder.Configuration["Rabbit:Host"] ?? "rabbitmq",
+                        "/",
+                        host =>
+                        {
+                            host.Username(builder.Configuration["Rabbit:Username"]!);
+                            host.Password(builder.Configuration["Rabbit:Password"]!);
+                        }
+                    );
                     cfg.UseMessageRetry(r =>
                     {
                         r.Handle<Exception>(ex =>
                             TransientErrors.IsTransient(ex)
-                            || ex is SimulationConflictException
                             || ex is MongoException mongo
                                 && (
                                     mongo.HasErrorLabel("RetryableWriteError")

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SwiftRide.Application.Health;
@@ -25,6 +26,7 @@ public static class ApiPipeline
                 using var scope = app.Logger.BeginScope(
                     new Dictionary<string, object> { ["CorrelationId"] = correlation }
                 );
+                var started = Stopwatch.GetTimestamp();
                 try
                 {
                     await next(context);
@@ -58,7 +60,10 @@ public static class ApiPipeline
                             "Dữ liệu xung đột. Hãy tải lại trạng thái trước khi thử lại."
                         ),
                         HttpRequestException => (503, "Dịch vụ tạm thời chưa sẵn sàng."),
-                        OperationCanceledException => (503, "Dịch vụ phản hồi quá hạn."),
+                        TimeoutException or OperationCanceledException => (
+                            503,
+                            "Dịch vụ phản hồi quá hạn."
+                        ),
                         _ => (500, "Lỗi hệ thống. Dùng CorrelationId để tra cứu."),
                     };
                     if (status == 500)
@@ -75,15 +80,32 @@ public static class ApiPipeline
                             )
                             .ExecuteAsync(context);
                 }
+                if (
+                    !context.Request.Path.StartsWithSegments("/health")
+                    && !context.RequestAborted.IsCancellationRequested
+                )
+                {
+                    var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText;
+                    app.Logger.LogInformation(
+                        "{Method} {Route} {StatusCode} {ElapsedMs}ms CorrelationId={CorrelationId}",
+                        context.Request.Method,
+                        route ?? "(unmatched)",
+                        context.Response.StatusCode,
+                        Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                        correlation
+                    );
+                }
             }
         );
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous();
-        app.MapGet("/health/ready", async (IReadinessProbe probe, CancellationToken ct) =>
-                await probe.Ready(ct)
-                    ? Results.Ok(new { status = "ready" })
-                    : Results.StatusCode(503)
+        app.MapGet(
+                "/health/ready",
+                async (IReadinessProbe probe, CancellationToken ct) =>
+                    await probe.Ready(ct)
+                        ? Results.Ok(new { status = "ready" })
+                        : Results.StatusCode(503)
             )
             .AllowAnonymous();
         app.MapOpenApi().RequireAuthorization();

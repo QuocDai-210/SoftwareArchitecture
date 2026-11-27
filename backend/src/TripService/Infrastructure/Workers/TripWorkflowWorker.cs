@@ -12,10 +12,10 @@ public sealed class TripWorkflowWorker(
             try
             {
                 await using var scan = scopes.CreateAsyncScope();
-                var ids = await scan
+                var due = await scan
                     .ServiceProvider.GetRequiredService<ITripWorkflowQueue>()
                     .Due(DateTimeOffset.UtcNow, ct);
-                foreach (var id in ids)
+                foreach (var (id, version) in due)
                 {
                     try
                     {
@@ -35,7 +35,7 @@ public sealed class TripWorkflowWorker(
                             await using var failure = scopes.CreateAsyncScope();
                             await failure
                                 .ServiceProvider.GetRequiredService<TripWorkflow>()
-                                .RecordFailure(id, TransientErrors.IsTransient(ex), ct);
+                                .RecordFailure(id, version, TransientErrors.IsTransient(ex), ct);
                         }
                         catch (Exception saveError) when (!ct.IsCancellationRequested)
                         {

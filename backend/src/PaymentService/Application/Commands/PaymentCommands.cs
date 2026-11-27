@@ -9,19 +9,18 @@ public sealed class PaymentCommands(
     IPaymentReader reader,
     IUnitOfWork unit,
     PaymentMethodFactory factory,
-    IEventPublisher bus,
-    IPaymentMetrics metrics
+    IEventPublisher bus
 )
 {
     public async Task<Payment> Charge(PaymentRequest request, string key, CancellationToken ct)
     {
         RequestKeys.Validate(key);
-        if (request.Method == PaymentMethod.Card || request.PaymentToken is not null)
-            throw new RuleException("Thanh toán thẻ chưa bật; dùng Ví hoặc COD.");
+        PaymentTokens.Validate(request.Method, request.PaymentToken);
         if (string.IsNullOrWhiteSpace(request.DriverId) || request.DriverId.Length > 100)
             throw new RuleException("Thiếu tài xế của chuyến.", ErrorKind.Validation);
         if (
-            request.TripId == Guid.Empty
+            request.Attempt < 1
+            || request.TripId == Guid.Empty
             || string.IsNullOrWhiteSpace(request.RiderId)
             || request.RiderId.Length > 100
             || request.Amount is < 0 or > 100000000
@@ -50,24 +49,7 @@ public sealed class PaymentCommands(
         if (payment is not null)
         {
             RequestKeys.Same(payment.RequestHash, hash);
-            if (
-                payment.Method == PaymentMethod.Cod
-                && payment.Status == PaymentStatus.Declined
-                && request.Attempt > payment.Attempt
-            )
-            {
-                var retry = await factory.Create(PaymentMethod.Cod).Capture(request, ct);
-                payment.AwaitCash(request.DriverId!, request.Attempt);
-                if (retry.Outcome == CaptureOutcome.Declined)
-                    payment.Decline(retry.Reason ?? "Local COD fixture declined.");
-            }
-            if (payment.Method == PaymentMethod.Wallet && payment.Status == PaymentStatus.Settled)
-            {
-                await unit.Save(ct);
-                await tx.Commit(ct);
-                return payment;
-            }
-            await PublishResult(payment, ct);
+            await PublishResult(payment, request.Attempt, ct);
             await unit.Save(ct);
             await tx.Commit(ct);
             return payment;
@@ -84,19 +66,19 @@ public sealed class PaymentCommands(
             request.CorrelationId,
             capture.Success,
             capture.Reason,
-            request.DriverId
+            request.DriverId,
+            request.Attempt
         );
-        if (request.Method == PaymentMethod.Cod)
-        {
-            payment.AwaitCash(request.DriverId!, request.Attempt);
-            if (capture.Outcome == CaptureOutcome.Declined)
-                payment.Decline(capture.Reason ?? "Local COD fixture declined.");
-        }
         writer.Add(payment);
-        await PublishResult(payment, ct);
+        if (capture.Success)
+            AddJournal(
+                payment.Id,
+                "Charge",
+                Ledger.Charge(method.DebitAccount(request.RiderId), payment.Amount)
+            );
+        await PublishResult(payment, request.Attempt, ct);
         await unit.Save(ct);
         await tx.Commit(ct);
-        metrics.Outcome(payment.Status.ToString().ToLowerInvariant());
         return payment;
     }
 
@@ -108,34 +90,18 @@ public sealed class PaymentCommands(
         CancellationToken ct
     )
     {
-        if (!actor.IsDriver)
-            throw new RuleException(
-                "Only the assigned Driver can refund a COD trip.",
-                ErrorKind.Forbidden
-            );
+        if (!actor.IsService)
+            throw new RuleException("Service role required.", ErrorKind.Forbidden);
         RequestKeys.Validate(key);
         if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 200)
             throw new RuleException("Cần lý do hoàn tiền, tối đa 200 ký tự.", ErrorKind.Validation);
-        if (!request.CashReturned)
-            throw new RuleException("Cần xác nhận hoàn COD giả lập.", ErrorKind.Validation);
         var hash = RequestKeys.Hash(request.Reason);
         await using var tx = await unit.Begin(ct);
         await writer.Lock(id, ct);
-        var payment = await writer.FindTracked(id, ct)
+        var payment =
+            await writer.FindTracked(id, ct)
             ?? throw new RuleException("Không có giao dịch.", ErrorKind.NotFound);
-        if (payment.DriverId != actor.Id)
-            throw new RuleException("Driver is not assigned to this trip.", ErrorKind.Forbidden);
-        if (payment.Method != PaymentMethod.Cod)
-        {
-            if (payment.Method == PaymentMethod.Wallet)
-                throw new RuleException(
-                    "Wallet trip refunds are not supported in this simulation."
-                );
-            throw new RuleException(
-                "Giao dịch online cũ chỉ hỗ trợ đọc và đối soát ngoài hệ thống."
-            );
-        }
-        if (payment.Status is PaymentStatus.Refunded or PaymentStatus.RefundPending)
+        if (payment.Status == PaymentStatus.Refunded)
         {
             if (payment.RefundKey != key)
                 throw new RuleException("Giao dịch đã được hoàn.");
@@ -144,8 +110,6 @@ public sealed class PaymentCommands(
         }
         if (payment.Status != PaymentStatus.Settled)
             throw new RuleException("Chỉ hoàn khoản đã thanh toán.");
-        if (payment.IsTopUp)
-            throw new RuleException("Chức năng này chỉ hoàn tiền chuyến.", ErrorKind.Validation);
         await factory.Create(payment.Method).Refund(payment, ct);
         var charge = (await reader.Journals(payment.Id, ct)).Single(x => x.Kind == "Charge");
         AddJournal(payment.Id, "Refund", Ledger.Reverse(charge.Lines));
@@ -173,7 +137,7 @@ public sealed class PaymentCommands(
         );
     }
 
-    private Task PublishResult(Payment p, CancellationToken ct) =>
+    private Task PublishResult(Payment p, long attempt, CancellationToken ct) =>
         p.Status switch
         {
             PaymentStatus.Settled => bus.Publish(
@@ -184,17 +148,19 @@ public sealed class PaymentCommands(
                     p.Amount,
                     "VND",
                     p.CorrelationId,
-                    p.Method == PaymentMethod.Wallet ? p.DriverId : null
+                    p.DriverId,
+                    p.RiderId,
+                    p.Method
                 ),
                 p.CorrelationId,
                 ct
             ),
-            PaymentStatus.Declined or PaymentStatus.Compensated => bus.Publish(
+            PaymentStatus.Declined => bus.Publish(
                 new PaymentFailed(
                     Guid.NewGuid(),
                     p.Id,
                     p.Reason ?? "Thanh toán bị từ chối.",
-                    p.Status == PaymentStatus.Compensated,
+                    attempt,
                     p.CorrelationId
                 ),
                 p.CorrelationId,

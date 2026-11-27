@@ -1,9 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <EmbeddedResource
-      Include="Persistence/Migrations/InitialSchema.sql"
-      LogicalName="InitialSchema.sql"
-    />
     <ProjectReference Include="../Application/PaymentService.Application.csproj" />
     <ProjectReference Include="../../Shared/SwiftRide.Infrastructure/SwiftRide.Infrastructure.csproj" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />

@@ -11,37 +11,8 @@ public static class WorkflowEvents
             trip.Method,
             trip.PaymentToken,
             trip.CorrelationId,
-            trip.Version,
-            trip.DriverId,
-            trip.Method == PaymentMethod.Wallet,
-            trip.Method == PaymentMethod.Wallet ? trip.Quote?.Id : null
-        );
-
-    public static WalletTripHoldRequested ReserveWallet(Trip trip) =>
-        new(
-            trip.Quote!.Id,
-            trip.Id,
-            trip.RiderId,
-            checked((long)trip.Quote!.Amount),
-            trip.Quote.Id,
-            trip.Version,
-            trip.CorrelationId
-        );
-
-    public static WalletTripHoldReleaseRequested ReleaseWallet(
-        Trip trip,
-        bool rematch = false,
-        bool cancelRequested = false
-    ) =>
-        new(
-            Guid.NewGuid(),
-            trip.Id,
-            trip.RiderId,
-            checked((long)trip.Quote!.Amount),
-            trip.CorrelationId,
-            rematch,
-            cancelRequested,
-            trip.Quote?.Id
+            trip.PaymentAttempt,
+            trip.DriverId
         );
 
     public static Task Release(Trip trip, IEventPublisher bus, CancellationToken ct) =>

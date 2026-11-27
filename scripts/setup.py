@@ -31,6 +31,7 @@ def locked(output):
         else:
             fcntl.flock(output, fcntl.LOCK_UN)
 
+
 GENERATED = {
     "POSTGRES_ADMIN_PASSWORD",
     "TRIP_DB_PASSWORD",
@@ -38,11 +39,11 @@ GENERATED = {
     "MATCH_DB_PASSWORD",
     "PAY_DB_PASSWORD",
     "RABBIT_PASSWORD",
-    "AUTH_SECRET",
-    "AUTH_SIGNING_KEY",
+    "SERVICE_CLIENT_SECRET",
     "RIDER_PASSWORD",
     "DRIVER_PASSWORD",
     "GRAFANA_PASSWORD",
+    "WEB_SESSION_SECRET",
 }
 
 
@@ -76,21 +77,19 @@ def check():
     with tempfile.TemporaryDirectory(prefix="swiftride-setup-") as directory:
         root = Path(directory)
         (root / ".env.example").write_text(
-            "AUTH_SIGNING_KEY=\nGEOAPIFY_API_KEY=\n", encoding="utf-8"
+            "SERVICE_CLIENT_SECRET=\nOTEL_SDK_DISABLED=true\n", encoding="utf-8"
         )
         (root / ".env").write_text("# retained\nEXISTING=keep", encoding="utf-8")
         assert setup(root) == 2
         result = (root / ".env").read_text(encoding="utf-8")
         assert result.startswith("# retained\nEXISTING=keep\n")
-        assert "AUTH_SIGNING_KEY=Aa1!" in result
-        assert result.endswith("GEOAPIFY_API_KEY=\n")
+        assert "SERVICE_CLIENT_SECRET=Aa1!" in result
+        assert result.endswith("OTEL_SDK_DISABLED=true\n")
         assert setup(root) == 0
         assert (root / ".env").read_text(encoding="utf-8") == result
         if os.name != "nt":
             assert (root / ".env").stat().st_mode & 0o777 == 0o600
-    print(
-        "Setup checks passed: existing values retained and external keys left empty."
-    )
+    print("Setup checks passed: existing values retained and configuration defaults retained.")
 
 
 if __name__ == "__main__":
@@ -98,6 +97,4 @@ if __name__ == "__main__":
         check()
     else:
         count = setup(Path(__file__).resolve().parents[1])
-        print(
-            f"Added {count} missing settings to .env; existing values retained. External keys require manual setup."
-        )
+        print(f"Added {count} missing settings to .env; existing values retained.")

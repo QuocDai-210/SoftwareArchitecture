@@ -1,39 +1,46 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
+using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
 
 namespace SwiftRide.Infrastructure;
 
-public sealed class ServiceTokens(IConfiguration config)
+public sealed class ServiceTokens(IHttpClientFactory clients, IConfiguration config)
 {
-    private string? token;
-    private DateTimeOffset expires;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private string? _token;
+    private DateTimeOffset _expires;
 
-    public Task<string> Get(CancellationToken ct)
+    public async Task<string> Get(CancellationToken ct)
     {
-        if (token is not null && expires > DateTimeOffset.UtcNow.AddSeconds(30))
-            return Task.FromResult(token);
-        ct.ThrowIfCancellationRequested();
-        var now = DateTime.UtcNow;
-        var issuer = config["Auth:Issuer"] ?? "swiftride-local";
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Auth:SigningKey"]!));
-        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var jwt = new JwtSecurityToken(
-            issuer,
-            "swiftride-api",
-            [
-                new Claim("sub", "swiftride-internal-service"),
-                new Claim("role", "service"),
-                new Claim("preferred_username", "swiftride-service"),
-            ],
-            now,
-            now.AddMinutes(15),
-            credentials
-        );
-        token = new JwtSecurityTokenHandler().WriteToken(jwt);
-        expires = new DateTimeOffset(now.AddMinutes(15));
-        return Task.FromResult(token);
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (_token is not null && _expires > DateTimeOffset.UtcNow.AddSeconds(30))
+                return _token;
+            var authority = config["Auth:Backchannel"] ?? config["Auth:Authority"];
+            using var response = await clients
+                .CreateClient("identity")
+                .PostAsync(
+                    $"{authority}/protocol/openid-connect/token",
+                    new FormUrlEncodedContent(
+                        new Dictionary<string, string>
+                        {
+                            ["grant_type"] = "client_credentials",
+                            ["client_id"] = "swiftride-service",
+                            ["client_secret"] = config["Auth:ServiceSecret"]!,
+                        }
+                    ),
+                    ct
+                );
+            response.EnsureSuccessStatusCode();
+            var data = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+            _token = data.GetProperty("access_token").GetString()!;
+            _expires = DateTimeOffset.UtcNow.AddSeconds(data.GetProperty("expires_in").GetInt32());
+            return _token;
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 }

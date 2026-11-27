@@ -1115,3 +1115,138 @@ textarea.field {
       border-color 150ms ease;
   }
 }
+
+.dispatch-shell {
+  max-width: 1440px;
+  margin: auto;
+  background: #fff;
+}
+.dispatch-shell > header {
+  height: 64px;
+  padding: 0 clamp(18px, 4vw, 58px);
+}
+.dispatch-account {
+  position: relative;
+  z-index: 20;
+}
+.dispatch-account summary,
+.dispatch-panel summary {
+  cursor: pointer;
+  padding: 10px 4px;
+}
+.dispatch-account form {
+  position: absolute;
+  right: 0;
+  white-space: nowrap;
+  background: white;
+  border-radius: 12px;
+}
+.dispatch-stage {
+  display: grid;
+  grid-template-columns: minmax(280px, 370px) 1fr;
+  height: calc(100dvh - 64px);
+}
+.dispatch-map {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 0;
+}
+.dispatch-canvas {
+  position: absolute;
+  inset: 0;
+}
+.dispatch-distance {
+  position: absolute;
+  left: 12px;
+  bottom: 24px;
+  background: white;
+  border-radius: 12px;
+  padding: 6px 10px;
+  font-size: 12px;
+  pointer-events: none;
+}
+.dispatch-panel {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 28px 22px;
+  overflow-y: auto;
+}
+.dispatch-panel h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+.dispatch-search,
+.dispatch-history,
+.dispatch-list button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+  text-align: left;
+  min-height: 48px;
+}
+.dispatch-search {
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: #e4f3ec;
+  color: #134e40;
+  font-weight: 700;
+  font-size: 20px;
+}
+.dispatch-search span {
+  font-size: 28px;
+  line-height: 1;
+}
+.dispatch-history {
+  justify-content: space-between;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  color: #345b50;
+}
+.dispatch-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.dispatch-option select {
+  padding: 9px;
+  border-radius: 8px;
+  background: var(--paper);
+}
+.dispatch-back {
+  min-height: 44px;
+  color: var(--brand);
+}
+.dispatch-list button {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+.dispatch-list span {
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .dispatch-shell > header {
+    height: 54px;
+  }
+  .dispatch-stage {
+    height: calc(100dvh - 54px);
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(32%, 1fr) auto;
+    background: #e8f1e9;
+  }
+  .dispatch-map {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .dispatch-panel {
+    grid-column: 1;
+    grid-row: 2;
+    max-height: 64dvh;
+    background: white;
+    border-radius: 20px 20px 0 0;
+    padding: 18px 20px max(18px, env(safe-area-inset-bottom));
+  }
+}

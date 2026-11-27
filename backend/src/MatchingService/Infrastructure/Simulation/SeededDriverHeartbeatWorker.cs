@@ -15,7 +15,7 @@ public sealed class SeededDriverHeartbeatWorker(
             return;
         var drivers = database.GetCollection<DriverDocument>("drivers");
         var ids = Enumerable
-            .Range(1, 1000)
+            .Range(1, 4)
             .Select(i => $"22222222-2222-2222-2222-{i:000000000000}")
             .ToArray();
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));

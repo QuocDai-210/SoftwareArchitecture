@@ -8,13 +8,13 @@
   "panels": [
     {
       "id": 1,
-      "title": "Tỷ lệ chuyến thành công",
+      "title": "Tỷ lệ thành công trong các chuyến đã kết thúc (5 phút)",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "swiftride-prometheus" },
       "targets": [
         {
-          "expr": "sum(rate(swiftride_trips_outcomes_total{status=\"paid\"}[5m])) / clamp_min(sum(rate(swiftride_trips_requested_total[5m])), 0.000001)",
+          "expr": "(sum(increase(swiftride_trips_outcomes_total{status=\"paid\"}[5m])) or vector(0)) / (sum(increase(swiftride_trips_outcomes_total[5m])) > 0)",
           "refId": "A",
           "legendFormat": "{{service_name}}"
         }
@@ -53,13 +53,13 @@
     },
     {
       "id": 4,
-      "title": "Tỷ lệ thanh toán lỗi",
+      "title": "Tỷ lệ lần thanh toán lỗi (5 phút)",
       "type": "timeseries",
       "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "swiftride-prometheus" },
       "targets": [
         {
-          "expr": "sum(rate(swiftride_payments_outcomes_total{status=~\"declined|compensated|error\"}[5m])) / clamp_min(sum(rate(swiftride_payments_outcomes_total[5m])),0.000001)",
+          "expr": "(sum(increase(swiftride_payment_attempts_total{status!=\"settled\"}[5m])) or vector(0)) / (sum(increase(swiftride_payment_attempts_total[5m])) > 0)",
           "refId": "A",
           "legendFormat": "{{service_name}}"
         }

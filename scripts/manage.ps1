@@ -1,5 +1,5 @@
 ﻿param(
-    [ValidateSet('setup', 'build', 'up', 'stop', 'status', 'logs', 'trip', 'matching', 'payment')]
+    [ValidateSet('setup', 'build', 'observe', 'up', 'stop', 'status', 'logs', 'trip', 'matching', 'payment')]
     [string]$Command = 'status'
 )
 
@@ -48,10 +48,12 @@ try {
             Invoke-Python 'scripts/setup.py'
         }
         'build' {
+            Invoke-Python 'scripts/setup.py'
             Invoke-Python 'scripts/check-architecture.py'
             Invoke-Python 'scripts/check-resources.py'
             Invoke-Checked 'docker' @('compose', '--profile', '*', 'stop')
-            foreach ($service in @('rabbitmq', 'trip', 'matching', 'payment', 'gateway', 'web')) {
+            $services = @('rabbitmq', 'trip', 'matching', 'payment', 'gateway', 'web')
+            foreach ($service in $services) {
                 Invoke-Checked 'docker' @('compose', 'build', $service)
             }
         }
@@ -66,18 +68,21 @@ try {
         }
         default {
             Invoke-Python 'scripts/check-resources.py'
-            if ($Command -eq 'up') {
-                Invoke-Checked 'docker' @('compose', 'stop', 'observability')
-            } else {
-                Invoke-Checked 'docker' @('compose', '--profile', '*', 'stop')
-            }
+            $target = $Command
             $env:OTEL_SDK_DISABLED = 'true'
-            $composeArgs = @(
-                'compose', 'up', '--no-build', '--remove-orphans', '-d', '--wait', '--wait-timeout', '300'
-            )
-            if ($Command -ne 'up') {
-                $composeArgs += $Command
+            if ($Command -eq 'up') {
+                Invoke-Checked 'docker' @('compose','--profile','observability','stop','observability')
+                $target = 'web'
+            } elseif ($Command -eq 'observe') {
+                $env:OTEL_SDK_DISABLED = 'false'
+                Invoke-Checked 'docker' @('compose','--profile','observability','up','-d','--no-build','--wait')
+                break
+            } else {
+                Invoke-Checked 'docker' @('compose','--profile','*','stop')
             }
+            $composeArgs = @(
+                'compose', 'up', '--no-build', '-d', '--wait', '--wait-timeout', '300', $target
+            )
             Invoke-Checked 'docker' $composeArgs
         }
     }

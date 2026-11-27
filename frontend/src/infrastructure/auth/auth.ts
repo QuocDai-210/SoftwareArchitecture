@@ -1,12 +1,8 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { cookies } from "next/headers";
 import { sessionCookie } from "./session-cookie";
-
-type LoginResult = {
-  accessToken: string;
-  expiresAt: number;
-  user: { id: string; name: string; role: "rider" | "driver" };
-};
+import { exchange, flowCookie } from "./oidc";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -15,31 +11,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   cookies: { sessionToken: sessionCookie },
   providers: [
     Credentials({
-      credentials: {
-        username: { label: "Tên đăng nhập", type: "text" },
-        password: { label: "Mật khẩu", type: "password" },
-      },
+      credentials: { query: {} },
       async authorize(credentials) {
-        const username = String(credentials.username ?? "").trim();
-        const password = String(credentials.password ?? "");
-        if (!username || !password) return null;
-        const response = await fetch(`${process.env.GATEWAY_URL}/auth/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
-          cache: "no-store",
-          signal: AbortSignal.timeout(6000),
-        });
-        if (!response.ok) return null;
-        const result = (await response.json()) as LoginResult;
-        if (result.user.role !== "rider") return null;
-        return {
-          id: result.user.id,
-          name: result.user.name,
-          role: result.user.role,
-          accessToken: result.accessToken,
-          expiresAt: result.expiresAt,
-        };
+        if (typeof credentials.query !== "string") return null;
+        const flow = (await cookies()).get(flowCookie)?.value;
+        return exchange(credentials.query, flow);
       },
     }),
   ],

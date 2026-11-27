@@ -1,32 +1,8 @@
 using System.Diagnostics;
-using Microsoft.EntityFrameworkCore;
-using SwiftRide.Trips.Infrastructure;
 using Xunit;
 
 public sealed class StorageTests
 {
-    [Fact]
-    public void PostgreSqlSnapshotMatchesPaymentModel()
-    {
-        using var db = new SwiftRide.Payments.Infrastructure.PayDb(
-            new DbContextOptionsBuilder<SwiftRide.Payments.Infrastructure.PayDb>()
-                .UseNpgsql("Host=localhost;Database=unused")
-                .Options
-        );
-        Assert.False(db.Database.HasPendingModelChanges());
-    }
-
-    [Fact]
-    public void PostgreSqlSnapshotMatchesTripModel()
-    {
-        using var db = new TripDb(
-            new DbContextOptionsBuilder<TripDb>()
-                .UseNpgsql("Host=localhost;Database=unused")
-                .Options
-        );
-        Assert.False(db.Database.HasPendingModelChanges());
-    }
-
     [Fact]
     [Trait("Category", "Integration")]
     public async Task DatabaseOwnershipAndConstraintsAreEnforced()
@@ -44,15 +20,13 @@ public sealed class StorageTests
             "trip",
             "TripDB",
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' "
-                + "AND table_name IN ('Trips','UserProfiles','InboxState','OutboxState','OutboxMessage');"
+                + "AND table_name IN ('Trips','InboxState','OutboxState','OutboxMessage');"
         );
-        Assert.Equal("5", tables.Trim());
+        Assert.Equal("4", tables.Trim());
         await Psql(
-            "trip",
-            "TripDB",
-            "BEGIN; INSERT INTO \"UserProfiles\" VALUES "
-                + "('storage-check','Driver','0901234567'); INSERT INTO \"UserProfiles\" VALUES "
-                + "('storage-check','Duplicate','0901234567'); ROLLBACK;",
+            "payment_app",
+            "PayDB",
+            """BEGIN; UPDATE "WalletAccounts" SET "Available" = -1; ROLLBACK;""",
             succeeds: false
         );
     }

@@ -1,3 +1,5 @@
+using SwiftRide.SharedKernel;
+
 // Preserve the deployed MassTransit message URN and exchange names.
 namespace SwiftRide.Core;
 
@@ -8,5 +10,7 @@ public sealed record PaymentSettled(
     decimal Amount,
     string Currency,
     string CorrelationId,
-    string? DriverId = null
+    string? DriverId = null,
+    string? RiderId = null,
+    PaymentMethod? Method = null
 );

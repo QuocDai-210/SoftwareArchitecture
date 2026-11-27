@@ -10,18 +10,14 @@ public sealed record TripView(
     Quote? Quote,
     PaymentMethod Method,
     int Rejections,
+    long PaymentAttempt,
+    bool Refunded,
     DateTimeOffset? Deadline,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? Reason,
     long Version,
-    IReadOnlyList<TripChange> History,
-    string RiderName,
-    string? RiderPhone,
-    string PickupNote,
-    int? Rating,
-    string? Review,
-    DateTimeOffset? RatedAt
+    IReadOnlyList<TripChange> History
 )
 {
     public static TripView From(Trip t) =>
@@ -35,19 +31,13 @@ public sealed record TripView(
             t.Quote,
             t.Method,
             t.Rejections,
+            t.PaymentAttempt,
+            t.Refunded,
             t.Deadline,
             t.CreatedAt,
             t.UpdatedAt,
             t.Reason,
             t.Version,
-            t.History,
-            t.RiderName,
-            t.Status is TripStatus.DriverAccepted or TripStatus.EnRoute or TripStatus.PickedUp
-                ? t.RiderPhone
-                : null,
-            t.PickupNote,
-            t.Rating,
-            t.Review,
-            t.RatedAt
+            t.History
         );
 }

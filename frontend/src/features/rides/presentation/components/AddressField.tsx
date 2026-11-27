@@ -14,7 +14,7 @@ export function AddressField({
   label: string;
   value: Point | null;
   onChange: (point: Point | null) => void;
-  service: RideService;
+  service: Pick<RideService, "search">;
   disabled: boolean;
   onFocus?: () => void;
 }) {
@@ -27,6 +27,7 @@ export function AddressField({
   useEffect(() => {
     if (value) {
       setQuery("");
+      setError("");
       setResults([]);
     }
   }, [value]);
@@ -36,6 +37,7 @@ export function AddressField({
       setSearched(false);
       return;
     }
+    setResults([]);
     setSearching(true);
     setSearched(false);
     let active = true;

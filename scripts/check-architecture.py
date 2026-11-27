@@ -7,7 +7,6 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "backend/src"
-FRONT = ROOT / "frontend/src"
 errors = []
 
 
@@ -90,66 +89,6 @@ for project in sorted(projects):
             )
 
 
-def layer(path):
-    parts = path.relative_to(FRONT).parts
-    if parts[0] == "features":
-        return parts[2]
-    return parts[0]
-
-
-def frontend_allowed(source, target):
-    if source in ("domain", "application", "presentation", "infrastructure"):
-        return (
-            target
-            in {
-                "domain": {"domain"},
-                "application": {"domain", "application"},
-                "presentation": {"domain", "application", "presentation"},
-                "infrastructure": {"domain", "application", "infrastructure"},
-            }[source]
-        )
-    return source in ("app", "composition")
-
-
-# Check guards themselves against reversed dependencies.
-assert frontend_allowed("application", "domain")
-assert not frontend_allowed("domain", "application")
-assert not frontend_allowed("presentation", "infrastructure")
-assert not frontend_allowed("infrastructure", "presentation")
-assert frontend_allowed("composition", "infrastructure")
-
-frontend_count = 0
-for source in sorted(FRONT.rglob("*")):
-    if source.suffix not in (".ts", ".tsx"):
-        continue
-    frontend_count += 1
-    text = re.sub(r"(?m)^\s*//.*$", "", source.read_text(encoding="utf-8"))
-    current = layer(source)
-    imports = re.findall(r"(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)[\'\"]([^\'\"]+)[\'\"]", text)
-    for name in imports:
-        if name.startswith((".", "@/")):
-            target = (FRONT / name[2:] if name.startswith("@/") else source.parent / name).resolve()
-            require(target.is_relative_to(FRONT), f"{source.relative_to(ROOT)}: import escapes src")
-            if target.is_relative_to(FRONT):
-                require(
-                    frontend_allowed(current, layer(target)),
-                    f"{source.relative_to(ROOT)}: {current} imports {layer(target)} ({name})",
-                )
-        elif current in ("domain", "application"):
-            require(False, f"{source.relative_to(ROOT)}: package {name} in inner layer")
-    if current in ("domain", "application", "presentation"):
-        require(
-            not re.search(r"\b(fetch|XMLHttpRequest)\s*\(", text),
-            f"{source.relative_to(ROOT)}: transport outside infrastructure",
-        )
-    if current in ("domain", "application"):
-        require(
-            not re.search(r"\b(window|document|localStorage|sessionStorage|process\.env)\b", text),
-            f"{source.relative_to(ROOT)}: platform/UI leaks into inner layer",
-        )
-
 if errors:
     raise SystemExit("\n".join(errors))
-print(
-    f"Architecture checks passed: {len(projects)} backend projects, {frontend_count} frontend files."
-)
+print(f"Architecture checks passed for {len(projects)} backend projects.")

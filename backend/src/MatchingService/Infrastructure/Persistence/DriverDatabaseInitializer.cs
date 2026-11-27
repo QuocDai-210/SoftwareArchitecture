@@ -1,5 +1,3 @@
-using SwiftRide.SharedKernel.Geometry;
-
 namespace SwiftRide.Matching.Infrastructure;
 
 public sealed class DriverDatabaseInitializer(IMongoDatabase database, IConfiguration config)
@@ -28,11 +26,9 @@ public sealed class DriverDatabaseInitializer(IMongoDatabase database, IConfigur
         );
         if (!config.GetValue<bool>("Fixtures:Enabled"))
             return;
-        for (var i = 1; i <= 1000; i++)
+        for (var i = 1; i <= 4; i++)
         {
-            var random = new Random(20262114 + i);
             var id = $"22222222-2222-2222-2222-{i:000000000000}";
-            var location = HcmcSeedLocation.Next(random);
             await Drivers.UpdateOneAsync(
                 x => x.Id == id,
                 Builders<DriverDocument>
@@ -45,7 +41,7 @@ public sealed class DriverDatabaseInitializer(IMongoDatabase database, IConfigur
                     .SetOnInsert(x => x.Vehicle, "Xe máy mô phỏng")
                     .SetOnInsert(
                         x => x.Location,
-                        DriverDocument.Geo(location.Longitude, location.Latitude)
+                        DriverDocument.Geo(106.7009 + (i - 1) * 0.002, 10.7769)
                     )
                     .SetOnInsert(x => x.LastSeenAt, DateTime.UtcNow),
                 new UpdateOptions { IsUpsert = true },

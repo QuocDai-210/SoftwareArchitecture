@@ -39,9 +39,7 @@ public sealed class WorkflowTests
             reader.Object,
             writer.Object,
             bus.Object,
-            Mock.Of<ITripMetrics>(),
-            Mock.Of<IMatchingClient>(),
-            Mock.Of<IUserProfileStore>()
+            Mock.Of<ITripMetrics>()
         );
         await Assert.ThrowsAsync<RuleException>(() =>
             commands.Cancel(
@@ -62,12 +60,12 @@ public sealed class WorkflowTests
         var version = trip.Version;
         await commands.Cancel(
             trip.Id,
-            new(version, "Vehicle issue"),
-            new Actor("driver", IsDriver: true),
+            new(version, "Changed plans"),
+            new Actor("user", IsRider: true),
             default
         );
         Assert.Equal(TripStatus.Cancelled, trip.Status);
-        Assert.Contains("Tài xế", trip.Reason);
+        Assert.Contains("Changed plans", trip.Reason);
         await Assert.ThrowsAsync<RuleException>(() =>
             commands.Cancel(
                 trip.Id,
@@ -192,13 +190,13 @@ public sealed class WorkflowTests
         );
         for (var i = 0; i < 3; i++)
         {
-            await workflow.RecordFailure(trip.Id, true, default);
+            await workflow.RecordFailure(trip.Id, trip.Version, true, default);
             Assert.Equal(TripStatus.ReservingDriver, trip.Status);
             Assert.NotNull(trip.NextAttemptAt);
         }
         bus.VerifyNoOtherCalls();
-        await workflow.RecordFailure(trip.Id, true, default);
-        await workflow.RecordFailure(trip.Id, true, default);
+        await workflow.RecordFailure(trip.Id, trip.Version, true, default);
+        await workflow.RecordFailure(trip.Id, trip.Version, true, default);
         Assert.Equal(TripStatus.Failed, trip.Status);
         bus.Verify(
             x =>

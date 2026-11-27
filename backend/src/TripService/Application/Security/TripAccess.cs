@@ -13,7 +13,6 @@ public static class TripAccess
                 || t.Status
                     is TripStatus.Requested
                         or TripStatus.AwaitingRiderConfirmation
-                        or TripStatus.WalletHoldPending
                         or TripStatus.ReservingDriver
             )
         )
@@ -36,7 +35,6 @@ public static class TripAccess
                 || t.Status
                     is TripStatus.Requested
                         or TripStatus.AwaitingRiderConfirmation
-                        or TripStatus.WalletHoldPending
                         or TripStatus.ReservingDriver
             )
         )

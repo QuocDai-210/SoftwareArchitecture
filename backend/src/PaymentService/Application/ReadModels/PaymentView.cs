@@ -10,12 +10,8 @@ public sealed record PaymentView(
     PaymentStatus Status,
     string? Reason,
     DateTimeOffset CreatedAt,
-    bool IsTopUp,
-    bool RequiresCheckout,
+    long Attempt,
     string? DriverId,
-    string? CollectedBy,
-    DateTimeOffset? CollectedAt,
-    string? CollectionReason,
     string? RefundedBy,
     DateTimeOffset? RefundedAt
 )
@@ -31,12 +27,8 @@ public sealed record PaymentView(
             p.Status,
             p.Reason,
             p.CreatedAt,
-            p.IsTopUp,
-            false,
+            p.Attempt,
             p.DriverId,
-            p.CollectedBy,
-            p.CollectedAt,
-            p.CollectionReason,
             p.RefundedBy,
             p.RefundedAt
         );

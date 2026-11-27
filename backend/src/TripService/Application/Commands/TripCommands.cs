@@ -9,9 +9,7 @@ public sealed class TripCommands(
     ITripReader reader,
     ITripWriter writer,
     IEventPublisher bus,
-    ITripMetrics metrics,
-    IMatchingClient matching,
-    IUserProfileStore profiles
+    ITripMetrics metrics
 )
 {
     public async Task<CreatedTrip> Create(
@@ -31,15 +29,7 @@ public sealed class TripCommands(
             && request.Pickup.Longitude == request.Destination.Longitude
         )
             throw new RuleException("Điểm đón và điểm đến phải khác nhau.", ErrorKind.Validation);
-        if (!Enum.IsDefined(request.Method))
-            throw new RuleException("Phương thức thanh toán không hợp lệ.", ErrorKind.Validation);
-        if (request.Method == PaymentMethod.Card || request.PaymentToken is not null)
-            throw new RuleException(
-                "Chuyến mới chỉ hỗ trợ thanh toán bằng ví hoặc tiền mặt.",
-                ErrorKind.Validation
-            );
-        if ((request.PickupNote?.Length ?? 0) > 240)
-            throw new RuleException("Ghi chú đón khách tối đa 240 ký tự.", ErrorKind.Validation);
+        PaymentTokens.Validate(request.Method, request.PaymentToken);
         RequestKeys.Validate(key);
         if (!actor.IsRider)
             throw new RuleException("Cần quyền Rider.", ErrorKind.Forbidden);
@@ -51,48 +41,18 @@ public sealed class TripCommands(
             RequestKeys.Same(previous.RequestHash, hash);
             return new(TripView.From(previous), previous.Id, false);
         }
-        var profile = await profiles.Get(rider, ct);
-        if (
-            profile is null
-            || string.IsNullOrWhiteSpace(profile.Name)
-            || string.IsNullOrWhiteSpace(profile.Phone)
-        )
-            throw new RuleException(
-                "Bổ sung họ tên và số điện thoại liên hệ trước khi đặt xe.",
-                ErrorKind.Validation
-            );
-        if (
-            (await reader.List(rider, false, ct)).Any(x =>
-                x.Status
-                    is TripStatus.AwaitingRiderConfirmation
-                        or TripStatus.WalletHoldPending
-                        or TripStatus.ReservingDriver
-                        or TripStatus.AwaitingDriverAcceptance
-                        or TripStatus.AcceptingDriver
-                        or TripStatus.DriverAccepted
-                        or TripStatus.EnRoute
-                        or TripStatus.PickedUp
-                        or TripStatus.PaymentPending
-                        or TripStatus.PaymentReview
-            )
-        )
-            throw new RuleException(
-                "Bạn còn chuyến đang chờ thanh toán. Hoàn tất trước khi đặt chuyến mới."
-            );
         var trip = new Trip
         {
             Id = Guid.NewGuid(),
             RiderId = rider,
             Pickup = request.Pickup,
             Destination = request.Destination,
-            RiderName = profile.Name,
-            RiderPhone = profile.Phone,
-            PickupNote = request.PickupNote?.Trim() ?? "",
             Method = request.Method,
             PaymentToken = request.PaymentToken,
             IdempotencyKey = key!,
             RequestHash = hash,
             CorrelationId = correlation,
+            TraceParent = System.Diagnostics.Activity.Current?.Id,
         };
         var stored = await writer.Create(trip, ct);
         RequestKeys.Same(stored.RequestHash, hash);
@@ -112,13 +72,6 @@ public sealed class TripCommands(
         var trip = await reader.Get(id, ct);
         TripAccess.Rider(trip, actor);
         trip.CheckVersion(request.ExpectedVersion);
-        if (trip.Method == PaymentMethod.Wallet)
-        {
-            trip.BeginWalletHold(request.QuoteId, DateTimeOffset.UtcNow);
-            await bus.Publish(WorkflowEvents.ReserveWallet(trip), trip.CorrelationId, ct);
-            await writer.Save(ct);
-            return TripView.From(trip);
-        }
         trip.ConfirmQuote(request.QuoteId, DateTimeOffset.UtcNow);
         await writer.Save(ct);
         return TripView.From(trip);
@@ -132,40 +85,7 @@ public sealed class TripCommands(
     )
     {
         var trip = await reader.Get(id, ct);
-        if (
-            actor.IsRider
-            && trip.Status == TripStatus.PaymentReview
-            && trip.Method == PaymentMethod.Wallet
-        )
-        {
-            TripAccess.Rider(trip, actor);
-            if (!trip.CanCancelWalletHold)
-                throw new RuleException("A completed wallet trip cannot be cancelled.");
-            trip.CheckVersion(request.ExpectedVersion);
-            await bus.Publish(
-                WorkflowEvents.ReleaseWallet(trip, cancelRequested: true),
-                trip.CorrelationId,
-                ct
-            );
-            await writer.Save(ct);
-            return TripView.From(trip);
-        }
-        if (actor.IsRider && trip.Status == TripStatus.WalletHoldPending)
-        {
-            throw new RuleException(
-                "Đang xác nhận khoản giữ ví. Vui lòng đợi kết quả rồi thử lại."
-            );
-        }
-        if (actor.IsRider)
-            TripAccess.Rider(trip, actor);
-        else
-        {
-            TripAccess.Driver(trip, actor);
-            if (trip.Status is not (TripStatus.DriverAccepted or TripStatus.EnRoute))
-                throw new RuleException(
-                    "Chỉ hủy trước khi đón khách; lời mời chưa nhận dùng Từ chối."
-                );
-        }
+        TripAccess.Rider(trip, actor);
         var reason = request.Reason?.Trim();
         if (
             (reason?.Length ?? 0) > 240
@@ -176,29 +96,10 @@ public sealed class TripCommands(
         )
             throw new RuleException("Cần lý do hủy, tối đa 240 ký tự.", ErrorKind.Validation);
         trip.CheckVersion(request.ExpectedVersion);
-        trip.Move(
-            TripStatus.Cancelled,
-            $"{(actor.IsRider ? "Người đặt xe" : "Tài xế")} hủy chuyến. {reason}".Trim()
-        );
-        if (trip.Method == PaymentMethod.Wallet && trip.Quote is not null)
-            await bus.Publish(WorkflowEvents.ReleaseWallet(trip), trip.CorrelationId, ct);
+        trip.Move(TripStatus.Cancelled, reason ?? "Rider cancelled.");
         await WorkflowEvents.Release(trip, bus, ct);
         await writer.Save(ct);
         metrics.Outcome("cancelled");
-        return TripView.From(trip);
-    }
-
-    public async Task<TripView> Review(
-        Guid id,
-        ReviewTripRequest request,
-        Actor actor,
-        CancellationToken ct
-    )
-    {
-        var trip = await reader.Get(id, ct);
-        TripAccess.Rider(trip, actor);
-        trip.Rate(request.Rating, request.Comment, request.ExpectedVersion);
-        await writer.Save(ct);
         return TripView.From(trip);
     }
 
@@ -212,15 +113,11 @@ public sealed class TripCommands(
         var trip = await reader.Get(id, ct);
         TripAccess.Driver(trip, actor);
         trip.CheckVersion(request.ExpectedVersion);
-        trip.RejectDriver();
-        if (trip.Method == PaymentMethod.Wallet)
-            await bus.Publish(
-                WorkflowEvents.ReleaseWallet(trip, rematch: true),
-                trip.CorrelationId,
-                ct
-            );
         await WorkflowEvents.Release(trip, bus, ct);
+        trip.RejectDriver();
         await writer.Save(ct);
+        if (trip.Status == TripStatus.Failed)
+            metrics.Outcome("failed");
         return TripView.From(trip);
     }
 
@@ -249,10 +146,9 @@ public sealed class TripCommands(
     )
     {
         var trip = await reader.Get(id, ct);
-        TripAccess.Driver(trip, actor);
-        if (trip.Method != PaymentMethod.Cod)
-            throw new RuleException("Only COD payments can be retried.");
-        if (trip.Status != TripStatus.PaymentReview)
+        if (!actor.IsService)
+            throw new RuleException("Service role required.", ErrorKind.Forbidden);
+        if (trip.Status != TripStatus.PaymentReview || trip.Refunded)
             throw new RuleException("Only trips in payment review can be retried.");
         trip.CheckVersion(request.ExpectedVersion);
         trip.Move(TripStatus.PaymentPending);
@@ -274,33 +170,11 @@ public sealed class TripCommands(
         var trip = await reader.Get(id, ct);
         TripAccess.Driver(trip, actor);
         trip.CheckVersion(request.ExpectedVersion);
-        if (target is TripStatus.PickedUp or TripStatus.DroppedOff)
-            await matching.EnsureArrival(
-                new(trip.DriverId!, trip.Id, target.ToString()),
-                trip.CorrelationId,
-                ct
-            );
         trip.Move(target);
-        if (target is TripStatus.EnRoute or TripStatus.PickedUp)
-            await bus.Publish(
-                new TripProgressed(
-                    Guid.NewGuid(),
-                    trip.Id,
-                    trip.DriverId!,
-                    trip.ReservationId!.Value,
-                    trip.Version,
-                    target.ToString(),
-                    trip.Pickup,
-                    trip.Destination,
-                    trip.Quote?.Route,
-                    trip.CorrelationId
-                ),
-                trip.CorrelationId,
-                ct
-            );
         if (target == TripStatus.DroppedOff)
         {
             trip.Move(TripStatus.PaymentPending);
+            await WorkflowEvents.Release(trip, bus, ct);
             await bus.Publish(WorkflowEvents.Completed(trip), trip.CorrelationId, ct);
         }
         await writer.Save(ct);

@@ -9,5 +9,6 @@ builder.AddGateway();
 var app = builder.Build();
 app.UsePlatform();
 app.UseRateLimiter();
-app.MapGatewayEndpoints();
+app.MapGet("/screens/trips/{id:guid}", TripScreen.Get).RequireAuthorization("participant");
+app.MapReverseProxy();
 app.Run();

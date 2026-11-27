@@ -4,14 +4,6 @@ namespace SwiftRide.Matching.Application;
 
 public sealed class DriverPresence(IDriverPresence presence, IDriverEligibility eligibility)
 {
-    public async Task Heartbeat(Actor actor, CancellationToken ct)
-    {
-        Authorize(actor);
-        if (!await eligibility.Approved(actor.Id, ct))
-            throw new RuleException("Tài xế chưa được duyệt.", ErrorKind.Forbidden);
-        await presence.Heartbeat(actor.Id, ct);
-    }
-
     public async Task Location(
         Actor actor,
         string name,

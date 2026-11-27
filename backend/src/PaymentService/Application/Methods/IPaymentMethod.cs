@@ -3,7 +3,6 @@ namespace SwiftRide.Payments.Application;
 public enum CaptureOutcome
 {
     Settled,
-    Pending,
     Declined,
 }
 

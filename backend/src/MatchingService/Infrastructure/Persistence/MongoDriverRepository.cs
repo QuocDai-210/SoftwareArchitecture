@@ -6,23 +6,8 @@ public sealed class MongoDriverRepository(IMongoDatabase database)
         IDriverReservations,
         IDriverEligibility
 {
-    public async Task<DriverContact?> Contact(string driverId, CancellationToken ct)
-    {
-        var driver = await Drivers.Find(x => x.Id == driverId).FirstOrDefaultAsync(ct);
-        if (driver is null)
-            return null;
-        return new(driver.Id, driver.Name, "", driver.Plate, driver.Vehicle);
-    }
-
     public Task<bool> Approved(string driverId, CancellationToken ct) =>
         Drivers.Find(x => x.Id == driverId && x.Approved && !x.Suspended).AnyAsync(ct);
-
-    public Task Heartbeat(string driverId, CancellationToken ct) =>
-        Drivers.UpdateOneAsync(
-            x => x.Id == driverId,
-            Builders<DriverDocument>.Update.Set(x => x.LastSeenAt, DateTime.UtcNow),
-            cancellationToken: ct
-        );
 
     private IMongoCollection<DriverDocument> Drivers { get; } =
         database.GetCollection<DriverDocument>("drivers");
@@ -60,15 +45,6 @@ public sealed class MongoDriverRepository(IMongoDatabase database)
     public async Task<ReservationResult> Reserve(ReservationRequest request, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
-        var existing = await Drivers
-            .Find(x =>
-                x.Id == request.DriverId
-                && x.TripId == request.TripId.ToString()
-                && x.ReservationId == request.ReservationId.ToString()
-            )
-            .FirstOrDefaultAsync(ct);
-        if (existing is not null && (existing.Busy || existing.LeaseExpiresAt > now))
-            return new(true, existing.LeaseExpiresAt);
         var f = Builders<DriverDocument>.Filter;
         var filter =
             f.Eq(x => x.Id, request.DriverId)
@@ -87,7 +63,19 @@ public sealed class MongoDriverRepository(IMongoDatabase database)
             new FindOneAndUpdateOptions<DriverDocument> { ReturnDocument = ReturnDocument.After },
             ct
         );
-        return new(driver is not null, driver?.LeaseExpiresAt);
+        if (driver is not null)
+            return new(true, driver.LeaseExpiresAt);
+        var existing = await Drivers
+            .Find(x =>
+                x.Id == request.DriverId
+                && x.TripId == request.TripId.ToString()
+                && x.ReservationId == request.ReservationId.ToString()
+            )
+            .FirstOrDefaultAsync(ct);
+        return new(
+            existing is not null && (existing.Busy || existing.LeaseExpiresAt > now),
+            existing?.LeaseExpiresAt
+        );
     }
 
     public async Task<ReservationResult> Confirm(ReservationRequest request, CancellationToken ct)

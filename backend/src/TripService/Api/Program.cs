@@ -9,7 +9,5 @@ builder.AddTripInfrastructure();
 var app = builder.Build();
 app.UsePlatform();
 await app.Services.InitializeTripDatabase();
-if (args.Contains("--migrate"))
-    return;
 app.MapTripEndpoints();
 app.Run();
