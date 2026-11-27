@@ -52,6 +52,7 @@ public sealed class TripCommands(
             IdempotencyKey = key!,
             RequestHash = hash,
             CorrelationId = correlation,
+            TraceParent = System.Diagnostics.Activity.Current?.Id,
         };
         var stored = await writer.Create(trip, ct);
         RequestKeys.Same(stored.RequestHash, hash);
@@ -115,6 +116,8 @@ public sealed class TripCommands(
         await WorkflowEvents.Release(trip, bus, ct);
         trip.RejectDriver();
         await writer.Save(ct);
+        if (trip.Status == TripStatus.Failed)
+            metrics.Outcome("failed");
         return TripView.From(trip);
     }
 

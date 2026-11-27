@@ -18,6 +18,7 @@ public static class ServiceRegistration
         var tripUrl = urls.Trip;
         var matchUrl = urls.Matching;
         var payUrl = urls.Payment;
+        builder.Services.AddHttpClient("screen", c => c.Timeout = TimeSpan.FromSeconds(5));
         builder.Services.AddHttpClient("readiness", c => c.Timeout = TimeSpan.FromSeconds(5));
         builder.Services.AddRateLimiter(options =>
         {

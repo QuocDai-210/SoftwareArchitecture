@@ -35,7 +35,7 @@ export function RouteMap({
   const [tilesFailed, setTilesFailed] = useState(false);
   select.current = onSelect;
   useEffect(() => {
-    if (!mapKey || !container.current) return;
+    if (!container.current) return;
     let disposed = false;
     setReady(false);
     setTilesFailed(false);
@@ -51,11 +51,14 @@ export function RouteMap({
           .zoom({ position: "topright", zoomInTitle: "Phóng to", zoomOutTitle: "Thu nhỏ" })
           .addTo(instance);
         L.tileLayer(
-          `https://maps.geoapify.com/v1/tile/positron/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(mapKey)}`,
+          mapKey
+            ? `https://maps.geoapify.com/v1/tile/positron/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(mapKey)}`
+            : "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
           {
-            maxZoom: 20,
-            attribution:
-              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | <a href="https://www.geoapify.com/">Geoapify</a>',
+            maxZoom: mapKey ? 20 : 19,
+            attribution: mapKey
+              ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | <a href="https://www.geoapify.com/">Geoapify</a>'
+              : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           },
         )
           .on("tileerror", () => setTilesFailed(true))
@@ -144,7 +147,7 @@ export function RouteMap({
         }
         if (!points.length) return;
         const bottom = desktop ? 30 : frame.bottom - (sheet?.top ?? frame.bottom - 90) + 16;
-        const left = desktop ? (sheet?.right ?? 80) - frame.left + 24 : 24;
+        const left = desktop && sheet ? sheet.right - frame.left + 24 : 24;
         instance.fitBounds(L.latLngBounds(points), {
           paddingTopLeft: [Math.min(left, frame.width * 0.5), 80],
           paddingBottomRight: [desktop ? 80 : 70, Math.min(bottom, frame.height - 140)],
@@ -200,7 +203,7 @@ export function RouteMap({
         </svg>
         <span className="sr-only">{onLocate ? locateLabel : "Xem toàn tuyến"}</span>
       </button>
-      {(!mapKey || error || tilesFailed) && (
+      {(error || tilesFailed) && (
         <p role="status" className="map-notice">
           {error ||
             (tilesFailed

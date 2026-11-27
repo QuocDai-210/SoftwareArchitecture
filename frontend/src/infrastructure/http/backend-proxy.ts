@@ -8,7 +8,7 @@ export async function proxy(
   const { path } = await params;
   if (
     !path.length ||
-    !["trips", "payments", "wallets", "quote", "screens", "maps", "profiles"].includes(path[0]) ||
+    !["trips", "payments", "wallets", "screens", "drivers"].includes(path[0]) ||
     path.some((p) => !/^[a-zA-Z0-9-]+$/.test(p))
   )
     return NextResponse.json({ detail: "Đường dẫn không hợp lệ." }, { status: 400 });
@@ -25,8 +25,8 @@ export async function proxy(
   } catch {
     return NextResponse.json({ detail: "Phiên đã hết hạn. Hãy đăng nhập lại." }, { status: 401 });
   }
-  if (!session.roles.includes("rider"))
-    return NextResponse.json({ detail: "Web chỉ hỗ trợ tài khoản Rider." }, { status: 403 });
+  if (!session.roles.some((role) => role === "rider" || role === "driver"))
+    return NextResponse.json({ detail: "Cần tài khoản Rider hoặc Driver." }, { status: 403 });
   const headers = new Headers({
     Authorization: `Bearer ${session.token}`,
     "Content-Type": "application/json",

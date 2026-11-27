@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import hashlib
 from html.parser import HTMLParser
-from http.cookiejar import CookieJar
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 import json
 from pathlib import Path
 import secrets
@@ -26,11 +26,10 @@ from urllib.request import (
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-GATEWAY = "http://127.0.0.1:8080"
-ISSUER = "http://auth.swiftride.test:8180"
-LOCAL = "http://127.0.0.1:8180"
+GATEWAY = "http://localhost:8080"
+LOCAL = "http://localhost:8180"
 OIDC = "/realms/swiftride/protocol/openid-connect"
-CALLBACK = "http://127.0.0.1:8976/callback"
+CALLBACK = "http://localhost:8976/callback"
 PICKUP = {"latitude": 10.7769, "longitude": 106.7009, "label": "Pickup"}
 DESTINATION = {"latitude": 10.787, "longitude": 106.713, "label": "Destination"}
 
@@ -52,8 +51,6 @@ class Callback(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if newurl.split("?", 1)[0] == CALLBACK:
             raise ReceivedCode(newurl)
-        if newurl.startswith(ISSUER + "/"):
-            newurl = LOCAL + newurl[len(ISSUER) :]
         if not newurl.startswith(LOCAL + "/"):
             raise ValueError("Unexpected OIDC redirect")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
@@ -77,21 +74,19 @@ def login(username, password):
         code_challenge_method="S256",
         code_challenge=challenge.rstrip(b"=").decode(),
     )
-    browser = build_opener(ProxyHandler({}), HTTPCookieProcessor(CookieJar()), Callback())
-    headers = {"Host": urlsplit(ISSUER).netloc}
-    with browser.open(
-        Request(LOCAL + OIDC + "/auth?" + urlencode(params), headers=headers), timeout=10
-    ) as response:
+    # The loopback-only opener mirrors Chromium treating localhost as a secure context.
+    browser = build_opener(
+        ProxyHandler({}),
+        HTTPCookieProcessor(CookieJar(DefaultCookiePolicy(secure_protocols=("http", "https")))),
+        Callback(),
+    )
+    with browser.open(Request(LOCAL + OIDC + "/auth?" + urlencode(params)), timeout=10) as response:
         form = LoginForm()
         form.feed(response.read().decode())
-    assert form.action and form.action.startswith((LOCAL + "/", ISSUER + "/")), "No login form"
+    assert form.action and form.action.startswith(LOCAL + "/"), "No login form"
     try:
         with browser.open(
-            Request(
-                form.action.replace(ISSUER, LOCAL, 1),
-                urlencode(dict(username=username, password=password)).encode(),
-                headers=headers,
-            ),
+            Request(form.action, urlencode(dict(username=username, password=password)).encode()),
             timeout=10,
         ):
             raise RuntimeError("Keycloak did not return an authorization code")
@@ -293,7 +288,7 @@ def redeliver(trip, card, correlation, settings):
         "Authorization": "Basic " + base64.b64encode(auth.encode()).decode(),
     }
     req = Request(
-        "http://127.0.0.1:15672/api/exchanges/%2F/" + name + "/publish",
+        "http://localhost:15672/api/exchanges/%2F/" + name + "/publish",
         json.dumps(payload).encode(),
         headers,
     )
@@ -440,6 +435,13 @@ def main():
             move(trip, "retry-payment", service)
         trip = wait(trip, person, ["Paid"])
         api("GET", "/payments/" + trip["id"], poor, expected=403)
+        screen = "/screens/trips/" + trip["id"]
+        api("GET", screen, poor, expected=403)
+        assert api("GET", screen, drivers[trip["driverId"]])["payment"] is None
+        receipt = api("GET", screen, person)
+        assert receipt["trip"]["status"] == "Paid"
+        assert receipt["payment"]["amount"] == trip["quote"]["amount"]
+
         if recovery:
             redeliver(trip, card, str(uuid.uuid4()), settings)
         verify_payment(trip, person, service, card, opening)

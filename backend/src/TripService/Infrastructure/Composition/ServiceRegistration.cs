@@ -32,6 +32,10 @@ public static class ServiceRegistration
     public static async Task InitializeTripDatabase(this IServiceProvider services)
     {
         await using var scope = services.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<TripDb>().Database.EnsureCreatedAsync();
+        var db = scope.ServiceProvider.GetRequiredService<TripDb>();
+        await db.Database.EnsureCreatedAsync();
+        await db.Database.ExecuteSqlRawAsync(
+            """ALTER TABLE "Trips" ADD COLUMN IF NOT EXISTS "TraceParent" text"""
+        );
     }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using SwiftRide.Application.Observability;
 
 namespace SwiftRide.Infrastructure;
@@ -11,9 +12,17 @@ public sealed class ApplicationMetrics : ITripMetrics, IMatchingMetrics
 
     public void Duration(double seconds) => Telemetry.Matching.Record(seconds);
 
-    public IDisposable? TraceWorkflow(Guid tripId, string correlationId)
+    public void PaymentOutcome(string status) =>
+        Telemetry.PaymentAttempts.Add(1, new KeyValuePair<string, object?>("status", status));
+
+    public IDisposable? TraceWorkflow(Guid tripId, string correlationId, string? traceParent)
     {
-        var activity = Telemetry.Activities.StartActivity("trip.workflow");
+        ActivityContext.TryParse(traceParent, null, out var parent);
+        var activity = Telemetry.Activities.StartActivity(
+            "trip.workflow",
+            ActivityKind.Internal,
+            parent
+        );
         activity?.SetTag("trip.id", tripId);
         activity?.SetTag("correlation.id", correlationId);
         return activity;

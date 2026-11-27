@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using MassTransit;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SwiftRide.Application.Messaging;
 
@@ -17,7 +18,8 @@ public static class MessageBusRegistration
         where TDb : DbContext
     {
         builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
-        builder.Services.AddHostedService<OutboxMetrics<TDb>>();
+        if (!builder.Configuration.GetValue<bool>("OTEL_SDK_DISABLED"))
+            builder.Services.AddHostedService<OutboxMetrics<TDb>>();
         builder.Services.AddMassTransit(x =>
         {
             x.SetKebabCaseEndpointNameFormatter();

@@ -40,7 +40,7 @@ public sealed class TripWorkflow(
     public async Task Step(Guid id, CancellationToken ct)
     {
         var trip = await reader.Get(id, ct);
-        using var activity = metrics.TraceWorkflow(id, trip.CorrelationId);
+        using var activity = metrics.TraceWorkflow(id, trip.CorrelationId, trip.TraceParent);
         switch (trip.Status)
         {
             case TripStatus.Requested:

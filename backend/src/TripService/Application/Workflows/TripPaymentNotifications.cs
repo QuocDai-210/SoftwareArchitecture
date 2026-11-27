@@ -13,31 +13,45 @@ public sealed class TripPaymentNotifications(
     {
         var trip = await reader.Get(message.TripId, ct);
         if (
-            message.PaymentId != trip.Id
-            || message.Currency != "VND"
-            || message.DriverId != trip.DriverId
-        )
-            throw new RuleException("Settlement identity or currency mismatch.");
-        if (
             trip.Status is not (TripStatus.PaymentPending or TripStatus.PaymentReview)
             || trip.Refunded
         )
             return;
-        if (message.Amount != trip.Quote?.Amount)
+        if (
+            message.PaymentId != trip.Id
+            || message.Currency != "VND"
+            || message.DriverId != trip.DriverId
+            || message.RiderId is null
+            || message.Method is null
+        )
         {
-            if (trip.Status == TripStatus.PaymentPending)
-                trip.Move(TripStatus.PaymentReview, "Settlement amount mismatch.");
+            // Older settlement events omit payer and method. A replay obtains the current receipt.
+            await Review(trip, "Settlement identity or currency requires reconciliation.", ct);
+            return;
+        }
+        if (
+            message.Amount != trip.Quote?.Amount
+            || message.RiderId != trip.RiderId
+            || message.Method != trip.Method
+        )
+        {
+            var pending = trip.Status == TripStatus.PaymentPending;
+            if (pending)
+                trip.Move(TripStatus.PaymentReview, "Charge differs from the confirmed trip.");
             await bus.Publish(
                 new RefundRequested(trip.Id, message.Amount, trip.CorrelationId),
                 trip.CorrelationId,
                 ct
             );
             await writer.Save(ct);
+            if (pending)
+                metrics.PaymentOutcome("mismatch");
             return;
         }
         trip.Move(TripStatus.Paid);
         await writer.Save(ct);
         metrics.Outcome("paid");
+        metrics.PaymentOutcome("settled");
     }
 
     public async Task Failed(PaymentFailed message, CancellationToken ct)
@@ -45,8 +59,7 @@ public sealed class TripPaymentNotifications(
         var trip = await reader.Get(message.TripId, ct);
         if (trip.Status != TripStatus.PaymentPending || message.Attempt != trip.PaymentAttempt)
             return;
-        trip.Move(TripStatus.PaymentReview, message.Reason);
-        await writer.Save(ct);
+        await Review(trip, message.Reason, ct, "declined");
     }
 
     public async Task Faulted(RideCompleted message, CancellationToken ct)
@@ -54,11 +67,21 @@ public sealed class TripPaymentNotifications(
         var trip = await reader.Get(message.TripId, ct);
         if (trip.Status != TripStatus.PaymentPending || message.Attempt != trip.PaymentAttempt)
             return;
-        trip.Move(
-            TripStatus.PaymentReview,
-            "Thanh toán hết lượt retry; cần đối soát hoặc phát lại."
-        );
+        await Review(trip, "Thanh toán hết lượt retry; cần đối soát hoặc phát lại.", ct, "faulted");
+    }
+
+    private async Task Review(
+        Trip trip,
+        string reason,
+        CancellationToken ct,
+        string outcome = "mismatch"
+    )
+    {
+        if (trip.Status != TripStatus.PaymentPending)
+            return;
+        trip.Move(TripStatus.PaymentReview, reason);
         await writer.Save(ct);
+        metrics.PaymentOutcome(outcome);
     }
 
     public async Task Refunded(PaymentRefunded message, CancellationToken ct)

@@ -1,4 +1,21 @@
-# Nghiệm thu backend SwiftRide
+# Nghiệm thu SwiftRide
+
+## Bản web Rider/Driver và Gateway tổng hợp
+
+Ngày 27/11/2026 trên Linux, dùng project Compose riêng `swiftride-pdf-uicheck`. Giới hạn RAM của 11 thành phần khi bật toàn bộ profile là 7,92/12 GB.
+
+| Hạng mục | Kết quả |
+|---|---|
+| Build và test | 17 project backend qua kiểm tra kiến trúc, build 0 lỗi và 0 cảnh báo. 11/11 test đơn vị và 1/1 test tích hợp database đạt. Build production của Next.js thành công. |
+| Trình duyệt Chromium | Hai phiên độc lập đăng nhập Keycloak bằng Rider và Driver. Rider đặt, xác nhận giá. Driver ở kích thước 390 × 844 nhận chuyến, đang đến, đón và trả khách. Rider thấy biên nhận Wallet ở trạng thái Paid. Driver không nhận dữ liệu biên nhận. Đã thử đăng xuất. |
+| Từ chối và hủy trên web | Rider tự nhập địa điểm bằng tọa độ. Driver từ chối lời mời. Rider nhận báo giá mới và hủy thành công. |
+| Postman | Newman chạy hai chuyến Card/Wallet, gồm đọc màn hình tổng hợp. 47 request, 65 assertion, 0 lỗi trong lần chạy này. Số request thay đổi theo số lần polling. |
+| Phân quyền và sự cố | API màn hình trả 403 cho Rider khác. Các kịch bản tranh tài xế, từ chối, timeout, broker dừng, restart, phát lại và hoàn một khoản thu sai đều đạt. |
+| Quan sát | Tempo tìm được span `trip.workflow` trong cùng trace với request đặt xe. Prometheus ghi nhận bốn loại kết quả xử lý thanh toán: `settled`, `declined`, `faulted` và `mismatch`. |
+
+Giao diện Driver được kiểm thử trên Chromium với viewport di động. Hướng dẫn chạy web và bộ kiểm thử nằm trong [README](../README.md).
+
+## Nghiệm thu backend trước khi tích hợp web
 
 Kiểm thử trên Linux ngày 27/11/2026 với project Compose `swiftride-pdf`. PostgreSQL, MongoDB, RabbitMQ và Keycloak dùng volume riêng được tạo cho backend này. Lần nghiệm thu cuối dùng cùng bộ image trong project tạm `swiftride-pdf-acceptance`, khởi động từ bốn volume trống. Các lần restart sau đó dùng lại đúng volume của lần chạy.
 

@@ -89,7 +89,7 @@
       "redirectUris": [
         "https://oauth.pstmn.io/v1/callback",
         "https://oauth.pstmn.io/v1/browser-callback",
-        "http://127.0.0.1:8976/callback"
+        "http://localhost:8976/callback"
       ],
       "attributes": { "pkce.code.challenge.method": "S256" },
       "protocolMappers": [

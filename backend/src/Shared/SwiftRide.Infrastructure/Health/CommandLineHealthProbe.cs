@@ -12,7 +12,7 @@ public static class CommandLineHealthProbe
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         try
         {
-            using var response = await client.GetAsync("http://127.0.0.1:8080/health/ready");
+            using var response = await client.GetAsync("http://localhost:8080/health/ready");
             Environment.ExitCode = response.IsSuccessStatusCode ? 0 : 1;
         }
         catch (Exception)

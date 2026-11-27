@@ -148,7 +148,9 @@ public sealed class PaymentCommands(
                     p.Amount,
                     "VND",
                     p.CorrelationId,
-                    p.DriverId
+                    p.DriverId,
+                    p.RiderId,
+                    p.Method
                 ),
                 p.CorrelationId,
                 ct

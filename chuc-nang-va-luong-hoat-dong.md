@@ -1,3 +1,5 @@
+> **Tài liệu lịch sử.** Bản triển khai theo PDF và sơ đồ hiện hành nằm trong [README](README.md#kiến-trúc-và-vòng-đời).
+
 # SwiftRide — Chức năng và luồng hoạt động mô phỏng
 
 **Phạm vi mục tiêu theo yêu cầu cập nhật:** hệ thống mô phỏng đặt xe tại TP. Hồ Chí Minh,

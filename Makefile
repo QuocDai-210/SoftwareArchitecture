@@ -11,12 +11,12 @@ setup:
 build: setup
 	python3 -B scripts/check-resources.py
 	docker compose --profile "*" stop
-	@set -e; for service in rabbitmq matching trip payment gateway; do docker compose build "$$service"; done
+	@set -e; for service in rabbitmq matching trip payment gateway web; do docker compose build "$$service"; done
 
 up: setup
 	python3 -B scripts/check-resources.py
 	docker compose --profile observability stop observability
-	docker compose up --no-build -d --wait --wait-timeout 300 gateway
+	docker compose up --no-build -d --wait --wait-timeout 300 web
 
 observe: setup
 	python3 -B scripts/check-resources.py

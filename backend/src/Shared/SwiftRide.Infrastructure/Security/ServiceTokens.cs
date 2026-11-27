@@ -17,10 +17,11 @@ public sealed class ServiceTokens(IHttpClientFactory clients, IConfiguration con
         {
             if (_token is not null && _expires > DateTimeOffset.UtcNow.AddSeconds(30))
                 return _token;
+            var authority = config["Auth:Backchannel"] ?? config["Auth:Authority"];
             using var response = await clients
                 .CreateClient("identity")
                 .PostAsync(
-                    $"{config["Auth:Authority"]}/protocol/openid-connect/token",
+                    $"{authority}/protocol/openid-connect/token",
                     new FormUrlEncodedContent(
                         new Dictionary<string, string>
                         {

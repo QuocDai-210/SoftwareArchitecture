@@ -27,6 +27,7 @@ public sealed class Trip
     [new(TripStatus.Requested, DateTimeOffset.UtcNow, null)];
     public string RequestHash { get; set; } = "";
     public string IdempotencyKey { get; set; } = "";
+    public string? TraceParent { get; set; }
     public string CorrelationId { get; set; } = "";
     public int WorkflowRetries { get; private set; }
     public DateTimeOffset? NextAttemptAt { get; private set; }

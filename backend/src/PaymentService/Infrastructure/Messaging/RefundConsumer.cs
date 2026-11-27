@@ -14,7 +14,7 @@ public sealed class RefundConsumer(IPaymentReader reader, PaymentCommands paymen
         await payments.Refund(
             payment.Id,
             $"trip:{payment.Id}:refund",
-            new RefundRequest("Settled fare differs from confirmed quote."),
+            new RefundRequest("Charge differs from the confirmed trip."),
             new Actor("trip-saga", IsService: true),
             context.CancellationToken
         );

@@ -481,6 +481,40 @@
           ]
         },
         {
+          "name": "Card · Read trip screen",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway}}/screens/trips/{{tripId}}",
+            "header": [{ "key": "CorrelationId", "value": "{{correlationId}}" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{riderToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) {",
+                  "  pm.execution.setNextRequest(null);",
+                  "  throw new Error(\"Unexpected HTTP \" + pm.response.code);",
+                  "}",
+                  "const rideResponse = pm.response.json();",
+                  "pm.test(\"Trip and payment belong to the same completed ride\", () => {",
+                  "  pm.expect(rideResponse.trip.status).to.equal(\"Paid\");",
+                  "  pm.expect(rideResponse.payment.tripId).to.equal(rideResponse.trip.id);",
+                  "  pm.expect(rideResponse.payment.amount).to.equal(rideResponse.trip.quote.amount);",
+                  "  pm.expect(rideResponse.paymentUnavailable).to.equal(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Card · Read ledger",
           "request": {
             "method": "GET",
@@ -999,6 +1033,40 @@
                   "  pm.expect(rideResponse.status).to.equal(\"Settled\");",
                   "  pm.expect(rideResponse.amount).to.equal(Number(pm.collectionVariables.get(\"fare\")));",
                   "  pm.expect(rideResponse.currency).to.equal(\"VND\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wallet · Read trip screen",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway}}/screens/trips/{{tripId}}",
+            "header": [{ "key": "CorrelationId", "value": "{{correlationId}}" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{riderToken}}", "type": "string" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) {",
+                  "  pm.execution.setNextRequest(null);",
+                  "  throw new Error(\"Unexpected HTTP \" + pm.response.code);",
+                  "}",
+                  "const rideResponse = pm.response.json();",
+                  "pm.test(\"Trip and payment belong to the same completed ride\", () => {",
+                  "  pm.expect(rideResponse.trip.status).to.equal(\"Paid\");",
+                  "  pm.expect(rideResponse.payment.tripId).to.equal(rideResponse.trip.id);",
+                  "  pm.expect(rideResponse.payment.amount).to.equal(rideResponse.trip.quote.amount);",
+                  "  pm.expect(rideResponse.paymentUnavailable).to.equal(false);",
                   "});"
                 ]
               }

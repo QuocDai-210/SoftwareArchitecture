@@ -50,10 +50,23 @@ public sealed class PaymentNotificationTests
             4200,
             "VND",
             "",
-            "driver1"
+            "driver1",
+            trip.RiderId,
+            trip.Method
         );
-        await Assert.ThrowsAsync<RuleException>(() =>
-            notifications.Settled(settled with { Currency = "USD" }, default)
+        await notifications.Settled(settled with { Currency = "USD" }, default);
+        Assert.Equal(TripStatus.PaymentReview, trip.Status);
+        trip.Move(TripStatus.PaymentPending);
+        await notifications.Settled(settled with { RiderId = "other" }, default);
+        Assert.Equal(TripStatus.PaymentReview, trip.Status);
+        bus.Verify(
+            b =>
+                b.Publish(
+                    It.Is<RefundRequested>(m => m.TripId == trip.Id && m.Amount == 4200),
+                    "",
+                    default
+                ),
+            Times.Once
         );
         await notifications.Settled(settled with { Amount = 4201 }, default);
         Assert.Equal(TripStatus.PaymentReview, trip.Status);

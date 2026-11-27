@@ -48,6 +48,8 @@ public static class ServiceRegistration
             .AddJwtBearer(o =>
             {
                 o.Authority = authority;
+                if (builder.Configuration["Auth:Backchannel"] is { } backchannel)
+                    o.MetadataAddress = $"{backchannel}/.well-known/openid-configuration";
                 o.Audience = "swiftride-api";
                 o.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
                 o.MapInboundClaims = false;

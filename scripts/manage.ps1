@@ -52,7 +52,7 @@ try {
             Invoke-Python 'scripts/check-architecture.py'
             Invoke-Python 'scripts/check-resources.py'
             Invoke-Checked 'docker' @('compose', '--profile', '*', 'stop')
-            $services = @('rabbitmq', 'trip', 'matching', 'payment', 'gateway')
+            $services = @('rabbitmq', 'trip', 'matching', 'payment', 'gateway', 'web')
             foreach ($service in $services) {
                 Invoke-Checked 'docker' @('compose', 'build', $service)
             }
@@ -72,7 +72,7 @@ try {
             $env:OTEL_SDK_DISABLED = 'true'
             if ($Command -eq 'up') {
                 Invoke-Checked 'docker' @('compose','--profile','observability','stop','observability')
-                $target = 'gateway'
+                $target = 'web'
             } elseif ($Command -eq 'observe') {
                 $env:OTEL_SDK_DISABLED = 'false'
                 Invoke-Checked 'docker' @('compose','--profile','observability','up','-d','--no-build','--wait')

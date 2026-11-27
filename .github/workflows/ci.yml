@@ -66,9 +66,14 @@ jobs:
 
       - name: Run the Postman and recovery scenarios
         run: |
-          npm install --prefix "$RUNNER_TEMP/postman" --no-audit --no-fund newman@6.2.3
+          npm install --prefix "$RUNNER_TEMP/postman" --no-audit --no-fund newman@6.2.3 playwright-core@1.65.1
           python3 scripts/acceptance.py --newman "$RUNNER_TEMP/postman/node_modules/.bin/newman"
           dotnet test backend/tests/SwiftRide.Checks -c Release --no-build --no-restore --filter Category=Integration
+
+      - name: Run the Rider and Driver browser journey
+        run: |
+          "$RUNNER_TEMP/postman/node_modules/.bin/playwright-core" install chromium
+          NODE_PATH="$RUNNER_TEMP/postman/node_modules" node scripts/check-web.cjs
 
       - name: Stop test containers
         if: ${{ always() && hashFiles('.env') != '' }}
